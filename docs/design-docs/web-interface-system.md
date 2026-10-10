@@ -345,12 +345,12 @@ Hashes stay server-side, responses are no-store, and provider fetch/cache limits
 remain bounded. See [identity and handles](identity-and-handles.md#gravatar-follow-up).
 
 Person profiles show a 64px picture above their name. Contributor lists and
-account menus reuse the same component and user-ID URL. Settings includes a
-picture preview, public-visibility explanation, generated-fallback guidance and
-an optional link to create or update a Gravatar with the account email. The link
-opens a separate tab to preserve profile drafts. Missing images never imply a
-missing provider account. No photo upload UI, embedded editor or automatic
-name/bio import is introduced.
+account menus reuse the same component and user-ID URL. Settings has no picture
+preview or provider instructions; a secondary question below the profile fields
+links to `/support#profile-picture`. Support explains creating/updating Gravatar
+with the account email, public visibility, optional use, generated fallback and
+the update delay. Missing images never imply a missing provider account. No photo
+upload UI, embedded editor or automatic name/bio import is introduced.
 
 Appearance is a validated, HttpOnly, SameSite cookie containing only `light`,
 `dark` or `system`. Server rendering sets the root attribute, and CSS semantic
@@ -584,7 +584,10 @@ layout keeps the existing theme, field order and bottom action placement.
 
 An unclaimed hub handle shows availability, its prospective `/@handle` address,
 a permanence checkbox and an explicit Claim handle button. Handle edits never
-autosave. After claiming, the input is read-only and hub names remain editable.
+autosave. After claiming, the handle becomes a plain label/value fact in the same
+layout as Hub ID, retaining the hint “This is your claimed permanent hub handle.”
+A hidden field preserves the native form's saved handle, while the backend
+continues to enforce immutability.
 Person usernames continue to autosave with existing validation.
 
 Account deactivation and deletion are separate choices. Each explains consequences

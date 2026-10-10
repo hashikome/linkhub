@@ -2501,10 +2501,13 @@ describe("account shell and appearance", () => {
               .evaluate((image) => (image as HTMLImageElement).naturalWidth),
           )
           .toBe(64);
-        await browserExpect(page.getByLabel("Handle", { exact: true })).toHaveAttribute(
-          "readonly",
-          "",
-        );
+        await browserExpect(page.getByLabel("Handle", { exact: true })).toHaveCount(0);
+        await browserExpect(
+          page
+            .locator(".account-facts > div")
+            .filter({ has: page.locator("dt", { hasText: /^Handle$/ }) })
+            .locator("dd"),
+        ).toHaveText(handle);
         await browserExpect(
           page.getByRole("button", { name: "Claim handle", exact: true }),
         ).toHaveCount(0);
@@ -5919,10 +5922,39 @@ it("claims a permanent hub handle and deactivates/reactivates through native acc
           await page.screenshot({ path: `/tmp/handle-claim-${width}.png`, fullPage: true });
         }
       await page.getByRole("button", { name: "Claim handle", exact: true }).click();
-      await browserExpect(page.getByLabel("Handle", { exact: true })).toHaveAttribute(
-        "readonly",
-        "",
+      await browserExpect(page.getByLabel("Handle", { exact: true })).toHaveCount(0);
+      const claimedHandle = page
+        .locator(".account-facts > div")
+        .filter({ has: page.locator("dt", { hasText: /^Handle$/ }) })
+        .locator("dd");
+      await browserExpect(claimedHandle).toHaveText(chosen);
+      await browserExpect(page.locator("main")).toContainText(
+        "This is your claimed permanent hub handle.",
       );
+      // The immutable display must still let other hub fields save correctly.
+      await page.getByLabel("Hub name", { exact: true }).fill("A renamed hub after claiming");
+      if (!js) await page.getByRole("button", { name: "Save changes", exact: true }).click();
+      await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
+      await page.reload();
+      await browserExpect(page.getByLabel("Hub name", { exact: true })).toHaveValue(
+        "A renamed hub after claiming",
+      );
+      await browserExpect(claimedHandle).toHaveText(chosen);
+      if (js)
+        for (const width of [390, 768, 1280, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          for (const colorScheme of ["light", "dark"] as const) {
+            await page.emulateMedia({ colorScheme });
+            expect(
+              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            ).toBe(true);
+            await page.screenshot({
+              path: `/tmp/handle-claimed-${width}-${colorScheme}.png`,
+              fullPage: true,
+              animations: "disabled",
+            });
+          }
+        }
       await ready(page, "/account?action=deactivate");
       if (js)
         for (const width of [390, 768, 1280, 1440]) {
@@ -5982,7 +6014,7 @@ it("rejects an account confirmation replaced by another tab", async () => {
   }
 }, 30000);
 
-it("shows public Gravatar pictures and optional Settings guidance with native fallback", async () => {
+it("shows public Gravatar pictures and links Settings to Support with native fallback", async () => {
   const png = Buffer.from(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGOQS5n2HwAD1AIY4wETJQAAAABJRU5ErkJggg==",
     "base64",
@@ -6040,15 +6072,10 @@ it("shows public Gravatar pictures and optional Settings guidance with native fa
       await ready(page, `/c/${collection.body.data.id}`);
       await loaded(".contributor-list .avatar", 1);
       await browserSignIn(page, email, "/settings");
-      const region = page.getByRole("region", { name: "Profile picture", exact: true });
-      await browserExpect(region).toContainText("public on your profile and contributions");
-      await browserExpect(region).toContainText("optional");
-      const provider = region.getByRole("link", { name: /Create or update your Gravatar/ });
-      await browserExpect(provider).toHaveAttribute("href", "https://gravatar.com/");
-      await browserExpect(provider).toHaveAttribute("target", "_blank");
-      await browserExpect(provider).toHaveAttribute("rel", "noopener noreferrer");
+      const help = page.getByRole("link", { name: "How do I update my profile picture?" });
+      await browserExpect(help).toHaveAttribute("href", "/support#profile-picture");
+      await browserExpect(page.locator("main .avatar")).toHaveCount(0);
       await loaded("header .avatar", 1);
-      await loaded('[aria-labelledby="profile-picture-label"] .avatar', 1);
       if (js)
         for (const width of [390, 768, 1280, 1440]) {
           await page.setViewportSize({ width, height: 900 });
@@ -6057,11 +6084,13 @@ it("shows public Gravatar pictures and optional Settings guidance with native fa
             expect(
               await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
             ).toBe(true);
-            await provider.focus();
-            await browserExpect(provider).toBeFocused();
+            await help.focus();
+            await browserExpect(help).toBeFocused();
             expect(
-              await provider.evaluate((element) => getComputedStyle(element).outlineStyle),
+              await help.evaluate((element) => getComputedStyle(element).outlineStyle),
             ).not.toBe("none");
+            // Capture the page from its top after focus scrolls the help link into view.
+            await page.evaluate(() => window.scrollTo(0, 0));
             await page.screenshot({
               path: `/tmp/gravatar-settings-${width}-${colorScheme}.png`,
               fullPage: true,
@@ -6069,11 +6098,37 @@ it("shows public Gravatar pictures and optional Settings guidance with native fa
             });
           }
         }
+      await help.click();
+      await browserExpect(page).toHaveURL(`${origin}/support#profile-picture`);
+      await browserExpect(
+        page.getByRole("heading", { name: "How do I update my profile picture?" }),
+      ).toBeVisible();
+      await browserExpect(page.locator("main")).toContainText("same email address");
+      await browserExpect(page.locator("main")).toContainText("Gravatar is optional");
+      await browserExpect(page.locator("main")).toContainText("up to an hour");
+      await browserExpect(
+        page.getByRole("link", { name: "Gravatar", exact: true }),
+      ).toHaveAttribute("href", "https://gravatar.com/");
+      if (js)
+        for (const width of [390, 768, 1280, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          for (const colorScheme of ["light", "dark"] as const) {
+            await page.emulateMedia({ colorScheme });
+            expect(
+              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            ).toBe(true);
+            await page.screenshot({
+              path: `/tmp/gravatar-support-${width}-${colorScheme}.png`,
+              fullPage: true,
+              animations: "disabled",
+            });
+          }
+        }
       gravatarImages.delete(email);
-      await page.reload();
+      await ready(page, "/settings");
       await loaded("header .avatar", 64);
-      await loaded('[aria-labelledby="profile-picture-label"] .avatar', 64);
-      await browserExpect(region).not.toContainText("don't have a Gravatar");
+      await browserExpect(page.locator("main .avatar")).toHaveCount(0);
+      await browserExpect(help).toBeVisible();
       await page.setViewportSize({ width: 390, height: 900 });
       await page.screenshot({
         path: `/tmp/gravatar-fallback-settings-${js}.png`,

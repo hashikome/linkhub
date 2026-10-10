@@ -9,6 +9,14 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Display claimed hub handles as immutable label/value facts in Settings, matching
+  Hub ID, with a hint that the claimed handle is permanent. Unclaimed handles
+  keep the explicit claim form.
+
+- Simplify Profile Settings by replacing the picture preview and provider copy
+  with a help link. Support now explains how to update a Gravatar, which email
+  to use, public visibility, generated fallback and update timing.
+
 - Fix available Gravatar pictures falling back on slower connections: allow five
   seconds for image retrieval instead of 1.5, with a delayed-response regression.
 

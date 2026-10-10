@@ -33,9 +33,12 @@ load provider scripts, or send viewer cookies/referrers to Gravatar. The image
 endpoint requires no profile API credential. Rich profiles and entitlements are
 separate future work.
 
-Settings explains that the picture is public and associated with the account
-email, and offers an optional link to create or update a Gravatar. Registration
-is not required, and a missing image says nothing about whether an account exists.
+Support explains that the picture is public and associated with the account
+email, and offers an optional link to create or update a Gravatar. Settings links
+to that help below the profile fields, without a picture preview. This
+user-requested presentation update (2026-10-10) replaces the initial inline
+Settings preview and instructions. Registration is not required, and a missing
+image says nothing about whether an account exists.
 People choose their published image at Gravatar; no extra in-product provider
 selector or upload flow is introduced in this milestone.
 

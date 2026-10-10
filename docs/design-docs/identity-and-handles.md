@@ -107,11 +107,13 @@ same fallback without contacting the provider. Stored chosen-image URLs no longe
 participate in selection. Existing vendor image fields are not erased.
 
 Public person profiles, contributor lists and account navigation use the same
-immutable `/api/v1/users/:id/avatar` address. Profile Settings explains that the
-picture is public and associated with the account email, and offers an optional
-link to create or update a Gravatar. Registration is never required, and missing
-images are never described as evidence that no Gravatar account exists. Picture
-management remains at the provider; no upload/editor or provider selector is added.
+immutable `/api/v1/users/:id/avatar` address. Profile Settings links to
+`/support#profile-picture` below its fields, without an image preview. Support
+explains that the picture is public and associated with the account email, and
+offers an optional link to create or update a Gravatar. Registration is never
+required, and missing images are never described as evidence that no Gravatar
+account exists. Picture management remains at the provider; no upload/editor or
+provider selector is added.
 
 The API reads current eligibility and email for every request, then checks them
 again after image retrieval to discard in-flight results from changed accounts.

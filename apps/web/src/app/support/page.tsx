@@ -24,6 +24,17 @@ export default function Page() {
           Our support inbox isn't set up yet. Please check back soon.
         </p>
       )}
+      <h2 id="profile-picture">How do I update my profile picture?</h2>
+      <p>
+        We use <a href="https://gravatar.com/">Gravatar</a> for profile pictures. Sign in there or
+        create an account, then add and verify the same email address you use for nslinkhub. Upload
+        a picture and choose it for that email address.
+      </p>
+      <p>
+        Your picture is public on your profile and contributions. Gravatar is optional: when no
+        picture is available, we show your generated icon. After updating your picture, allow up to
+        an hour for the change to appear, then reload nslinkhub.
+      </p>
       <h2>Got an email you didn't request?</h2>
       <p>
         You can safely ignore it. A sign-in code does nothing unless someone enters it, and it

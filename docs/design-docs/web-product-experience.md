@@ -126,20 +126,21 @@ private collection in one transaction. A failed save leaves no empty hub.
 Settings has Profile, Hub and Notifications sections, showing one at a time.
 Profile edits username and full name; email and member-since are read-only. Hub
 edits name, **Show owner** and description, lets the owner explicitly claim one
-permanent handle, and shows its immutable ID. Usernames remain freely editable.
-View your public hub sits beneath the Hub ID. Autosave retains newer drafts and provides
+permanent handle, and shows its immutable ID. Claimed handles appear as plain
+label/value facts matching Hub ID, not text inputs. Usernames remain freely editable.
+View your public hub sits beneath Handle. Autosave retains newer drafts and provides
 Saving/Saved or retry feedback; a noscript Save changes button preserves native
 editing. Handle availability is advisory; backend validation decides the write.
 Missing hubs show a first-save action instead of empty required fields.
 Hub.showOwner controls the public ownership connection in both directions;
 profile names remain visible, and authorization is unchanged.
 
-The header avatar resolves through a chosen image, server-proxied Gravatar for
-the verified email, then a generated SVG. No upload field appears in Settings. The next avatar
-milestone replaces that priority with Gravatar first and our existing generated
-icons as fallback. Profile Settings will recommend creating a Gravatar account
-through an optional link; a missing image must not be presented as proof that
-no account exists. See [the avatar follow-up](identity-and-handles.md#gravatar-follow-up).
+The header avatar resolves through server-proxied Gravatar for an eligible
+account's verified email, then our generated SVG. Settings has no picture preview
+or upload field; a help question below the profile fields links to
+`/support#profile-picture`. Support explains optional Gravatar setup and updates;
+a missing image is never presented as proof that no provider account exists.
+See [the avatar contract](identity-and-handles.md#gravatar-follow-up).
 Appearance lives only in the header: System → Light → Dark → System. Signed-out
 visitors follow the system preference; saved appearance applies only with a
 valid session. The footer has copyright, “an ns series product”, Discover and

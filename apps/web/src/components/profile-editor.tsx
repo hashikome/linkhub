@@ -2,7 +2,6 @@
 import type { HandleAvailability, Profile, UsernameAvailability } from "@nslinkhub/types";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { readJson, submitForm } from "../lib/http";
-import { Avatar } from "./avatar";
 import { FormNotice } from "./form-notice";
 import { LocalTime } from "./local-time";
 
@@ -391,26 +390,6 @@ export function ProfileEditor({
                   <dd className="account-email">{profile.email}</dd>
                 </div>
               </dl>
-              <section className="settings-field" aria-labelledby="profile-picture-label">
-                <h2 id="profile-picture-label" className="settings-picture-label">
-                  Profile picture
-                </h2>
-                <div className="settings-field-control">
-                  <Avatar userId={profile.id} large />
-                  <p className="field-help">
-                    Your Gravatar picture is public on your profile and contributions. When no
-                    picture is available, we use your generated icon.
-                  </p>
-                  <p className="field-help">
-                    <a href="https://gravatar.com/" target="_blank" rel="noopener noreferrer">
-                      Create or update your Gravatar
-                      <span className="sr-only"> (opens in a new tab)</span>
-                    </a>{" "}
-                    with your account email. It’s optional. Picture changes can take up to an hour
-                    to appear.
-                  </p>
-                </div>
-              </section>
               <div className="settings-field">
                 <label htmlFor="display-name">Full name</label>
                 <input
@@ -511,6 +490,9 @@ export function ProfileEditor({
                   </dd>
                 </div>
               </dl>
+              <p className="field-help">
+                <a href="/support#profile-picture">How do I update my profile picture?</a>
+              </p>
             </fieldset>
             <fieldset className="account-field-group" hidden={section !== "hub"}>
               <legend>Hub</legend>
@@ -539,51 +521,17 @@ export function ProfileEditor({
                       onChange={edit}
                     />
                   </div>
-                  <div className="settings-field">
-                    <label htmlFor="handle">Handle</label>
+                  {saved.handleClaimedAt ? (
                     <div className="settings-field-control">
-                      <input
-                        id="handle"
-                        name="handle"
-                        readOnly={!!saved.handleClaimedAt}
-                        required
-                        minLength={3}
-                        maxLength={60}
-                        pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                        title="3–60 lowercase letters, numbers and hyphens"
-                        autoCapitalize="none"
-                        spellCheck={false}
-                        aria-describedby="handle-help handle-status"
-                        aria-invalid={
-                          enhanced && ["invalid", "reserved", "taken"].includes(handleState)
-                        }
-                        defaultValue={saved.handle ?? ""}
-                        onChange={edit}
-                      />
+                      <input type="hidden" name="handle" value={saved.handle ?? ""} />
+                      <dl className="account-facts">
+                        <div>
+                          <dt>Handle</dt>
+                          <dd>{saved.handle}</dd>
+                        </div>
+                      </dl>
+                      <p className="field-help">This is your claimed permanent hub handle.</p>
                       <p className="field-help">
-                        {saved.handleClaimedAt
-                          ? "This is your permanent hub handle. You can still change your hub name."
-                          : "Choose your hub handle once. It stays reserved even if you delete your account."}
-                      </p>
-                      {!saved.handleClaimedAt && (
-                        <>
-                          <p className="field-help">Your hub address: /@{draft.handle}</p>
-                          <label className="handle-claim-confirm">
-                            <input type="checkbox" name="confirmHandle" onChange={edit} />
-                            <span>I choose this permanent hub handle.</span>
-                          </label>
-                          <button
-                            className="button handle-claim-button"
-                            type="submit"
-                            name="claimHandle"
-                            value="true"
-                            disabled={enhanced && (!draft.confirmHandle || !validFormat || saving)}
-                          >
-                            Claim handle
-                          </button>
-                        </>
-                      )}
-                      <p id="handle-help" className="field-help">
                         <a
                           href={`/h/${encodeURIComponent(saved.hubId)}?view=public`}
                           onClick={(event) => openPublicView(event, "hub")}
@@ -591,16 +539,65 @@ export function ProfileEditor({
                           View your public hub
                         </a>
                       </p>
-                      <p
-                        id="handle-status"
-                        className={`field-help handle-status ${["invalid", "reserved", "taken"].includes(handleState) ? "error" : handleState === "available" ? "success" : ""}`}
-                        role="status"
-                        hidden={!enhanced || handleState === "current"}
-                      >
-                        {handleMessages[handleState]}
-                      </p>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="settings-field">
+                      <label htmlFor="handle">Handle</label>
+                      <div className="settings-field-control">
+                        <input
+                          id="handle"
+                          name="handle"
+                          required
+                          minLength={3}
+                          maxLength={60}
+                          pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                          title="3–60 lowercase letters, numbers and hyphens"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          aria-describedby="handle-help handle-status"
+                          aria-invalid={
+                            enhanced && ["invalid", "reserved", "taken"].includes(handleState)
+                          }
+                          defaultValue={saved.handle ?? ""}
+                          onChange={edit}
+                        />
+                        <p className="field-help">
+                          Choose your hub handle once. It stays reserved even if you delete your
+                          account.
+                        </p>
+                        <p className="field-help">Your hub address: /@{draft.handle}</p>
+                        <label className="handle-claim-confirm">
+                          <input type="checkbox" name="confirmHandle" onChange={edit} />
+                          <span>I choose this permanent hub handle.</span>
+                        </label>
+                        <button
+                          className="button handle-claim-button"
+                          type="submit"
+                          name="claimHandle"
+                          value="true"
+                          disabled={enhanced && (!draft.confirmHandle || !validFormat || saving)}
+                        >
+                          Claim handle
+                        </button>
+                        <p id="handle-help" className="field-help">
+                          <a
+                            href={`/h/${encodeURIComponent(saved.hubId)}?view=public`}
+                            onClick={(event) => openPublicView(event, "hub")}
+                          >
+                            View your public hub
+                          </a>
+                        </p>
+                        <p
+                          id="handle-status"
+                          className={`field-help handle-status ${["invalid", "reserved", "taken"].includes(handleState) ? "error" : handleState === "available" ? "success" : ""}`}
+                          role="status"
+                          hidden={!enhanced || handleState === "current"}
+                        >
+                          {handleMessages[handleState]}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                   <div className="settings-field">
                     <label htmlFor="show-owner">Show owner</label>
                     <div className="settings-field-control">

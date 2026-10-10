@@ -561,8 +561,8 @@ self-service account lifecycle and public Gravatar avatars Built; email change A
   session is signed out.
 - **Profile avatars** *(Built)*: use Gravatar, falling back to our
   existing generated icons when no image is available or the provider fails.
-  Profile Settings recommends creating a Gravatar account with an optional link;
-  no Gravatar account is required to use the product.
+  Profile Settings links to picture instructions on Support, without a picture
+  preview. Gravatar is optional; no Gravatar account is required to use the product.
 - **Hub handles:** generated handles are provisional. Owners explicitly claim one
   permanent handle; all issued spellings stay reserved after changes or deletion.
   Usernames and display names remain freely editable within their validation rules.
