@@ -23,6 +23,7 @@ import {
 import { auditContinuation, auditQuery } from "../../../lib/audit-query";
 import type { CaptureDraft } from "../../../lib/capture-draft";
 import { draftCookie, draftRoom, readDraft, saveDraft } from "../../../lib/capture-server";
+import { completeSignIn } from "../../../lib/complete-sign-in";
 import { serverCookie } from "../../../lib/cookies";
 import {
   accountFlowCookie,
@@ -47,6 +48,7 @@ import {
   readLastAccount,
   readPendingAction,
 } from "../../../lib/pending-action";
+import { securityForm } from "../../../lib/security-forms";
 import { serverRead } from "../../../lib/server-api";
 import { readSession } from "../../../lib/session";
 import { resendTiming } from "../../../lib/sign-in-flow";
@@ -64,6 +66,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
       status: 403,
     });
   }
+  const securityResponse = await securityForm(action, request, form);
+  if (securityResponse) return securityResponse;
   if (action === "account-send" || action === "account-confirm") {
     const flow = action === "account-confirm" ? await readAccountFlow() : null;
     if (
@@ -521,72 +525,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
       return redirectResponse(
         `/sign-in/code?notice=${result.status === 429 ? "limited" : result.status >= 500 || !result.status ? "unavailable" : "invalid"}${result.retryAfter ? `&wait=${Math.min(result.retryAfter, 600)}` : ""}`,
       );
-    const verified = (result.setCookies ?? []).map((cookie) => cookie.split(";")[0]).join("; ");
-    // Confirmed: run the action that asked for it, with the new session.
-    if (flow.purpose === "confirm" || flow.purpose === "resume") {
-      const pending = await readPendingAction();
-      const done = [
-        ...(result.setCookies ?? []),
-        flowCookie("", 0),
-        pendingActionCookie(null),
-        lastAccountCookie(flow.email),
-      ];
-      // A waiting action runs only for the person it belongs to.
-      if (
-        !pending ||
-        pending.target !== flow.returnTo ||
-        (flow.purpose === "resume" && pending.owner !== accountFingerprint(flow.email))
-      )
-        return redirectResponse(flow.returnTo, done);
-      const headers = new Headers(request.headers);
-      headers.set("cookie", verified);
-      const replay = await formPost<{ token?: string }>(
-        new Request(request.url, { headers }),
-        pending.path,
-        pending.body,
-        false,
-        pending.method ?? "POST",
-      );
-      if (replay.ok && pending.result === "collection-link" && replay.data?.token) {
-        const destination = new URL(pending.target, "http://local.invalid");
-        destination.searchParams.set("s", replay.data.token);
-        destination.searchParams.set("notice", "done");
-        return redirectResponse(destination.pathname + destination.search, done);
-      }
-      const join = pending.target.includes("?") ? "&" : "?";
-      const notice = replay.ok
-        ? (pending.success ?? "done")
-        : replay.status === 409
-          ? "conflict"
-          : replay.status === 403
-            ? "forbidden"
-            : replay.status === 429
-              ? "limited"
-              : "unavailable";
-      return redirectResponse(
-        `${pending.target}${join}notice=${notice}${pending.anchor ? `#${pending.anchor}` : ""}`,
-        done,
-      );
-    }
-    const captureId = /^\/capture\/([a-f0-9-]{36})$/.exec(flow.returnTo)?.[1];
-    if (!flow.invitationToken && captureId) {
-      const draft = await readDraft(captureId);
-      if (draft) {
-        const headers = new Headers(request.headers);
-        headers.set("cookie", verified);
-        return saveDraft(new Request(request.url, { headers }), draft, [
-          ...(result.setCookies ?? []),
-          flowCookie("", 0),
-          lastAccountCookie(flow.email),
-        ]);
-      }
-    }
-    return redirectResponse(flow.returnTo, [
-      ...(result.setCookies ?? []),
-      flowCookie("", 0),
-      lastAccountCookie(flow.email),
-      ...(flow.invitationToken ? [invitationCookie("", 0)] : []),
-    ]);
+    if ((result.data as { twoFactorRedirect?: boolean })?.twoFactorRedirect)
+      return redirectResponse("/sign-in/factor", result.setCookies ?? []);
+    return completeSignIn(request, flow, result);
   }
   if (action === "sign-out") {
     const result = await formPost(request, "/api/v1/auth/sign-out", {}, true);
@@ -719,10 +660,13 @@ function opsReturn(value: string | null, fallback: string) {
   return `${path}${query.size ? `?${query}` : ""}`;
 }
 
-// Sensitive actions confirm it's the signed-in person with a fresh email code,
-// then continue where they left off.
-function confirmFirst(action: PendingAction) {
-  return redirectResponse("/confirm", [pendingActionCookie(action)]);
+// Bind a sensitive action before offering any completed authentication method.
+async function confirmFirst(action: PendingAction) {
+  const session = await readSession();
+  if (!session) return resumeAfterSignIn(action);
+  return redirectResponse("/confirm", [
+    pendingActionCookie({ ...action, owner: accountFingerprint(session.email) }),
+  ]);
 }
 // A session that ended mid-action: sign in, then the action continues — but
 // only for the same person (see readLastAccount).

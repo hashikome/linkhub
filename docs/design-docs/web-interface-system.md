@@ -596,3 +596,18 @@ the action being confirmed; error, expired-code and resend paths remain availabl
 Recovery requires the account email and restores neither old sessions nor service
 privileges. The account page uses the existing quiet typography and form tokens;
 only the final deletion confirmation receives destructive emphasis.
+
+## Passwordless security settings
+
+Sign-in offers passkeys, configured Google, and the existing email flow. Google
+is labeled for existing accounts. `/settings/security` contains named passkeys,
+authenticator setup with a local QR/manual key, explicit removal and recovery
+codes. Setup material uses an encrypted HttpOnly five-minute cookie; passkey
+recovery codes stay in component memory until dismissed. Secrets are never URL
+parameters or third-party QR requests. Native email, TOTP and recovery forms work
+without JavaScript; passkeys explain their browser requirement.
+
+`/sign-in/factor` completes a pending login. OAuth returns to an app-owned page;
+a subsequent native POST resumes a saved action after checking account ownership.
+Passkey completion uses the same POST. Support explains each method and recovery.
+See [passwordless security](passwordless-security.md).

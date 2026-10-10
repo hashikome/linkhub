@@ -8,6 +8,10 @@ export function maskVerificationOverrides<T extends Record<string, string | unde
   const isolated = { ...env } as T & Record<string, string | undefined>;
   for (const key of [
     "BOOTSTRAP_ADMIN_EMAIL",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_ID_FILE",
+    "GOOGLE_CLIENT_SECRET",
+    "GOOGLE_CLIENT_SECRET_FILE",
     "DATABASE_URL_FILE",
     "REDIS_URL_FILE",
     "BETTER_AUTH_SECRET_FILE",

@@ -282,3 +282,23 @@ only active, verified accounts without pending deletion may serve a Gravatar.
 Eligibility and email are rechecked after provider resolution; all other cases
 use the same generated fallback. User-ID responses are no-store, provider hashes
 stay server-side, and provider caches never bypass current account checks.
+
+## Passwordless security
+
+[ADR-0035](engineering-decisions/0035-passwordless-account-security.md) and the
+[focused design](design-docs/passwordless-security.md) govern passkeys, Google,
+TOTP and recovery. A passkey must cryptographically prove WebAuthn user
+verification; a browser preference alone is insufficient. Protected email/Google
+sign-in has no usable session until a registered factor or recovery code passes.
+Recovery codes are single-use and do not disable factors. Enrollment/removal and
+code rotation require completed authentication within ten minutes, then revoke
+other sessions and pending challenges. No trusted-device or email-only recovery
+bypass exists. Account lifecycle recovery preserves enrolled protection.
+
+Google disables implicit and requested signup. Automatic first linking requires
+an authoritative verified Gmail/Workspace email; other Google email addresses
+require explicit same-email linking from a recent product session. Linking binds
+the callback to that session and account version. Provider subject IDs identify
+subsequent logins. OAuth secrets support `_FILE` inputs; OAuth access/refresh tokens and TOTP/recovery
+secrets are encrypted by Better Auth. Neither public profiles nor client payloads
+expose stored credentials. Tests use synthetic provider credentials only.

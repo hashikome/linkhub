@@ -1,9 +1,10 @@
 # Auth-delivery integration
 
 Status: implemented and locally verified. Dependency pinned by `bun.lock`:
-better-auth **1.6.23**. Email codes are the only signup/sign-in method and
-supply both email-change proofs. Web email-change screens, optional
-TOTP/recovery codes and targeted collection invitations are planned.
+better-auth **1.6.23**. Email codes own signup and both email-change proofs.
+Passkeys, existing-account Google and optional TOTP/recovery are implemented;
+see [passwordless security](passwordless-security.md). Web email-change screens
+and targeted collection invitations remain planned.
 
 ## Ownership and transaction boundary
 
@@ -18,8 +19,11 @@ operator commands across replicas, including code session creation, resend and
 email change. Read-only product requests remain concurrent; see
 [RELIABILITY.md](../RELIABILITY.md). This is a deliberate small-installation throughput tradeoff: measure
 lock wait before replacing it with carefully ordered account/challenge locks.
-Transaction acquisition is bounded to 5 seconds and execution to 15 seconds.
-No provider request occurs inside an auth transaction.
+Transaction acquisition is bounded to 5 seconds. Email execution is bounded to
+15 seconds, security operations to 20 seconds. OAuth exchanges the authorization
+code with Google inside the security transaction; email delivery stays outside
+it. This retains atomic linking/session policy at the cost of holding the shared
+lock during that exchange; monitor latency before changing the locking model.
 
 The OTP delivery callback renders an approved template and persists an
 AES-256-GCM-encrypted outbox payload in that same transaction. Its key is
@@ -83,7 +87,7 @@ Email-change steps require the initiating session. The workflow intent binds
 immutable user/session IDs, current and target addresses, phase and ten-minute
 expiry. Starting again replaces that intent. Generic sign-in codes cannot
 confirm it. Occupied-target issuance keeps a generic success response without
-sending mail to that account. GET never consumes authentication proof. Native
+sending mail to that account. GET never consumes email proof; Google's state/PKCE-validated callback is the documented OAuth exception. Native
 OTP, verification, magic-link and password-reset HTTP paths are unavailable so
 they cannot bypass the delivery or workflow boundary. The explicit native
 allowlist preserves sign-out, session revocation and non-credential user updates.

@@ -28,13 +28,12 @@ optional hubs and public person profiles. Signup creates no hub; ownership does.
   direct-share list includes the invitee's name and email for managing access.
   Opting out hides the public ownership connection in both directions; the
   person’s name remains visible on their profile.
-- **Sign-in: email codes.** The primary sign-in is
-  Substack-style passwordless — continue with email → enter the emailed code
-  (email codes only; no direct authentication links or passwords). Usernames are
-  not required for sign-in. ns-series single sign-on (a centralized IAM) can join later without reshaping
-  this. The web presents it as one verification flow (see [email-verification.md](email-verification.md)): a single code field that accepts pasted spaces or
-  dashes. Live provider acceptance remains before release. Optional
-  TOTP/recovery codes are a later follow-up.
+- **Sign-in: passwordless.** Email codes own onboarding; user-verified passkeys
+  and existing-account Google also sign in. Enrolled passkeys/TOTP protect email
+  and Google fallback with an additional factor or recovery code. Usernames are
+  not login credentials. See [passwordless security](passwordless-security.md)
+  and [email verification](email-verification.md). Future centralized nsauth
+  preserves this product boundary. Live provider acceptance remains before release.
 - **Email change** is only ever the same person updating their address — never
   a way to hand over a hub. A hub is never transferred (it is its owner's
   fingerprint); collections are. It is double-verified:

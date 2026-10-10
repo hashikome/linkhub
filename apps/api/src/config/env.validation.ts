@@ -5,6 +5,7 @@
 // the _FILE contract (readSecret) so file-delivered secrets get the same
 // checks as plain env vars — the production path must not bypass validation.
 
+import { googleCredentials } from "../auth/security-config";
 import { trustedProxies } from "../common/middleware/request-budget";
 import { emailConfig } from "../email/config";
 import { readSecret } from "./secret";
@@ -19,6 +20,7 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
   const errors: string[] = [];
   const env = config as Record<string, string | undefined>;
   telemetryConfig(env);
+  googleCredentials(env);
   trustedProxies(env.TRUSTED_PROXY_CIDRS);
 
   // Zero-config is a development affordance only. In production the in-code

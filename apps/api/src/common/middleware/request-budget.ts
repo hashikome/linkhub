@@ -42,7 +42,9 @@ export function requestBudget(
     if (request.method === "GET" && ["/api/v1/health", "/api/v1/status"].includes(path))
       return next();
     const scope =
-      path === "/api/v1/auth/invitations/preview" && request.method === "POST"
+      (path === "/api/v1/auth/invitations/preview" && request.method === "POST") ||
+      (request.method === "GET" &&
+        ["/api/v1/auth/methods", "/api/v1/auth/security/status"].includes(path))
         ? "read"
         : path.startsWith("/api/v1/auth/")
           ? "auth"

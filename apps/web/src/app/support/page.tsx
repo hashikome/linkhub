@@ -35,6 +35,46 @@ export default function Page() {
         picture is available, we show your generated icon. After updating your picture, allow up to
         an hour for the change to appear, then reload nslinkhub.
       </p>
+      <h2 id="passkeys">How do I use a passkey?</h2>
+      <p>
+        Sign in, open Settings → Security and choose Add a passkey. Your device will ask for a
+        fingerprint, face scan or PIN. Give the passkey a name you recognize. Next time, choose Sign
+        in with a passkey; you won't need an email or authenticator code.
+      </p>
+      <p>
+        Keep another passkey or your recovery codes somewhere you can reach if you lose your device.
+        Passkeys require JavaScript and a supported browser.
+      </p>
+      <h2 id="authenticator">How do I use an authenticator app?</h2>
+      <p>
+        Open Settings → Security and choose Set up authenticator. Scan the QR code with your
+        authenticator app, or enter the setup key manually. Enter the six-digit code from the app to
+        enable it, and save your recovery codes outside this account.
+      </p>
+      <p>
+        After signing in with email or Google, enter the current code from your app. If a code was
+        just used, wait for the next one. A registered passkey can also complete sign-in. Removing
+        an authenticator requires a recent completed sign-in.
+      </p>
+      <h2 id="google-sign-in">How do I sign in with Google?</h2>
+      <p>
+        Google signs you in to an existing nslinkhub account; it cannot create one. Use the same
+        email address for both accounts. If Google can't connect automatically, sign in with email
+        first, then choose Connect Google in Settings → Security. Any protection you enabled still
+        applies.
+      </p>
+      <h2 id="account-recovery">How do I recover access?</h2>
+      <p>
+        Try another registered passkey or sign in with email or Google, then choose Use a recovery
+        code. Each recovery code works once and leaves your security methods enabled. Once signed
+        in, replace a lost method and create a new set of recovery codes; older codes will stop
+        working.
+      </p>
+      <p>
+        An email code alone cannot bypass your passkey or authenticator protection. We cannot remove
+        that protection through the support inbox. Keep at least one working method or saved
+        recovery code. Reactivating an account preserves its security methods.
+      </p>
       <h2>Got an email you didn't request?</h2>
       <p>
         You can safely ignore it. A sign-in code does nothing unless someone enters it, and it

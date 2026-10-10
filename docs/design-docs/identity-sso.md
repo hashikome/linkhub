@@ -1,7 +1,9 @@
 # ns-series identity and single sign-on
 
-Status: accepted direction; integration is not built. Local email-code sign-in
-remains the implemented authentication path. Delivery order is in
+Status: accepted direction; integration is not built. Local email codes,
+user-verified passkeys, existing-account Google and optional TOTP/recovery are
+implemented. [ADR-0035](../engineering-decisions/0035-passwordless-account-security.md)
+explicitly amends delivery order to ship these methods before nsauth. Delivery order is in
 [PRODUCT.md](../../PRODUCT.md#11-delivery).
 
 ## Scope and ownership

@@ -169,8 +169,11 @@ beforeAll(async () => {
       }
     },
   });
-  origin = `http://127.0.0.1:${ingress.port}`;
+  origin = `http://localhost:${ingress.port}`;
   process.env.BETTER_AUTH_URL = origin;
+  // Synthetic identity-only credentials: the browser intercepts Google navigation.
+  process.env.GOOGLE_CLIENT_ID = "browser-fixture-client";
+  process.env.GOOGLE_CLIENT_SECRET = "browser-fixture-secret";
   const { AppModule } = await import("../../src/app.module.js");
   const { configureApp } = await import("../../src/app.setup.js");
   const { PrismaService: Prisma } = await import("../../src/database/prisma.service.js");
@@ -1261,7 +1264,12 @@ describe("explore to resource: production browser journey", () => {
               fullPage: true,
             });
           await feedback.getByRole("link", { name: "Sign in", exact: true }).click();
-          await browserExpect(page.locator('input[name="returnTo"]')).toHaveValue(path);
+          await browserExpect(
+            page.locator('form[action="/forms/code-send"] input[name="returnTo"]'),
+          ).toHaveValue(path);
+          await browserExpect(
+            page.locator('form[action="/forms/google-start"] input[name="returnTo"]'),
+          ).toHaveValue(path);
         }
         const [name, ...value] = otherCookie.split("=");
         await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
@@ -6144,3 +6152,268 @@ it("shows public Gravatar pictures and links Settings to Support with native fal
     }
   }
 }, 60000);
+
+async function securityScreens(page: import("@playwright/test").Page, name: string) {
+  for (const width of [390, 768, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const colorScheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme });
+      await page.waitForTimeout(150);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await page.screenshot({
+        path: `/tmp/security-${name}-${width}-${colorScheme}.png`,
+        fullPage: true,
+      });
+    }
+  }
+}
+
+it("protects passwordless sign-in with passkeys and native authenticator recovery", async () => {
+  const { page, close } = await freshPage();
+  try {
+    const email = `passkey-browser-${crypto.randomUUID()}@example.com`;
+    await browserSignIn(page, email, "/settings/security");
+    await browserExpect(
+      page.getByRole("heading", { name: "Account security", exact: true }),
+    ).toBeVisible();
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("WebAuthn.enable");
+    const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
+      options: {
+        protocol: "ctap2",
+        transport: "internal",
+        hasResidentKey: true,
+        hasUserVerification: true,
+        isUserVerified: true,
+        automaticPresenceSimulation: true,
+      },
+    });
+    // Force the browser to allow a non-UV response; the server must still reject it.
+    await cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId, isBadUV: true });
+    await page.route("**/api/v1/auth/security/passkey/options", async (route) => {
+      const response = await fetch(route.request().url(), {
+        method: route.request().method(),
+        body: route.request().postData(),
+        headers: await route.request().allHeaders(),
+      });
+      const options = await response.json();
+      options.authenticatorSelection.userVerification = "discouraged";
+      await route.fulfill({
+        status: response.status,
+        headers: {
+          "content-type": "application/json",
+          "set-cookie": response.headers.getSetCookie()[0],
+        },
+        body: JSON.stringify(options),
+      });
+    });
+    await page.getByLabel("Passkey name").fill("My test device");
+    await page.getByRole("button", { name: "Add a passkey", exact: true }).click();
+    await browserExpect(page.locator(".security-passkey [role=alert]")).toContainText(
+      "couldn't verify",
+    );
+    expect(await prisma.passkey.count({ where: { user: { email } } })).toBe(0);
+    await page.unroute("**/api/v1/auth/security/passkey/options");
+    await cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId, isBadUV: false });
+    await page.getByRole("button", { name: "Add a passkey", exact: true }).click();
+    await browserExpect(
+      page.getByRole("heading", { name: "Save your recovery codes", exact: true }),
+    ).toBeVisible();
+    const recovery = await page.locator(".security-recovery li code").first().innerText();
+    await page.getByRole("link", { name: "I've saved my codes" }).click();
+    await browserExpect(page.locator(".security-methods")).toContainText("My test device");
+    for (const width of [390, 768, 1280, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const colorScheme of ["light", "dark"] as const) {
+        await page.emulateMedia({ colorScheme });
+        await page.waitForTimeout(150);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        await page.screenshot({
+          path: `/tmp/security-settings-${width}-${colorScheme}.png`,
+          fullPage: true,
+        });
+      }
+    }
+    await page.evaluate(async () => {
+      await fetch("/forms/sign-out", { method: "POST", body: new URLSearchParams() });
+    });
+    await ready(page, "/sign-in?returnTo=/settings/security");
+    await cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId, isBadUV: true });
+    await page.route("**/api/v1/auth/passkey/generate-authenticate-options", async (route) => {
+      const response = await fetch(route.request().url(), {
+        method: route.request().method(),
+        body: route.request().postData(),
+        headers: await route.request().allHeaders(),
+      });
+      await route.fulfill({
+        status: response.status,
+        headers: {
+          "content-type": "application/json",
+          "set-cookie": response.headers.getSetCookie()[0],
+        },
+        body: JSON.stringify({ ...(await response.json()), userVerification: "discouraged" }),
+      });
+    });
+    await page.getByRole("button", { name: "Sign in with a passkey", exact: true }).click();
+    await browserExpect(page.locator(".security-passkey [role=alert]")).toContainText(
+      "couldn't verify",
+    );
+    expect((await page.request.get(`${origin}/api/v1/profile`)).status()).toBe(401);
+    await page.unroute("**/api/v1/auth/passkey/generate-authenticate-options");
+    await cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId, isBadUV: false });
+    await page.route("**/api/v1/auth/passkey/verify-authentication", async (route) => {
+      const payload = route.request().postDataJSON();
+      const clientData = JSON.parse(
+        Buffer.from(payload.response.response.clientDataJSON, "base64url").toString(),
+      );
+      clientData.origin = "https://foreign.invalid";
+      payload.response.response.clientDataJSON = Buffer.from(JSON.stringify(clientData)).toString(
+        "base64url",
+      );
+      await route.continue({ postData: JSON.stringify(payload) });
+    });
+    await page.getByRole("button", { name: "Sign in with a passkey", exact: true }).click();
+    await browserExpect(page.locator(".security-passkey [role=alert]")).toContainText(
+      "couldn't verify",
+    );
+    expect((await page.request.get(`${origin}/api/v1/profile`)).status()).toBe(401);
+    await page.unroute("**/api/v1/auth/passkey/verify-authentication");
+    // Start the independent successful ceremony with a fresh source-budget window.
+    await prisma.requestBudget.deleteMany();
+    const assertionRequest = page.waitForRequest((request) =>
+      request.url().endsWith("/passkey/verify-authentication"),
+    );
+    await page.getByRole("button", { name: "Sign in with a passkey", exact: true }).click();
+    const assertion = (await assertionRequest).postDataJSON();
+    await browserExpect(
+      page.getByRole("heading", { name: "Account security", exact: true }),
+    ).toBeVisible();
+    expect(
+      await prisma.session.count({ where: { user: { email }, authenticationMethod: "passkey" } }),
+    ).toBeGreaterThan(0);
+    await page.evaluate(async () => {
+      await fetch("/forms/sign-out", { method: "POST", body: new URLSearchParams() });
+    });
+    await browserSignIn(page, email, "/settings/security");
+    await browserExpect(
+      page.getByRole("heading", { name: "Confirm your sign-in", exact: true }),
+    ).toBeVisible();
+    await securityScreens(page, "factor");
+    const guarded = await page.request.get(`${origin}/api/v1/profile`);
+    expect(guarded.status()).toBe(401);
+    await page.getByRole("link", { name: "Use a recovery code", exact: true }).click();
+    await page.getByLabel("Recovery code", { exact: true }).fill(recovery);
+    await page.getByRole("button", { name: "Verify and continue", exact: true }).click();
+    await browserExpect(
+      page.getByRole("heading", { name: "Account security", exact: true }),
+    ).toBeVisible();
+    const replay = await page.request.post(`${origin}/api/v1/auth/passkey/verify-authentication`, {
+      data: assertion,
+      headers: { origin },
+    });
+    expect(replay.ok()).toBe(false);
+    await cdp.send("WebAuthn.removeVirtualAuthenticator", { authenticatorId });
+  } finally {
+    await close();
+  }
+}, 60000);
+
+it("sets up an authenticator and uses recovery without JavaScript", async () => {
+  const { page, close } = await freshPage(false);
+  try {
+    const email = `totp-browser-${crypto.randomUUID()}@example.com`;
+    await browserSignIn(page, email, "/settings/security");
+    await page.getByRole("button", { name: "Set up authenticator", exact: true }).click();
+    await browserExpect(page.getByAltText("Authenticator setup QR code")).toBeVisible();
+    expect(
+      await page
+        .getByAltText("Authenticator setup QR code")
+        .evaluate((img) => (img as HTMLImageElement).naturalWidth),
+    ).toBe(200);
+    await securityScreens(page, "setup");
+    await page.getByText("Enter a setup key instead", { exact: true }).click();
+    const key = (await page.locator(".security-secret").innerText()).trim();
+    expect(key).toMatch(/^[A-Z2-7]+=*$/i);
+    const recovery = await page.locator(".security-recovery li code").first().innerText();
+    const { createHmac } = await import("node:crypto");
+    let bits = "";
+    for (const char of key.toUpperCase())
+      bits += "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".indexOf(char).toString(2).padStart(5, "0");
+    const raw = Buffer.from(bits.match(/.{8}/g)?.map((v) => parseInt(v, 2)) ?? []);
+    const counter = Buffer.alloc(8);
+    counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 30000)));
+    const mac = createHmac("sha1", raw).update(counter).digest();
+    const code = ((mac.readUInt32BE(mac[19] & 15) & 0x7fffffff) % 1000000)
+      .toString()
+      .padStart(6, "0");
+    await page.getByLabel("Six-digit code", { exact: true }).fill(code);
+    await page.getByRole("button", { name: "Enable authenticator", exact: true }).click();
+    await browserExpect(
+      page.getByText("Your authenticator is enabled.", { exact: false }),
+    ).toBeVisible();
+    await page.locator("header details summary").click();
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+    await browserSignIn(page, email, "/settings/security");
+    await browserExpect(
+      page.getByRole("heading", { name: "Confirm your sign-in", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("link", { name: "Use a recovery code", exact: true }).click();
+    await page.getByLabel("Recovery code", { exact: true }).fill(recovery);
+    await page.getByRole("button", { name: "Verify and continue", exact: true }).click();
+    await browserExpect(
+      page.getByText("Your authenticator is enabled.", { exact: false }),
+    ).toBeVisible();
+  } finally {
+    await close();
+  }
+}, 30000);
+
+it("starts existing-account Google sign-in through a native form", async () => {
+  const { page, close } = await freshPage(false);
+  try {
+    let providerURL = "";
+    await page.route("**/forms/google-start", async (route) => {
+      const response = await fetch(route.request().url(), {
+        method: route.request().method(),
+        body: route.request().postData(),
+        headers: await route.request().allHeaders(),
+        redirect: "manual",
+      });
+      providerURL = response.headers.get("location") ?? "";
+      expect(response.status).toBe(303);
+      // Inspect the real redirect and deliver its cookies without contacting Google.
+      await route.fulfill({
+        status: 200,
+        headers: {
+          "content-type": "text/html",
+          "set-cookie": response.headers.getSetCookie().join("\n"),
+        },
+        body: "<h1>Google provider fixture</h1>",
+      });
+    });
+    await ready(page, "/sign-in?returnTo=/settings/security");
+    await browserExpect(
+      page.getByText("For existing accounts. Use email below to create an account."),
+    ).toBeVisible();
+    await securityScreens(page, "signin");
+    await page.getByRole("button", { name: "Continue with Google", exact: true }).click();
+    await browserExpect(
+      page.getByRole("heading", { name: "Google provider fixture" }),
+    ).toBeVisible();
+    const target = new URL(providerURL);
+    expect(target.origin).toBe("https://accounts.google.com");
+    expect(target.searchParams.get("redirect_uri")).toBe(`${origin}/api/v1/auth/callback/google`);
+    expect(target.searchParams.get("code_challenge_method")).toBe("S256");
+    expect(target.searchParams.get("state")).toBeTruthy();
+    const cookies = await page.context().cookies(origin);
+    expect(cookies.some((cookie) => /better-auth\.(?:oauth_state|state)/.test(cookie.name))).toBe(
+      true,
+    );
+  } finally {
+    await close();
+  }
+}, 30000);

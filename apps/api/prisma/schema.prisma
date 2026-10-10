@@ -22,6 +22,7 @@ model User {
   name                   String    @db.VarChar(255)
   bio                    String?   @db.VarChar(500)
   email                  String    @unique @db.VarChar(255)
+  twoFactorEnabled       Boolean   @default(false) @map("two_factor_enabled")
   emailVerified          Boolean   @default(false) @map("email_verified")
   image                  String?
   // Notification center: the badge counts items newer than seenAt; items at or
@@ -46,6 +47,8 @@ model User {
   shareEntries       ShareEntry[]
   saves              CollectionSave[]
   sessions           Session[]
+  twoFactor          TwoFactor?
+  passkeys           Passkey[]
   accounts           Account[]
   comments           CollectionComment[] @relation("CommentAuthor")
   hiddenComments     CollectionComment[] @relation("CommentHider")
@@ -199,6 +202,7 @@ model Resource {
 }
 
 model Session {
+  authenticationMethod String? @map("authentication_method") @db.VarChar(16)
   verifiedAt DateTime? @map("verified_at") @db.Timestamptz(6)
   id         String    @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
   expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
@@ -232,6 +236,7 @@ model Account {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
+  @@unique([providerId, accountId])
   @@index([userId], map: "idx_accounts_user_id")
   @@map("accounts")
 }
@@ -516,4 +521,34 @@ model HubHandleReservation {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@map("hub_handle_reservations")
+}
+
+// Better Auth owns encrypted factor secrets and atomic recovery-code consumption.
+model TwoFactor {
+  id String @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
+  userId String @unique @map("user_id") @db.Uuid
+  secret String
+  backupCodes String @map("backup_codes")
+  verified Boolean @default(false)
+  failedVerificationCount Int @default(0) @map("failed_verification_count")
+  lockedUntil DateTime? @map("locked_until") @db.Timestamptz(6)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  @@map("two_factors")
+}
+
+model Passkey {
+  id String @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  name String? @db.VarChar(100)
+  publicKey String @map("public_key")
+  credentialID String @unique @map("credential_id")
+  counter Int
+  deviceType String @map("device_type")
+  backedUp Boolean @map("backed_up")
+  transports String?
+  aaguid String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  @@index([userId])
+  @@map("passkeys")
 }

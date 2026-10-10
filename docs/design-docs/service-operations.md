@@ -109,8 +109,10 @@ Both roles use the same email-entry journey, adapted from Pigfarm ADR-0012:
 - Every recipient, including a matching signed-in account, verifies a fresh email
   OTP. Consent puts the invitation in `verifying`; no role exists yet. Successful
   verification atomically creates the role, session and audit, completes the
-  invitation, and redirects to `/manage`. Email OTP is the only current method;
-  TOTP is deferred to a later phase.
+  invitation, and redirects to `/manage`. For protected accounts, the fresh
+  invitation-bound email code yields a pending challenge; only completed
+  TOTP/passkey/recovery proof grants the role and session. Ordinary Google or
+  passkey sign-in never substitutes for the invitation-bound email proof.
 
 Issuance, preview, expiry, cancellation, decline and abandonment before consent
 create no accounts. A forwarded token can record consent and create an unverified

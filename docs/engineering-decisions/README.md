@@ -83,3 +83,5 @@ alongside their original rationale.
 - [0033-permanent-hub-handles-and-self-service-accounts.md](0033-permanent-hub-handles-and-self-service-accounts.md) — Permanent hub handles, retained reservations and distinct self-service deactivation/deletion.
 
 - [0034-public-gravatar-avatars.md](0034-public-gravatar-avatars.md) — Public active-account pictures, server-side proxying and generated fallback.
+
+- [0035-passwordless-account-security.md](0035-passwordless-account-security.md) — UV-required passkeys, existing-account Google sign-in, optional TOTP and protected recovery; local delivery before nsauth.

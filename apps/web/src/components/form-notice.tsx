@@ -1,6 +1,11 @@
 import { Toast } from "./toast";
 
 const messages: Record<string, string> = {
+  "security-saved": "Your security settings have been updated.",
+  "security-reconfirm": "Sign in again before changing your security settings.",
+  "google-linked": "Google is connected to your account.",
+  "google-failed":
+    "Google sign-in could not be completed. Sign in with email, then connect Google in Security settings. Google cannot create an account here.",
   "order-saved": "Order saved.",
   "section-saved": "Section saved.",
   "link-saved": "Link saved.",

@@ -200,3 +200,26 @@ updated shared components. Restart the owned launcher, not unrelated servers.
 Authenticated pages should redirect an anonymous request to sign-in rather than
 return the generic unavailable page. Production browser tests build from the
 current route tree; also check the live development URL after adding routes.
+
+## Google, passkeys and authenticator apps
+
+Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` together in the ignored API
+`.env`, or use their `_FILE` variants. Omit both to hide Google sign-in. Restart
+the API after changing its environment. Never copy credentials into web variables,
+tracked files, test fixtures or container images. Verification masks both values
+and file overrides.
+
+Register the exact public callback in the Google OAuth web client's authorized
+redirect URIs: `http://localhost:3000/api/v1/auth/callback/google` for the default
+local setup; use the configured public origin for other ports/environments.
+Authorized JavaScript origin, if configured, is `http://localhost:3000`. Reusing a
+client from another product does not automatically register this callback; check
+consent-screen test-user restrictions too. Google sign-in only accepts existing
+accounts. External-email Google users first connect from Account security after
+signing in with email and any required factor.
+
+Use `localhost`, not a numeric loopback address, for browser passkeys. The RP ID
+is the public hostname. Production needs HTTPS; a credential registered for
+localhost is not a production credential. Configure passkeys and TOTP through
+Settings → Security; store recovery codes outside the account. The additive
+passwordless-security migration must be deployed before running the new API.

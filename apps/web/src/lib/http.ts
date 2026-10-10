@@ -13,6 +13,37 @@ export function failure(code = "unavailable", status = 0, retryAfter = 0): Failu
   return { ok: false, code, status, retryAfter };
 }
 
+// WebAuthn needs browser credential APIs. Only its four app-owned JSON paths
+// cross this adapter; ordinary product writes keep their native-form boundary.
+export type PasskeyPath =
+  | "/security/passkey/options"
+  | "/security/passkey/verify"
+  | "/passkey/generate-authenticate-options"
+  | "/passkey/verify-authentication";
+export async function submitPasskey<T>(path: PasskeyPath, body: unknown = {}): Promise<Result<T>> {
+  const signal = AbortSignal.timeout(10000);
+  try {
+    const response = await fetch(`/api/v1/auth${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      credentials: "same-origin",
+      cache: "no-store",
+      redirect: "error",
+      signal,
+    });
+    const data = await response.json();
+    return response.ok
+      ? { ok: true, data: data as T }
+      : failure(
+          isApiErrorCode(data?.error?.code) ? data.error.code : "unavailable",
+          response.status,
+        );
+  } catch {
+    return failure(signal.aborted ? "request_timeout" : "unavailable");
+  }
+}
+
 // Progressive enhancement for native forms: same origin, bounded wait and no
 // automatic redirect that could turn a sign-in document into a successful save.
 export async function submitForm<T>(
@@ -131,6 +162,18 @@ export function permalink(id: string, token?: string): string {
 export function queryValue(value: string | string[] | undefined, max = 4096): string | undefined {
   return typeof value === "string" && value.length <= max ? value : undefined;
 }
+export function authCookies(raw: string): string {
+  return raw
+    .split(";")
+    .map((v) => v.trim())
+    .filter((v) =>
+      /^(?:__Secure-)?better-auth(?:\.(?:session_token|two_factor|oauth_state|state|dont_remember)|-passkey)=[^;\r\n]*$/.test(
+        v,
+      ),
+    )
+    .join("; ");
+}
+
 export function sessionCookie(raw: string): string {
   return raw
     .split(";")
@@ -173,7 +216,11 @@ export async function postJson<T>(
       ...(Array.isArray(payload.warnings) ? { warnings: payload.warnings } : {}),
       setCookies: response.headers
         .getSetCookie()
-        .filter((v) => /^(?:__Secure-)?better-auth\.session_token=/.test(v)),
+        .filter((v) =>
+          /^(?:__Secure-)?better-auth(?:\.(?:session_token|two_factor|oauth_state|state|dont_remember)|-passkey)=/.test(
+            v,
+          ),
+        ),
     };
   } catch {
     return failure(signal.aborted ? "request_timeout" : "unavailable");
@@ -248,7 +295,7 @@ export function safeReturn(value: unknown): string {
       : "/settings";
   }
   if (
-    /^\/(?:account|hub|settings|notifications|discover|support|confirm|manage(?:\/(?:analytics|audit|people|team|invitations|collections|accounts\/[a-f0-9-]{36}|collections\/[a-f0-9-]{36}))?)$/.test(
+    /^\/(?:account|hub|settings(?:\/security)?|notifications|discover|support|confirm|manage(?:\/(?:analytics|audit|people|team|invitations|collections|accounts\/[a-f0-9-]{36}|collections\/[a-f0-9-]{36}))?)$/.test(
       parsed.pathname,
     )
   )

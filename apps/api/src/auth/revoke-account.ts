@@ -2,6 +2,7 @@ import { emailKey } from "../email/outbox";
 import type { Prisma } from "../generated/prisma/client";
 import { invalidateAccountInvitations } from "../operations/invitations";
 import { handoverIdentifiers } from "./handover-proofs";
+import { invalidateSecurityChallenges } from "./security-handler";
 
 // Caller holds the auth authority lock. Proofs and delivery are revoked together.
 export async function revokeAccountAccess(
@@ -10,6 +11,7 @@ export async function revokeAccountAccess(
   address: string,
   secret: string,
 ) {
+  await invalidateSecurityChallenges(tx, userId);
   const intent = await tx.emailChangeIntent.findUnique({ where: { userId } });
   const lifecycleProofs = await tx.verification.findMany({
     where: { identifier: { startsWith: `account-action:${userId}:` } },

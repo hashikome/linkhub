@@ -4,6 +4,7 @@ import { readSecret } from "../config/secret";
 import { emailConfig } from "../email/config";
 import { PrismaClient } from "../generated/prisma/client";
 import { createDeliveryAuth } from "./delivery-auth";
+import { googleCredentials } from "./security-config";
 
 // The raw auth handler exists before Nest boots. Dependencies are composed here,
 // while tests and future delivery wiring use the same explicit factory.
@@ -14,6 +15,7 @@ const prisma = new PrismaClient({
   }),
 });
 export const auth = createDeliveryAuth({
+  google: googleCredentials(),
   supportUrl: emailConfig().supportUrl,
   suppressionSecret: emailConfig().suppressionSecret,
   prisma,

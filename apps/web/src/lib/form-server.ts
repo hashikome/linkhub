@@ -3,7 +3,7 @@ import { webServerConfig } from "@nslinkhub/config/web-server";
 import { type AccountAction, accountActions } from "@nslinkhub/types";
 import { cookies } from "next/headers";
 import { serverCookie } from "./cookies";
-import { type ApiPath, postJson, safePath, sessionCookie } from "./http";
+import { type ApiPath, authCookies, postJson, safePath } from "./http";
 import { openSignInFlow, type SignInFlow, sealSignInFlow } from "./sign-in-flow";
 
 export function sealFlow(flow: SignInFlow) {
@@ -49,7 +49,7 @@ export function formPost<T>(
     "Content-Type": "application/json",
     Origin: config.publicOrigin,
   });
-  const cookie = sessionCookie(request.headers.get("cookie") ?? "");
+  const cookie = authCookies(request.headers.get("cookie") ?? "");
   if (cookie) headers.set("cookie", cookie);
   const source = request.headers.get("x-web-form-source");
   if (source) headers.set("x-web-form-source", source);

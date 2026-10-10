@@ -14,6 +14,9 @@ import {
 import { accountActionContext, completeAccountAction } from "./account-lifecycle";
 import { createAuth } from "./create-auth";
 import { bindHandoverProofs, bindProofIdentifiers, handoverIdentifiers } from "./handover-proofs";
+import type { GoogleCredentials } from "./security-config";
+import { invalidateSecurityChallenges, securityHandler, securityPath } from "./security-handler";
+import type { SecurityContext } from "./security-plugins";
 
 const basePath = "/api/v1/auth";
 const accountPaths = new Set(["/account/send", "/account/confirm"]);
@@ -86,6 +89,7 @@ async function budget(tx: Prisma.TransactionClient, key: string, limit: number) 
 
 export interface DeliveryAuthOptions {
   prisma: PrismaClient;
+  google?: GoogleCredentials;
   secret: string;
   suppressionSecret: string;
   baseURL: string;
@@ -99,7 +103,7 @@ export interface DeliveryAuthOptions {
 export function createDeliveryAuth(options: DeliveryAuthOptions) {
   const { prisma, secret, baseURL, supportUrl } = options;
   const resendGap = options.codeResendSeconds ?? CODE_RESEND_SECONDS;
-  const ordinary = createAuth({ prisma, secret, baseURL });
+  const ordinary = createAuth({ prisma, secret, baseURL, google: options.google });
   async function getSession(input: { headers: Headers }) {
     const session = await ordinary.api.getSession(input);
     if (!session) return null;
@@ -115,8 +119,9 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
     handler: async (request: Request): Promise<Response> => {
       const url = new URL(request.url);
       const path = url.pathname.slice(basePath.length);
+      if (securityPath(path)) return securityHandler(request, options);
       // Explicit HTTP allowlist: native OTP/verification/reset routes cannot bypass
-      // purpose binding or durable delivery. No GET endpoint consumes a challenge.
+      // purpose binding or durable delivery. No email GET endpoint consumes a challenge.
       if (request.method === "GET") {
         if (path !== "/get-session") return failure(404);
         const session = await getSession({ headers: request.headers });
@@ -230,7 +235,15 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
             let proofIdentifiers: ReturnType<typeof handoverIdentifiers> | undefined;
             let invitationIdentifier: string | undefined;
             let emailPurpose: SignInCodePurpose = "sign-in";
+            const security: SecurityContext = {
+              proofOnly: !!lifecycle,
+              invitationToken:
+                path === "/invitations/verify" && typeof body.token === "string"
+                  ? body.token
+                  : undefined,
+            };
             const localAuth = createAuth({
+              security,
               prisma: tx,
               secret,
               baseURL,
@@ -512,6 +525,13 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                 : { email: lifecycle.address, otp: body.code };
             }
             const headers = new Headers(request.headers);
+            headers.set(
+              "cookie",
+              (headers.get("cookie") ?? "")
+                .split(";")
+                .filter((part) => !part.includes("better-auth.trust_device="))
+                .join(";"),
+            );
             headers.set("content-type", "application/json");
             headers.delete("content-length");
             const response = await localAuth.handler(
@@ -521,6 +541,7 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                 body: JSON.stringify(nativeBody),
               }),
             );
+            if (security.rejected) throw appError("unauthorized");
             if (
               deliveryFailed ||
               (response.ok && expectedDelivery && deliveryCount !== 1) ||
@@ -552,9 +573,16 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
             }
             if (response.ok && (path === "/code/verify" || verifyInvitation)) {
               const verified = (await response.clone().json()) as {
+                twoFactorRedirect?: boolean;
                 token?: string;
                 user?: { id?: string };
               };
+              if (verified.twoFactorRedirect) {
+                await options.beforeCommit?.();
+                response.headers.set("Cache-Control", "no-store");
+                response.headers.delete("set-auth-token");
+                return response;
+              }
               if (!verified.token || !verified.user?.id)
                 throw new Error("Missing verified session");
               const loggedInAt = new Date();
@@ -579,6 +607,7 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
               if (response.ok && path.endsWith("confirm-current"))
                 await tx.emailChangeIntent.update({ where: { userId }, data: { phase: "new" } });
               if (response.ok && path.endsWith("confirm-new")) {
+                if (userId) await invalidateSecurityChallenges(tx, userId);
                 const context = await localAuth.$context;
                 await context.internalAdapter.deleteSessions(
                   (await tx.session.findMany({ where: { userId }, select: { token: true } })).map(

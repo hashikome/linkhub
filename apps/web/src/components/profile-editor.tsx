@@ -366,6 +366,7 @@ export function ProfileEditor({
             {label}
           </a>
         ))}
+        <a href="/settings/security">Security</a>
       </nav>
       <div className="settings-content">
         {!feedback && !dirty && notice !== "profile-saved" && <FormNotice code={notice} />}

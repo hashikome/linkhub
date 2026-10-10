@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { NativeForm } from "../../components/native-form";
+import { SignInOptions } from "../../components/sign-in-options";
 import { VerifyStart } from "../../components/verification";
 import { readDraft } from "../../lib/capture-server";
 import { queryValue, safeReturn } from "../../lib/http";
@@ -30,6 +31,7 @@ export default async function Page({
         : "sign-in";
   return (
     <VerifyStart
+      alternatives={<SignInOptions returnTo={returnTo} />}
       copy={verificationCopy(purpose, { returnTo, action: pending?.label })}
       purpose={purpose}
       sendAction="/forms/code-send"

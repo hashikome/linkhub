@@ -216,9 +216,11 @@ success; where better-auth and the outbox cannot share a transaction, document
 and test the recovery path. Preserve `resolveSessionUser`, app-owned hub
 onboarding, and the raw auth handler before body parsers.
 
-Authentication uses email codes only. The transaction-scoped integration proves one-time consumption,
+Email signup and email proofs use codes only; other sign-in methods follow
+[passwordless security](passwordless-security.md). The transaction-scoped integration proves one-time consumption,
 resend invalidation, concurrent completion, cross-device sign-in and replay
-rejection on the pinned dependency. GET never consumes proof. Eight-digit
+rejection on the pinned dependency. GET never consumes an email proof. The
+Google OAuth callback is the protocol-specific state/PKCE-validated exception. Eight-digit
 verification codes are keyed-hashed through the supported auth integration;
 shared issue/verify budgets and non-enumerating issuance responses apply.
 See the [integration contract](auth-delivery-integration.md) for endpoints,

@@ -24,6 +24,7 @@
     "db:seed": "bun prisma/seed.ts"
   },
   "dependencies": {
+    "@better-auth/passkey": "1.6.23",
     "@logtape/logtape": "2.3.0",
     "@logtape/sentry": "2.3.0",
     "@nestjs/common": "^11.0.1",

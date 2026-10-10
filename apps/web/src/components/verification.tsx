@@ -19,7 +19,9 @@ export function VerifyStart({
   notice,
   cancelAction,
   footer,
+  alternatives,
 }: {
+  alternatives?: ReactNode;
   copy: VerificationCopy;
   purpose: VerificationPurpose;
   email?: string;
@@ -35,6 +37,7 @@ export function VerifyStart({
       <h1>{copy.title}</h1>
       <p className="verify-reason">{copy.reason}</p>
       <FormNotice code={notice} />
+      {alternatives}
       <NativeForm action={sendAction}>
         <input type="hidden" name="purpose" value={purpose} />
         {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}

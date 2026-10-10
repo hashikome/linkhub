@@ -4,6 +4,8 @@ import { bearer } from "better-auth/plugins";
 import { emitEvent } from "../common/observability/telemetry";
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
 import { accountUsername } from "../modules/users/account-onboarding";
+import { authoritativeGoogleEmail, type GoogleCredentials } from "./security-config";
+import { type SecurityContext, securityPlugins } from "./security-plugins";
 
 export interface AuthDependencies {
   prisma: PrismaClient | Prisma.TransactionClient;
@@ -11,9 +13,18 @@ export interface AuthDependencies {
   baseURL: string;
   /** Plugins and transaction-scoped persistence are supplied by the delivery composition. */
   plugins?: BetterAuthPlugin[];
+  google?: GoogleCredentials;
+  security?: SecurityContext;
 }
 
-export function createAuth({ prisma, secret, baseURL, plugins = [] }: AuthDependencies) {
+export function createAuth({
+  prisma,
+  secret,
+  baseURL,
+  plugins = [],
+  google,
+  security = {},
+}: AuthDependencies) {
   return betterAuth({
     logger: {
       log: (level) =>
@@ -23,6 +34,32 @@ export function createAuth({ prisma, secret, baseURL, plugins = [] }: AuthDepend
           level === "error" ? "error" : level === "warn" ? "warn" : "info",
         ),
     },
+    appName: "nslinkhub",
+    onAPIError: { errorURL: `${new URL(baseURL).origin}/sign-in?notice=google-failed` },
+    account: {
+      encryptOAuthTokens: true,
+      accountLinking: {
+        enabled: true,
+        allowDifferentEmails: false,
+        requireLocalEmailVerified: true,
+        trustedProviders: [],
+      },
+    },
+    socialProviders: google
+      ? {
+          google: {
+            ...google,
+            disableImplicitSignUp: true,
+            disableSignUp: true,
+            mapProfileToUser: (profile) => ({
+              emailVerified:
+                authoritativeGoogleEmail(profile) ||
+                (profile.email_verified === true &&
+                  security.googleLinkEmail === profile.email.toLowerCase()),
+            }),
+          },
+        }
+      : {},
     basePath: "/api/v1/auth",
     secret,
     baseURL,
@@ -60,6 +97,6 @@ export function createAuth({ prisma, secret, baseURL, plugins = [] }: AuthDepend
         },
       },
     },
-    plugins: [bearer(), ...plugins],
+    plugins: [...plugins, ...securityPlugins(prisma, secret, baseURL, security), bearer()],
   });
 }

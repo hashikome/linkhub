@@ -14,6 +14,7 @@ Each document distinguishes implemented contracts from planned behavior.
 - [tenancy-and-access.md](tenancy-and-access.md): the access model (owner →
   direct share → active link → published), service-operation restrictions,
   ownership transfer, publication and discovery.
+- [passwordless-security.md](passwordless-security.md): passkeys, existing-account Google, TOTP, recovery and authentication assurance.
 - [identity-and-handles.md](identity-and-handles.md): person usernames and profiles, hub handles and names, code-first sign-in, email change and the web
   URL scheme.
 - [collections-and-resources.md](collections-and-resources.md): item kinds and

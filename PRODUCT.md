@@ -540,10 +540,17 @@ Purpose: take a collection out of the product as a document. Status: API only.
 
 Purpose: one account, passwordless, that never loses what you were doing.
 Status: sign-in, verification, settings, permanent hub-handle claims and
-self-service account lifecycle and public Gravatar avatars Built; email change API only.
+self-service account lifecycle, public Gravatar avatars and passwordless security Built; email change API only.
 
-- **Sign-in:** email, then an eight-digit emailed code. Emails carry codes
-  only, never sign-in links; neither passwords nor usernames are login credentials.
+- **Sign-in:** prefer a passkey with device unlock, or use Google for an existing
+  account, or an eight-digit emailed code. Google never registers an account.
+  Emails carry codes only; neither passwords nor usernames are login credentials.
+- **Account security:** optional passkeys and authenticator-app TOTP in Settings.
+  After either is enrolled, email and Google require a registered factor or
+  single-use recovery code. A user-verified passkey completes sign-in directly.
+  Recovery keeps protection enabled; recent completed authentication is required
+  to add/remove methods or replace recovery codes. See
+  [passwordless security](docs/design-docs/passwordless-security.md).
 - **Verification:** every situation that sends a code uses the same two
   screens, worded for the purpose (sign in, first link, signing in to do
   something, a session that ended mid-action, confirming a sensitive action,
@@ -729,8 +736,8 @@ are scoped, revocable and rate-limited per plan.
   their audit commit together; recovery never revives old sessions or role
   grants. Invitation acceptance starts from the emailed link, creates an
   account only with explicit consent, and grants no role until a fresh,
-  invitation-bound email code is verified. Sensitive actions need a recent
-  email code.
+  invitation-bound email code is verified. Sensitive actions need recent completed
+  authentication; enrolled protection applies after the invitation email code.
 
 ## 9. Out Of Scope
 
@@ -837,7 +844,7 @@ Delivery order for the remaining milestones:
 12. **Rest of the internals pass** — fewer queries, one write-lock opt-out per
     controller, the forms route as an action table, Save a link drafts in
     Redis, focus rings.
-13. **Account** (§6.11) — email change in the web and authenticator-app codes.
+13. **Account** (§6.11) — email change in the web remains. Passkeys, existing-account Google sign-in, authenticator-app codes and protected recovery are built.
     Permanent hub-handle claims and self-service deactivation/recovery and
     deletion/cancellation are built (ADR-0033).
 14. **Browser extension** (§7).

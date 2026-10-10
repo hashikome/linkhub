@@ -9,6 +9,13 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Add passwordless account security: user-verified passkeys, existing-account
+  Google sign-in, optional authenticator apps and single-use recovery codes.
+  Protected email/Google sign-ins require another enrolled proof; email cannot
+  bypass protection. Security settings and Support cover setup and recovery.
+  Security changes require recent completed authentication and revoke other
+  sessions. Google credentials remain optional server-only configuration.
+
 - Display claimed hub handles as immutable label/value facts in Settings, matching
   Hub ID, with a hint that the claimed handle is permanent. Unclaimed handles
   keep the explicit claim form.
