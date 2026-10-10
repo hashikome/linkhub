@@ -13,7 +13,7 @@ const REPLY_LIMIT = 100;
 
 // Comments follow the collection's own access: anyone who can read may read the
 // discussion; signed-in readers may post and reply while comments are on and
-// the collection is not on hold. Owners and editors moderate (hide, mark the
+// the collection is not on hold. Owners and contributors moderate (hide, mark the
 // answer); authors edit or delete their own words. Nothing here grants access
 // to the collection or to anything it references.
 @Injectable()
@@ -212,16 +212,16 @@ export class CommentsService {
     };
   }
 
-  // Authors appear as everywhere else: by their @handle.
+  // Authors are people, whether or not they have a hub.
   private async authors(collection: Collection, rows: CollectionComment[]) {
     const ids = [...new Set(rows.flatMap((row) => (row.authorUserId ? [row.authorUserId] : [])))];
     if (!ids.length) return new Map<string, CommentAuthor>();
-    const [users, hub, editors] = await Promise.all([
+    const [users, hub, contributors] = await Promise.all([
       this.prisma.user.findMany({
-        where: { id: { in: ids } },
+        where: { id: { in: ids }, accountState: "active" },
         select: {
           id: true,
-          hub: { select: { id: true, handle: true } },
+          username: true,
         },
       }),
       this.prisma.hub.findUnique({
@@ -232,34 +232,27 @@ export class CommentsService {
         where: {
           collectionId: collection.id,
           source: "direct",
-          role: "editor",
+          role: "contributor",
           userId: { in: ids },
         },
         select: { userId: true },
       }),
     ]);
-    const editorIds = new Set(editors.map((share) => share.userId));
+    const contributorIds = new Set(contributors.map((share) => share.userId));
     return new Map(
-      users.flatMap((user): [string, CommentAuthor][] =>
-        user.hub
-          ? [
-              [
-                user.id,
-                {
-                  id: user.id,
-                  hubId: user.hub.id,
-                  handle: user.hub.handle,
-                  role:
-                    hub?.ownerUserId === user.id
-                      ? "owner"
-                      : editorIds.has(user.id)
-                        ? "editor"
-                        : null,
-                },
-              ],
-            ]
-          : [],
-      ),
+      users.map((person): [string, CommentAuthor] => [
+        person.id,
+        {
+          userId: person.id,
+          username: person.username,
+          role:
+            hub?.ownerUserId === person.id
+              ? "owner"
+              : contributorIds.has(person.id)
+                ? "contributor"
+                : null,
+        },
+      ]),
     );
   }
 

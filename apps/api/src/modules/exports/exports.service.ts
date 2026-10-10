@@ -106,7 +106,11 @@ export class ExportsService {
     titles: Map<string, string>,
   ): Promise<ExportInline> {
     if (resource.kind === ResourceKind.HEADING)
-      return { kind: "heading", title: resource.titleOverride ?? "Untitled heading" };
+      return {
+        kind: "heading",
+        title: resource.titleOverride ?? "Untitled heading",
+        description: resource.sectionDescription ?? undefined,
+      };
     if (resource.kind !== ResourceKind.COLLECTION_LINK) return this.toLink(resource, titles);
     const target = resource.linkedCollectionId
       ? await this.prisma.collection.findUnique({ where: { id: resource.linkedCollectionId } })

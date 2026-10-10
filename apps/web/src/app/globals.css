@@ -56,14 +56,13 @@
 }
 
 :root {
-  height: 100%;
-  overflow: hidden;
   color-scheme: light dark;
   --gutter: 2rem;
   --shell: 70rem;
   --row-inset: 0.875rem;
-  /* One control size: compact for fine pointers, 44px targets for touch. */
+  /* Buttons stay compact; fields keep room for input. Both grow for touch. */
   --control: 2.375rem;
+  --button-control: 2rem;
   --elevation: 0 1px 2px oklch(0.2 0.02 265 / 0.06), 0 12px 32px -12px oklch(0.2 0.02 265 / 0.22);
 }
 :root[data-theme="light"] {
@@ -74,10 +73,10 @@
 }
 body {
   margin: 0;
-  height: 100dvh;
+  min-height: 100dvh;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  overflow: hidden;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(min-content, 1fr) auto;
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
@@ -165,6 +164,10 @@ time {
   padding-inline: var(--gutter);
 }
 .topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--color-canvas);
   border-bottom: 1px solid var(--color-divider);
 }
 .topbar > nav {
@@ -216,17 +219,12 @@ time {
   gap: 0.375rem;
 }
 main {
+  min-width: 0;
   min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: none;
   padding-block: 2.5rem 2rem;
   scroll-padding-block: 1.5rem;
 }
-main::-webkit-scrollbar {
-  display: none;
-}
-/* The scroll region takes focus for keyboard scrolling; it is not a control,
-   so it shows no ring (returning to the window would otherwise frame it). */
+/* The skip-link target takes focus without drawing a ring around the page. */
 main:focus-visible {
   outline: none;
 }
@@ -249,14 +247,15 @@ main:focus-visible {
 .footer-nav {
   display: flex;
   flex-wrap: wrap;
-  gap: 0 1.25rem;
+  align-items: center;
+  gap: 0 2rem;
 }
 .footer-nav a {
   display: inline-flex;
   align-items: center;
   min-height: var(--control);
   color: var(--color-muted);
-  font-size: var(--text-meta);
+  font-size: 0.9375rem;
   font-weight: 500;
 }
 .footer-nav a:hover {
@@ -305,7 +304,7 @@ main:focus-visible {
   max-width: 32rem;
 }
 .settings-page {
-  max-width: 46rem;
+  max-width: 66rem;
 }
 .account-flow > h1 + p {
   color: var(--color-muted);
@@ -391,10 +390,9 @@ main:focus-visible {
   color: var(--color-ink);
   display: inline;
 }
-/* The title link stretches over its row, so the whole row opens it; links in
-   the meta line sit above the stretch. Focus rings the row, not the text. */
-.collection-row :is(h2, h3) a::after,
-.resource-row :is(h2, h3) a::after {
+/* Collection titles stretch over their row. Resource summaries toggle details;
+   only their title text opens the destination. */
+.collection-row :is(h2, h3) a::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -502,6 +500,10 @@ a.person:hover .person-handle:only-child {
   overflow-wrap: anywhere;
   max-width: 100%;
 }
+.tags .resource-tag-count {
+  border-color: transparent;
+  padding-inline: 0.125rem;
+}
 .resource-meta {
   display: flex;
   flex-wrap: wrap;
@@ -560,22 +562,25 @@ a.person:hover .person-handle:only-child {
 
 .button,
 .text-button {
-  min-height: var(--control);
+  min-height: var(--button-control);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.375rem 0.875rem;
+  padding: 0.25rem 0.625rem;
   cursor: pointer;
   color: var(--color-ink);
-  font-size: 0.9375rem;
-  font-weight: 550;
+  font-size: var(--text-meta);
+  font-weight: 500;
   line-height: 1.25rem;
   border-radius: var(--radius-control);
   text-decoration: none;
   background: var(--color-canvas);
   border: 1px solid var(--color-border);
   white-space: nowrap;
+}
+.button {
+  min-width: var(--button-control);
 }
 .button:hover {
   color: var(--color-ink);
@@ -638,26 +643,6 @@ a.person:hover .person-handle:only-child {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-}
-
-/* ---------- Copy link ---------- */
-
-.copy-link {
-  display: flex;
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 0.25rem;
-  max-width: 100%;
-  font-size: var(--text-meta);
-}
-.copy-link [role="status"]:empty {
-  display: none;
-}
-.copy-link [role="status"] {
-  color: var(--color-success);
-}
-.copy-link input {
-  width: 100%;
 }
 
 /* ---------- Pagination ---------- */
@@ -1227,7 +1212,7 @@ html[data-revalidating="true"] .session-nav {
   font-weight: 650;
 }
 
-/* ---------- Toasts and share menu ---------- */
+/* ---------- Toasts and collection actions ---------- */
 
 .toast-region {
   position: fixed;
@@ -1297,143 +1282,6 @@ html[data-revalidating="true"] .session-nav {
     visibility: hidden;
   }
 }
-.share-menu {
-  position: relative;
-}
-/* In the collection bar the panel anchors to the whole button group, which
-   ends at the bar's edge, so it never runs off a phone screen. */
-.collection-actions .share-menu {
-  position: static;
-}
-/* Contributors' History and Edit: buttons on wide screens; below, one button
-   that expands them in place in the bar and collapses them again. */
-.collection-more {
-  display: flex;
-  flex-direction: row-reverse;
-  align-items: center;
-  gap: 0.5rem;
-}
-.collection-more > summary {
-  list-style: none;
-  min-width: var(--control);
-  justify-content: center;
-  font-size: 1.125rem;
-}
-.collection-more > summary::-webkit-details-marker {
-  display: none;
-}
-.collection-more-items {
-  display: flex;
-  gap: 0.5rem;
-}
-.collection-more:not([open]) .collection-more-items {
-  display: none;
-}
-.collection-more .more-close,
-.collection-more[open] .more-open {
-  display: none;
-}
-.collection-more[open] .more-close {
-  display: inline;
-}
-.collection-actions .wide-action {
-  display: none;
-}
-@media (min-width: 1024px) {
-  .collection-actions .wide-action {
-    display: inline-flex;
-  }
-  .collection-actions .collection-more {
-    display: none;
-  }
-}
-.share-menu > summary {
-  list-style: none;
-}
-.share-menu > summary::-webkit-details-marker {
-  display: none;
-}
-.share-panel {
-  display: grid;
-  gap: 0.75rem;
-  min-width: 0;
-  text-align: start;
-}
-/* Only the narrow collection disclosure needs a floating surface. */
-.share-menu > .share-panel {
-  position: absolute;
-  z-index: 20;
-  inset-inline-end: 0;
-  top: calc(100% + 0.375rem);
-  width: min(20rem, calc(100vw - 2.5rem));
-  padding: 1rem;
-  background: var(--color-canvas);
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-panel);
-}
-.share-title {
-  margin: 0;
-  font-weight: 650;
-}
-.share-address {
-  display: grid;
-  gap: 0.25rem;
-  font-size: var(--text-meta);
-  color: var(--color-muted);
-}
-.share-address input {
-  width: 100%;
-  min-height: var(--control);
-  padding: 0.375rem 0.625rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-control);
-  background: var(--color-canvas);
-  color: var(--color-ink);
-  font-size: var(--text-meta);
-}
-.share-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem 1.25rem;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.share-links a,
-.share-link-button {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--control);
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--color-primary);
-  font: inherit;
-  font-size: 0.9375rem;
-  font-weight: 500;
-  text-decoration: underline;
-  text-decoration-color: color-mix(in oklch, var(--color-primary) 40%, transparent);
-  text-underline-offset: 0.25em;
-  cursor: pointer;
-}
-.share-links a:hover,
-.share-link-button:hover {
-  color: var(--color-primary-hover);
-  text-decoration-color: currentColor;
-}
-.share-status {
-  margin: 0;
-  min-height: 1.5em;
-  font-size: var(--text-meta);
-  color: var(--color-success);
-}
-.share-address-static {
-  margin: 0;
-  font-size: var(--text-meta);
-  color: var(--color-muted);
-  overflow-wrap: anywhere;
-}
-
 /* Appearance: compact header toggle; Settings keeps the segmented form. */
 .theme-picker {
   min-width: 0;
@@ -1583,16 +1431,6 @@ html[data-revalidating="true"] .session-nav {
   padding-inline: 0.75rem;
   border-radius: var(--radius-control);
 }
-.add-resource > span[aria-hidden] {
-  font-size: 1.125rem;
-  line-height: 1;
-}
-/* On phones the bar's Add a link is just "+", like the site header's. */
-@media (max-width: 639px) {
-  .add-resource .add-label {
-    display: none;
-  }
-}
 .collection-sheet > .continuation {
   margin-block: 0.5rem 1rem;
 }
@@ -1602,10 +1440,7 @@ html[data-revalidating="true"] .session-nav {
 
 /* Desktop: the sheet fills the frame; its header (bar, title, description, tags,
    metadata) stays put and only the sections and links scroll beneath it. */
-.share-aside {
-  display: none;
-}
-/* Wide screens: the share panel lives beside the sheet instead of in a menu. */
+/* Wide screens: discussion sits beside the collection. */
 @media (min-width: 1024px) {
   .reader-layout {
     display: grid;
@@ -1613,22 +1448,14 @@ html[data-revalidating="true"] .session-nav {
     gap: 1.5rem;
     align-items: start;
   }
-  .share-aside {
-    display: block;
-  }
-  .share-aside {
-    padding: 1rem 1rem 0;
-  }
-  .reader-layout .sheet-bar .share-menu {
-    display: none;
-  }
 }
-@media (min-width: 640px) and (min-height: 600px) {
+@media (min-width: 1024px) and (min-height: 600px) {
   main:has(.reader-layout) {
     padding-bottom: 1.5rem;
   }
   .reader-layout {
     height: 100%;
+    contain: size layout;
     grid-template-rows: minmax(0, 1fr);
   }
   .reader.collection-sheet {
@@ -1661,8 +1488,55 @@ html[data-revalidating="true"] .session-nav {
   outline-offset: -2px;
 }
 
-/* ---------- Discussion ---------- */
+/* ---------- Contributors and discussion ---------- */
 
+.collection-contributors {
+  padding-block: 1.5rem 0;
+}
+.collection-contributors h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  font-size: var(--text-row);
+}
+.contributor-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.contributor-list a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--control);
+  min-height: var(--control);
+  border-radius: 50%;
+}
+.contributor-names {
+  flex-direction: column;
+}
+.contributor-names a {
+  justify-content: flex-start;
+  gap: 0.5rem;
+  color: var(--color-ink);
+  font-weight: 600;
+  border-radius: var(--radius-control);
+}
+.contributor-names a span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.contributor-names a:hover {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+.collection-contributors .meta {
+  margin: 0.75rem 0 0;
+}
 .reader-side {
   display: grid;
   gap: 1rem;
@@ -1699,7 +1573,8 @@ html[data-revalidating="true"] .session-nav {
   font-size: var(--text-row);
   margin: 0;
 }
-.comments-count {
+.comments-count,
+.contributors-count {
   min-width: 1.5rem;
   padding: 0 0.5rem;
   border-radius: 1rem;
@@ -1865,8 +1740,11 @@ html[data-revalidating="true"] .session-nav {
   display: block;
   font-weight: 400;
 }
-/* Wide screens: Share stays above the independently scrolling discussion. */
+/* Wide screens: discussion follows the sidebar summary independently of the sheet header. */
 @media (min-width: 1024px) {
+  .collection-contributors {
+    padding: 1rem;
+  }
   .reader-side .comments {
     margin-top: 0;
     padding: 1rem;
@@ -1879,12 +1757,18 @@ html[data-revalidating="true"] .session-nav {
   .reader-side {
     height: 100%;
     min-height: 0;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, auto) minmax(0, 1fr);
+  }
+  .sidebar-summary {
+    min-height: 0;
+    overflow-y: auto;
   }
   .reader-side .comments {
     display: flex;
     flex-direction: column;
+    align-self: start;
     min-height: 0;
+    max-height: 100%;
     padding: 0;
     overflow: hidden;
   }
@@ -2084,9 +1968,6 @@ html[data-revalidating="true"] .session-nav {
 .hub-introduction .description {
   margin-block: 1rem 0;
 }
-.hub-introduction > .copy-link {
-  margin-top: 0.5rem;
-}
 .hub-collections-heading {
   display: flex;
   flex: 0 0 auto;
@@ -2141,6 +2022,7 @@ html[data-revalidating="true"] .session-nav {
 }
 @media (min-width: 640px) and (min-height: 481px) {
   .collection-browser.sized-collections {
+    contain: size layout;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -2162,9 +2044,6 @@ html[data-revalidating="true"] .session-nav {
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  main:has(.fits-desktop) {
     overflow: hidden;
   }
   .sized-collections:not(.fits-desktop) .collection-list {
@@ -2196,6 +2075,17 @@ html[data-revalidating="true"] .session-nav {
   gap: 0.75rem;
   margin-top: 1rem;
 }
+.shareable-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.shareable-heading > div {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
 .edit-page .context {
   margin-bottom: 0.25rem;
 }
@@ -2206,13 +2096,12 @@ html[data-revalidating="true"] .session-nav {
 .account-fields {
   display: flex;
   flex-direction: column;
-  gap: 1.75rem;
   width: 100%;
 }
 .account-field-group {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0;
   min-width: 0;
   padding: 0;
   margin: 0;
@@ -2237,12 +2126,10 @@ html[data-revalidating="true"] .session-nav {
   padding-block: 0.5rem;
   font-weight: 550;
 }
-.settings-field-wide {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.5rem;
-}
-.settings-field-wide > label {
-  padding-block: 0;
+.settings-field textarea {
+  min-height: 8.5rem;
+  max-height: 24rem;
+  field-sizing: content;
 }
 .settings-field-control {
   display: flex;
@@ -2273,23 +2160,9 @@ html[data-revalidating="true"] .session-nav {
   align-items: flex-end;
   gap: 0.125rem;
 }
-.hub-share-actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin-top: 1.25rem;
-}
-.settings-toggle-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-}
-.settings-toggle-row label {
-  font-weight: 550;
-}
 .settings-toggle-control {
+  width: var(--control);
+  align-self: flex-start;
   position: relative;
   display: grid;
   place-items: center;
@@ -2346,10 +2219,6 @@ html[data-revalidating="true"] .session-nav {
 }
 .handle-status.error {
   color: var(--color-danger);
-}
-.handle-preview {
-  overflow-wrap: anywhere;
-  color: var(--color-ink);
 }
 .profile-save-actions {
   display: flex;
@@ -2453,7 +2322,7 @@ html[data-revalidating="true"] .session-nav {
   color: var(--color-muted);
 }
 
-/* ---------- Service operations ---------- */
+/* ---------- Manage ---------- */
 
 .operation-section {
   margin-top: 2.5rem;
@@ -2474,10 +2343,111 @@ html[data-revalidating="true"] .session-nav {
   margin: 0;
   overflow-wrap: anywhere;
 }
-/* ---------- Service operations ---------- */
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block: 0.75rem;
+}
+/* Profile identity stays together; metadata and operations have distinct spacing. */
+.account-profile-heading {
+  margin-bottom: 1rem;
+}
+.account-profile-heading h1 {
+  margin: 0;
+}
+.account-profile-heading > a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  font-size: var(--text-body);
+  overflow-wrap: anywhere;
+}
+.account-profile .account-details {
+  grid-template-columns: 10rem minmax(0, 1fr);
+  gap: 0.5rem 1.5rem;
+}
+.account-profile .account-details dd {
+  max-width: 70ch;
+}
+.account-profile > .operation-section {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+}
+.account-profile > .operation-section > h2 {
+  margin-bottom: 0.5rem;
+}
+.account-profile .account-actions {
+  margin: 0;
+  gap: 0.75rem;
+}
+.account-profile .account-history {
+  margin-top: 0.75rem;
+}
+@media (max-width: 640px) {
+  .account-profile .account-details {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
+  }
+  .account-profile .account-details dd {
+    margin-bottom: 1rem;
+  }
+  .account-profile .account-details dd:last-child {
+    margin-bottom: 0;
+  }
+}
+/* ---------- Manage ---------- */
 
 .ops-page {
   max-width: 64rem;
+}
+.analytics-refresh {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  margin-block: 1.5rem;
+}
+.analytics-refresh p {
+  margin: 0;
+}
+.analytics-totals {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 4rem;
+  padding-block: 1.25rem;
+  margin-bottom: 0.75rem;
+  border-block: 1px solid var(--color-divider);
+}
+.analytics-totals dt {
+  color: var(--color-muted);
+  font-size: var(--text-meta);
+}
+.analytics-totals dd {
+  margin: 0.25rem 0 0;
+  font-size: var(--text-section);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.analytics-breakdowns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 2rem;
+}
+.analytics-table {
+  font-variant-numeric: tabular-nums;
+}
+.analytics-table td:first-child {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 1000px) {
+  .analytics-breakdowns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ops-table-scroll {
+  min-width: 0;
 }
 /* Tabs: one area per page; the current tab is underlined and bolder. */
 .ops-tabs {
@@ -2554,10 +2524,41 @@ main .ops-filters select {
   text-align: left;
   white-space: nowrap;
 }
+@media (min-width: 1024px) and (min-height: 600px) {
+  .ops-list-page {
+    height: 100%;
+    contain: size layout;
+    display: flex;
+    flex-direction: column;
+  }
+  .ops-list-page > :not(.ops-table-scroll) {
+    flex: 0 0 auto;
+  }
+  .ops-table-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-divider) transparent;
+    padding-bottom: 0.25rem;
+  }
+  .ops-table-scroll .ops-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--color-canvas);
+  }
+}
 .ops-table td {
   padding: 0.75rem;
   border-bottom: 1px solid var(--color-border);
   vertical-align: top;
+}
+@media (min-width: 721px) {
+  .ops-table td[data-label="Timestamp"] {
+    white-space: nowrap;
+  }
 }
 .ops-table th:first-child,
 .ops-table td:first-child {
@@ -2576,8 +2577,13 @@ main .ops-filters select {
   font-size: var(--text-meta);
   overflow-wrap: anywhere;
 }
-.ops-id {
-  font-variant-numeric: tabular-nums;
+.ops-table td[data-label="Hub"],
+.ops-table td[data-label="Email"],
+.ops-table td[data-label="Username"] {
+  overflow-wrap: anywhere;
+}
+.ops-account-identity {
+  min-width: 0;
 }
 .ops-status {
   display: inline-block;
@@ -2601,47 +2607,12 @@ main .ops-filters select {
 .ops-table .action-form {
   margin: 0;
 }
-.ops-actions .text-button,
-.quick-action > summary {
+.ops-actions .text-button {
   min-height: auto;
   padding: 0.125rem 0.375rem;
 }
-.text-button.danger,
-.quick-action > summary.danger {
+.text-button.danger {
   color: var(--color-danger);
-}
-/* A row action opens an inline reason and confirm button. */
-.quick-action > summary {
-  list-style: none;
-  cursor: pointer;
-  color: var(--color-primary);
-  font-weight: 550;
-  font-size: 0.9375rem;
-}
-.quick-action > summary::-webkit-details-marker {
-  display: none;
-}
-.quick-action[open] > summary {
-  color: var(--color-muted);
-}
-.quick-action .action-form {
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-  white-space: normal;
-}
-.quick-action .action-form > label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-}
-.quick-action select {
-  width: auto;
 }
 /* Narrow screens: each row becomes a labelled block. */
 @media (max-width: 720px) {
@@ -2664,7 +2635,7 @@ main .ops-filters select {
   }
   .ops-table td {
     display: grid;
-    grid-template-columns: 6.5rem 1fr;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
     gap: 0.75rem;
     padding: 0.25rem 0;
     border: 0;
@@ -2679,8 +2650,43 @@ main .ops-filters select {
     text-align: left;
     white-space: normal;
   }
-  .quick-action .action-form {
-    justify-content: flex-start;
+}
+
+/* Accounts has additional identity/session columns; stack sooner on tablets. */
+@media (min-width: 721px) and (max-width: 1023px) {
+  .ops-accounts .ops-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .ops-accounts .ops-table,
+  .ops-accounts .ops-table tbody,
+  .ops-accounts .ops-table tr,
+  .ops-accounts .ops-table td {
+    display: block;
+  }
+  .ops-accounts .ops-table tr {
+    padding-block: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .ops-accounts .ops-table td {
+    display: grid;
+    grid-template-columns: 6.5rem minmax(0, 1fr);
+    gap: 0.75rem;
+    padding: 0.25rem 0;
+    border: 0;
+  }
+  .ops-accounts .ops-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--color-muted);
+    font-size: var(--text-meta);
+  }
+  .ops-accounts .ops-table td.ops-actions {
+    display: block;
+    text-align: left;
+    white-space: normal;
   }
 }
 
@@ -2772,6 +2778,7 @@ main .ops-filters select {
 @media (pointer: coarse) {
   :root {
     --control: 2.75rem;
+    --button-control: 2.75rem;
   }
 }
 @media (max-height: 480px) {
@@ -2905,4 +2912,421 @@ main .ops-filters select {
   color: var(--color-muted);
   font-size: var(--text-meta);
   white-space: nowrap;
+}
+
+.notification-settings {
+  margin: 0;
+}
+.notification-settings h2 {
+  margin-bottom: 0.75rem;
+}
+.profile-create-hub {
+  margin-bottom: 1.75rem;
+}
+.profile-create-hub p {
+  margin-bottom: 0.75rem;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 12rem minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+  margin-top: 1rem;
+}
+.settings-content {
+  background: var(--color-canvas);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-panel);
+}
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0;
+}
+.settings-nav a {
+  padding: 0.625rem 0.875rem;
+  border-radius: var(--radius-control);
+  color: var(--color-muted);
+  text-decoration: none;
+}
+.settings-nav a:hover {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+.settings-nav a[aria-current] {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  font-weight: 650;
+}
+.settings-content {
+  min-width: 0;
+  padding: 2rem;
+}
+.settings-content [hidden] {
+  display: none;
+}
+.settings-content .account-field-group legend,
+.settings-content .notification-settings h2 {
+  font-size: var(--text-section);
+  font-weight: 650;
+  margin-bottom: 1rem;
+}
+.settings-content .settings-field,
+.settings-content .account-facts > div {
+  padding-block: 1rem;
+}
+.settings-content .account-facts {
+  gap: 0;
+}
+.settings-content .profile-save-actions {
+  margin-top: 1rem;
+}
+@media (max-width: 767px) {
+  .settings-content .hub-id {
+    align-items: flex-start;
+  }
+  .settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+  }
+  .settings-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    padding: 0;
+  }
+  .settings-nav a {
+    padding: 0.625rem 0.75rem;
+  }
+  .settings-content {
+    padding: 1.25rem;
+  }
+}
+
+.person-bio {
+  max-width: 65ch;
+  margin-top: 1rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.audit-filters > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  color: var(--color-muted);
+  font-size: 0.875rem;
+}
+.audit-filters > label:has(input[type="search"]) {
+  flex: 1 1 14rem;
+}
+.audit-filter-footer {
+  flex: 1 0 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+.audit-filter-options,
+.audit-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+.audit-read-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--control);
+  color: var(--color-muted);
+  font-size: var(--text-meta);
+}
+.audit-read-toggle input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  min-height: 0;
+}
+.audit-id-copy code {
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.audit-id-value {
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.audit-id-value:hover {
+  color: var(--color-primary);
+}
+
+.action-dialog {
+  margin: auto;
+  text-align: left;
+  white-space: normal;
+  width: min(26rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-size: var(--text-body);
+  line-height: 1.5;
+}
+.action-dialog::backdrop {
+  background: oklch(0 0 0 / 45%);
+}
+.action-dialog-heading {
+  padding: 1.25rem;
+  border-bottom: 1px solid var(--color-divider);
+}
+.action-dialog-heading h2 {
+  margin: 0;
+  font-size: var(--text-section);
+  line-height: var(--text-section--line-height);
+}
+.action-dialog-heading p {
+  margin: 0.375rem 0 0;
+  color: var(--color-muted);
+  font-size: var(--text-meta);
+  overflow-wrap: anywhere;
+}
+.action-dialog-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--color-divider);
+}
+.action-menu {
+  display: inline-block;
+  text-align: left;
+}
+.action-menu > summary::marker {
+  content: "";
+}
+.action-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.action-choices {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+.action-dialog .action-choices {
+  margin: 0;
+  padding: 0.5rem;
+}
+.action-choices li {
+  margin: 0;
+}
+.action-choices a {
+  display: block;
+  padding: 0.75rem;
+  border-radius: var(--radius-control);
+  color: var(--color-primary);
+  min-height: var(--control);
+  overflow-wrap: anywhere;
+  text-decoration: none;
+}
+.action-choices :is(a:hover, a:focus-visible) {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+
+.account-row,
+.collection-row:has(.collection-open:not(:disabled)) {
+  cursor: pointer;
+}
+.account-row:hover,
+.collection-row:has(.collection-open:not(:disabled)):hover {
+  background: var(--color-primary-soft);
+}
+
+.account-open,
+.collection-open {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--color-ink);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.collection-open:disabled {
+  cursor: default;
+}
+
+/* Section context stays visible while native disclosures hide their items. */
+.section-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+.resource-section {
+  position: relative;
+  padding-block: 0.75rem 1.25rem;
+}
+.resource-section + .resource-section {
+  border-top: 1px solid var(--color-divider);
+  padding-top: 1.5rem;
+}
+.section-disclosure > summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+.section-disclosure > summary h2 {
+  display: inline;
+  font-size: 1.25rem;
+  line-height: 1.75rem;
+}
+.section-expand-hint {
+  display: block;
+  margin-top: 0.5rem;
+  color: var(--color-primary);
+  font-size: var(--text-meta);
+}
+.section-disclosure[open] > summary .section-expand-hint {
+  display: none;
+}
+.section-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 70ch;
+  margin-block: 0.5rem 1rem;
+  font-weight: 400;
+}
+.resource-section > details > .resource-list {
+  margin-top: 1rem;
+}
+.section-edit {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.resource-disclosure > summary,
+.section-disclosure > summary {
+  position: relative;
+  cursor: pointer;
+  list-style: none;
+}
+.resource-disclosure > summary::-webkit-details-marker,
+.section-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.item-context {
+  padding-top: 0.75rem;
+  max-width: 70ch;
+}
+.item-context .description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.linked-item {
+  border-block: 1px solid var(--color-divider);
+  margin-bottom: 1rem;
+  padding-block: 0.75rem;
+}
+.resource-row,
+.resource-disclosure {
+  scroll-margin-top: 5rem;
+}
+.resource-disclosure[open] {
+  cursor: pointer;
+}
+.reorder-list {
+  list-style: none;
+  padding: 0;
+  margin-block: 1.5rem;
+}
+.reorder-list > li {
+  scroll-margin-top: 6rem;
+  padding-block: 0.75rem;
+  border-top: 2px solid transparent;
+  border-bottom: 1px solid var(--color-divider);
+}
+.reorder-list > .drop-target {
+  border-top-color: var(--color-primary);
+}
+.reorder-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+.reorder-title {
+  flex: 1 1 18rem;
+  overflow-wrap: anywhere;
+  cursor: grab;
+}
+.reorder-title:active {
+  cursor: grabbing;
+}
+.reorder-section .reorder-title {
+  font-weight: 600;
+}
+.reorder-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+/* Make the complete highlighted row part of the disclosure's pointer target. */
+.resource-row:has(> .resource-disclosure) {
+  padding: 0;
+}
+.resource-row > .resource-disclosure {
+  padding: 0.625rem var(--row-inset);
+}
+.collection-sheet .resource-row > .resource-disclosure {
+  padding-inline: 0.75rem;
+}
+
+.collection-workspace {
+  max-width: 48rem;
+}
+.edit-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin-block: 0.75rem 2rem;
+  font-size: var(--text-meta);
+}
+.edit-navigation a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control);
+}
+.collection-workspace > section {
+  scroll-margin-top: 6rem;
+}
+.collection-workspace > section + section {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-divider);
+}
+
+/* An explicit handle choice stays separate from autosaved profile fields. */
+.handle-claim-confirm {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.handle-claim-button {
+  align-self: flex-start;
+}
+.account-lifecycle .back-link {
+  display: inline-block;
+  margin-bottom: 0.75rem;
 }

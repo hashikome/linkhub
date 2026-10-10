@@ -1,16 +1,8 @@
-// Every email-code situation is one flow with a purpose. The purpose decides
-// the words on both screens and what happens once the code is accepted; the
-// screens, cooldowns and code checks are shared.
-export const verificationPurposes = [
-  "sign-in", // clicked "Sign in"
-  "first-link", // saving a first link while signed out
-  "continue", // signing in to do something (comment, settings, a shared item…)
-  "resume", // the session ended mid-action; the action continues afterwards
-  "confirm", // signed in, but a sensitive action needs a fresh code
-  "invitation", // accepting or resuming an operator/admin invitation
-] as const;
-export type VerificationPurpose = (typeof verificationPurposes)[number];
+import type { VerificationPurpose } from "@nslinkhub/types";
 
+export { type VerificationPurpose, verificationPurposes } from "@nslinkhub/types";
+
+// Screens and emails share a purpose vocabulary; copy remains surface-specific.
 export interface VerificationCopy {
   title: string;
   /** Why we're asking, in one sentence. */
@@ -26,7 +18,7 @@ function destination(returnTo: string) {
   if (returnTo.includes("compose=comment")) return "join the discussion";
   if (returnTo.startsWith("/settings")) return "open your settings";
   if (returnTo.startsWith("/notifications")) return "see your notifications";
-  if (returnTo.startsWith("/ops")) return "use service operations";
+  if (returnTo.startsWith("/manage")) return "use management";
   if (/^\/(c\/|@)/.test(returnTo)) return "open this collection";
   return null;
 }
@@ -83,7 +75,7 @@ export function verificationCopy(
     default:
       return {
         title: "Sign in",
-        reason: "Sign in or create your personal hub with your email.",
+        reason: "Sign in or create your account with your email.",
         after: "We'll email you an eight-digit code. No password needed.",
         codeTitle: "Check your email",
         codeButton: "Verify and continue",

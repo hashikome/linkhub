@@ -40,6 +40,7 @@ export default async function Page({
           <a href={draft ? `/capture/${draft.id}` : "/discover"}>
             {draft ? "Back to your link" : "Back to Discover"}
           </a>
+          <a href="/account">Reactivate an account or cancel deletion</a>
           {query.notice === "signout-failed" && (
             <NativeForm action="/forms/sign-out">
               <button type="submit" className="button">

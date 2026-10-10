@@ -14,7 +14,7 @@ export interface Resource {
    * a readable reference's target title. Never an input for links.
    */
   title: string | null;
-  /** A link's page description and site name; null for other kinds. */
+  /** Fetched link description or authored section context; null for references. */
   description: string | null;
   siteName: string | null;
   /** Who added the item; null when unknown (added before attribution). */
@@ -38,6 +38,8 @@ export interface UpdateResourceRequest {
   version: number;
   tags?: string[];
   position?: number;
+  /** Optional authored context, only for sections; empty string clears it. */
+  description?: string;
 }
 
 export interface ReorderResourcesRequest {
@@ -51,5 +53,16 @@ export interface CreateCollectionResourceRequest {
 }
 export interface CreateHeadingResourceRequest {
   title: string;
-  position: number;
+  description?: string;
+  /** Start the section at this existing non-heading item. */
+  firstItemId: string;
+  firstItemVersion: number;
+}
+
+/** Move an item (or a section with its items). Omit destination to append. */
+export interface MoveResourceRequest {
+  version: number;
+  direction?: "up" | "down";
+  beforeId?: string;
+  beforeVersion?: number;
 }

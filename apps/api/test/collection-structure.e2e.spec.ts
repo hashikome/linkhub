@@ -119,7 +119,7 @@ describe("Independent collection resources (e2e)", () => {
     await request(app.getHttpServer())
       .post(`/api/v1/collections/${a}/shares`)
       .auth(alice, { type: "bearer" })
-      .send({ email: `isolated-editor_${sfx}@example.com`, role: "editor" })
+      .send({ email: `isolated-editor_${sfx}@example.com`, role: "contributor" })
       .expect(201);
     const shares = await request(app.getHttpServer())
       .get(`/api/v1/collections/${a}/resources`)
@@ -215,6 +215,11 @@ describe("Independent collection resources (e2e)", () => {
     const token = await signUp("heading-owner");
     const id = await createCollection(token, "heading-guide");
     const route = `/api/v1/collections/${id}/resources/heading`;
+    const first = await request(app.getHttpServer())
+      .post(`/api/v1/collections/${id}/resources/external`)
+      .auth(token, { type: "bearer" })
+      .send({ url: "https://fixture-links.dev/section-start", position: 0 })
+      .expect(201);
     await request(app.getHttpServer())
       .post(route)
       .auth(token, { type: "bearer" })
@@ -223,7 +228,11 @@ describe("Independent collection resources (e2e)", () => {
     const heading = await request(app.getHttpServer())
       .post(route)
       .auth(token, { type: "bearer" })
-      .send({ title: "Getting started", position: 0 })
+      .send({
+        title: "Getting started",
+        firstItemId: first.body.data.id,
+        firstItemVersion: first.body.data.version,
+      })
       .expect(201);
     expect(heading.body.data).toMatchObject({
       kind: "heading",

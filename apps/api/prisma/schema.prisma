@@ -17,28 +17,33 @@ datasource db {
 
 model User {
   id                     String    @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
+  username               String    @unique @db.VarChar(20)
+  selfDeactivated        Boolean   @default(false) @map("self_deactivated")
   name                   String    @db.VarChar(255)
+  bio                    String?   @db.VarChar(500)
   email                  String    @unique @db.VarChar(255)
   emailVerified          Boolean   @default(false) @map("email_verified")
   image                  String?
-  showNameOnHub          Boolean   @default(true) @map("show_name_on_hub")
   // Notification center: the badge counts items newer than seenAt; items at or
   // before clearedAt are hidden from the list.
   notificationsSeenAt    DateTime? @map("notifications_seen_at") @db.Timestamptz(6)
   notificationsClearedAt DateTime? @map("notifications_cleared_at") @db.Timestamptz(6)
+  lastLoginAt            DateTime? @map("last_login_at") @db.Timestamptz(6)
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt              DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
 
-  accountState      String         @default("active") @map("account_state") @db.VarChar(16)
-  operationsVersion Int            @default(1) @map("operations_version")
-  suspensionReason  String?        @map("suspension_reason") @db.VarChar(32)
-  suspendedAt       DateTime?      @map("suspended_at") @db.Timestamptz(6)
-  operatorGrant     OperatorGrant?
-  adminGrant        AdminGrant?
+  accountState         String         @default("active") @map("account_state") @db.VarChar(16)
+  operationsVersion    Int            @default(1) @map("operations_version")
+  suspensionReason     String?        @map("suspension_reason") @db.VarChar(32)
+  suspendedAt          DateTime?      @map("suspended_at") @db.Timestamptz(6)
+  deletionScheduledFor DateTime?      @map("deletion_scheduled_for") @db.Timestamptz(6)
+  operatorGrant        OperatorGrant?
+  adminGrant           AdminGrant?
 
   hub                Hub?
   createdCollections Collection[]        @relation("CollectionCreator")
   shares             CollectionShare[]
+  shareEntries       ShareEntry[]
   saves              CollectionSave[]
   sessions           Session[]
   accounts           Account[]
@@ -46,10 +51,13 @@ model User {
   hiddenComments     CollectionComment[] @relation("CommentHider")
   addedResources     Resource[]          @relation("ResourceAddedBy")
 
+  @@index([deletionScheduledFor])
   @@map("users")
 }
 
 model Hub {
+  handleClaimedAt DateTime? @map("handle_claimed_at") @db.Timestamptz(6)
+  showOwner   Boolean  @default(true) @map("show_owner")
   id          String   @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
   ownerUserId String   @unique @map("owner_user_id") @db.Uuid
   handle      String   @unique @db.VarChar(60)
@@ -72,7 +80,6 @@ model Collection {
   slug               String   @db.VarChar(120)
   title              String   @db.VarChar(255)
   description        String?
-  tags               String[] @default([])
   published          Boolean  @default(false)
   linkSharingEnabled Boolean  @default(false) @map("link_sharing_enabled")
   commentsEnabled    Boolean  @default(true) @map("comments_enabled")
@@ -87,6 +94,7 @@ model Collection {
   hub              Hub                 @relation(fields: [hubId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   creator          User?               @relation("CollectionCreator", fields: [creatorUserId], references: [id], onDelete: SetNull, onUpdate: NoAction)
   resources        Resource[]          @relation("CollectionResources")
+  tags             CollectionTag[]
   linkedBy         Resource[]          @relation("ResourceLinkedCollection")
   shares           CollectionShare[]
   saves            CollectionSave[]
@@ -97,6 +105,44 @@ model Collection {
   @@map("collections")
 }
 
+// Shared normalized names; there is no public catalogue/usage endpoint.
+model Tag {
+  id          String @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
+  name        String @unique(map: "tags_name_unique") @db.VarChar(80)
+  items       ItemTag[]
+  collections CollectionTag[]
+
+  @@map("tags")
+}
+
+model ItemTag {
+  itemId   String @map("item_id") @db.Uuid
+  tagId    String @map("tag_id") @db.Uuid
+  position Int
+
+  item Resource @relation(fields: [itemId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tag  Tag      @relation(fields: [tagId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@id([itemId, tagId])
+  @@index([tagId], map: "idx_item_tags_tag_id")
+  @@map("item_tags")
+}
+
+// Stored collection/tag union; item_count is maintained by database triggers.
+model CollectionTag {
+  collectionId String @map("collection_id") @db.Uuid
+  tagId        String @map("tag_id") @db.Uuid
+  itemCount    Int    @map("item_count")
+
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  tag        Tag        @relation(fields: [tagId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@id([collectionId, tagId])
+  @@index([tagId], map: "idx_collection_tags_tag_id")
+  @@map("collection_tags")
+}
+
+// Collection collaborators: role is viewer or contributor (SQL CHECK).
 model CollectionShare {
   collectionId String   @map("collection_id") @db.Uuid
   userId       String   @map("user_id") @db.Uuid
@@ -133,10 +179,11 @@ model Resource {
   url                String?
   linkedCollectionId String?  @map("linked_collection_id") @db.Uuid
   titleOverride      String?  @map("title_override") @db.VarChar(255)
+  sectionDescription String?  @map("section_description") @db.VarChar(500)
   // Who added the item (null for items saved before attribution, or once the
   // account is deleted); the activity entry stays the record.
   addedByUserId      String?  @map("added_by_user_id") @db.Uuid
-  tags               String[] @default([])
+  tags               ItemTag[]
   position           Int
   version            BigInt   @default(1)
   createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -201,25 +248,6 @@ model Verification {
   @@map("verifications")
 }
 
-// Audit references deliberately survive collection deletion and transfer.
-// Access always scopes by the immutable hubId; no mutable names or payloads.
-model AuditRecord {
-  id           String   @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
-  hubId        String   @map("hub_id") @db.Uuid
-  actorUserId  String   @map("actor_user_id") @db.Uuid
-  collectionId String?  @map("collection_id") @db.Uuid
-  targetUserId String?  @map("target_user_id") @db.Uuid
-  // The item acted on; no foreign key, so history outlives a removed item.
-  resourceId   String?  @map("resource_id") @db.Uuid
-  action       String   @db.VarChar(48)
-  role         String?  @db.VarChar(16)
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  @@index([hubId, createdAt(sort: Desc), id(sort: Desc)], map: "idx_audit_hub_created")
-  @@index([collectionId, createdAt(sort: Desc), id(sort: Desc)], map: "idx_audit_collection_created")
-  @@map("audit_records")
-}
-
 // Atomic fixed-window budgets shared across API replicas. The key is a
 // purpose-bound HMAC, never a raw source address or credential.
 model RequestBudget {
@@ -280,17 +308,6 @@ model EmailSuppression {
   @@map("email_suppressions")
 }
 
-model AuthAudit {
-  id        String   @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
-  userId    String?  @map("user_id") @db.Uuid
-  action    String   @db.VarChar(32)
-  outcome   String   @db.VarChar(16)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-
-  @@index([createdAt])
-  @@map("auth_audit")
-}
-
 model OperatorGrant {
   userId    String   @id @map("user_id") @db.Uuid
   grantedAt DateTime @default(now()) @map("granted_at") @db.Timestamptz(6)
@@ -310,33 +327,6 @@ model CollectionHold {
   collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@map("collection_holds")
-}
-
-model OperatorAudit {
-  invitationId  String?  @map("invitation_id") @db.Uuid
-  id            String   @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
-  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  actorKind     String   @map("actor_kind") @db.VarChar(16)
-  actorUserId   String?  @map("actor_user_id") @db.Uuid
-  authority     String?  @db.VarChar(128)
-  targetUserId  String?  @map("target_user_id") @db.Uuid
-  collectionId  String?  @map("collection_id") @db.Uuid
-  action        String   @db.VarChar(40)
-  reason        String?  @db.VarChar(32)
-  outcome       String   @db.VarChar(16)
-  beforeState   String?  @map("before_state") @db.VarChar(16)
-  afterState    String?  @map("after_state") @db.VarChar(16)
-  requestId     String?  @map("request_id") @db.VarChar(64)
-  operationId   String?  @map("operation_id") @db.Uuid
-  payloadHash   String?  @map("payload_hash") @db.VarChar(64)
-  resultVersion Int?     @map("result_version")
-
-  @@unique([actorUserId, operationId])
-  @@unique([authority, operationId])
-  @@index([createdAt(sort: Desc), id(sort: Desc)])
-  @@index([targetUserId, createdAt(sort: Desc)])
-  @@index([collectionId, createdAt(sort: Desc)])
-  @@map("operator_audit")
 }
 
 model AdminGrant {
@@ -414,7 +404,7 @@ model CaptureReceipt {
 }
 
 // Discussion on one collection: top-level comments with one level of replies.
-// Access follows the collection policy; moderation is owner/editor hiding and,
+// Access follows the collection policy; moderation is owner/contributor hiding and,
 // for the author, edit/delete. A deleted comment with replies keeps its place.
 model CollectionComment {
   id             String    @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
@@ -439,4 +429,91 @@ model CollectionComment {
   @@index([collectionId, createdAt(sort: Desc)], map: "idx_collection_comments_collection_created")
   @@index([parentId, createdAt], map: "idx_collection_comments_parent_created")
   @@map("collection_comments")
+}
+
+// References survive target deletion; content access remains scoped by immutable hubId.
+// One evidence store. Category governs visibility and retention, never a separate log.
+model AuditLog {
+  id            String   @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
+  category      String   @default("content") @db.VarChar(16)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  actorKind     String   @default("user") @map("actor_kind") @db.VarChar(16)
+  actorUserId   String?  @map("actor_user_id") @db.Uuid
+  authority     String?  @db.VarChar(128)
+  hubId         String?  @map("hub_id") @db.Uuid
+  targetUserId  String?  @map("target_user_id") @db.Uuid
+  collectionId  String?  @map("collection_id") @db.Uuid
+  resourceId    String?  @map("resource_id") @db.Uuid
+  invitationId  String?  @map("invitation_id") @db.Uuid
+  action        String   @db.VarChar(48)
+  role          String?  @db.VarChar(16)
+  reason        String?  @db.VarChar(32)
+  outcome       String?  @db.VarChar(16)
+  beforeState   String?  @map("before_state") @db.VarChar(48)
+  afterState    String?  @map("after_state") @db.VarChar(48)
+  requestId     String?  @map("request_id") @db.VarChar(64)
+  operationId   String?  @map("operation_id") @db.Uuid
+  payloadHash   String?  @map("payload_hash") @db.VarChar(64)
+  resultVersion Int?     @map("result_version")
+
+  @@unique([actorUserId, operationId])
+  @@unique([authority, operationId])
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@index([hubId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([collectionId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([targetUserId, createdAt(sort: Desc)])
+  @@index([category, createdAt])
+  @@map("audit_logs")
+}
+
+// Personal sharing history, separate from collection access grants. Resource
+// references survive deletion; resolution always checks current visibility.
+model ShareEntry {
+  id              String   @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
+  createdByUserId String   @map("created_by_user_id") @db.Uuid
+  kind            String   @db.VarChar(16)
+  resourceId      String?  @map("resource_id") @db.Uuid
+  message         String   @db.VarChar(1000)
+  context         Json?    @db.JsonB
+  operationId     String? @map("operation_id") @db.Uuid
+  payloadHash     String? @map("payload_hash") @db.VarChar(64)
+  openCount       Int      @default(0) @map("open_count")
+  opens           ShareOpen[]
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  creator User @relation(fields: [createdByUserId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([createdByUserId, operationId])
+  @@index([createdByUserId, id(sort: Desc)])
+  @@index([kind, resourceId, createdAt])
+  @@index([createdAt])
+  @@map("share_entries")
+}
+
+// Idempotent client reports, without IPs, user agents, or recipient identities.
+model ShareOpen {
+  id        String   @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
+  shareId   String   @map("share_id") @db.Uuid
+  eventId   String   @map("event_id") @db.Uuid
+  attribution Json? @db.JsonB
+  context Json? @db.JsonB
+  occurredAt DateTime? @map("occurred_at") @db.Timestamptz(6)
+  payloadHash String? @map("payload_hash") @db.VarChar(64)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  share ShareEntry @relation(fields: [shareId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([shareId, eventId])
+  @@index([shareId, createdAt])
+  @@map("share_opens")
+}
+
+// Reservations outlive hub/account deletion. hubId is provenance, not a live FK.
+model HubHandleReservation {
+  id String @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
+  handle String @unique @db.VarChar(60)
+  hubId String @map("hub_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("hub_handle_reservations")
 }

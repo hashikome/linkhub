@@ -1,50 +1,63 @@
 import { describe, expect, it } from "bun:test";
-import { createPersonalHub } from "./hub-onboarding";
+import { accountUsername } from "../users/account-onboarding";
+import { ensurePersonalHub } from "./hub-onboarding";
 
-// In-memory stand-in for the hub delegate: unique handles, created rows echoed.
-function fakeHubs(taken: string[] = []) {
-  const handles = new Set(taken);
-  return {
-    hub: {
-      findUnique: async ({ where }: { where: { handle: string } }) =>
-        handles.has(where.handle) ? { handle: where.handle } : null,
-      create: async ({ data }: { data: { handle: string; name: string } }) => {
-        handles.add(data.handle);
-        return data;
+const fakeUsers = (taken: string[] = []) =>
+  ({
+    $queryRaw: async (_sql: unknown, identity: string) =>
+      taken.some((name) => name.replaceAll("-", "") === identity) ? [{ id: "existing" }] : [],
+  }) as unknown as Parameters<typeof accountUsername>[0];
+
+describe("separate account and hub defaults", () => {
+  it("derives unique usernames from names and excludes app routes", async () => {
+    expect(await accountUsername(fakeUsers(), "John Beef")).toBe("john-beef");
+    expect(await accountUsername(fakeUsers(["john-beef"]), "John Beef")).toBe("john-beef-2");
+    expect(await accountUsername(fakeUsers(["johnbeef"]), "John Beef")).toBe("john-beef-2");
+    for (const name of ["Settings", "Home", "Platform", "Manage", "Support", "Share"])
+      expect(await accountUsername(fakeUsers(), name)).toBe(`${name.toLowerCase()}-2`);
+  });
+  it("uses a readable random username when no usable name exists", async () => {
+    expect(await accountUsername(fakeUsers(), "")).toMatch(/^[a-z]+-[a-z]+-[a-f0-9]{4}$/);
+  });
+  it("uses the person's username for a first hub and preserves their full name on a handle collision", async () => {
+    let hub: unknown = null;
+    const db = {
+      hubHandleReservation: {
+        findUnique: async ({ where }: { where: { handle: string } }) =>
+          where.handle === "john-beef" ? { hubId: "other" } : null,
       },
-    },
-  } as unknown as Parameters<typeof createPersonalHub>[0];
-}
-
-describe("personal hub defaults", () => {
-  it("keeps every word of a name-derived handle, even hex-looking ones", async () => {
-    for (const [name, expected] of [
-      ["John Beef", "John Beef"],
-      ["Ada Face", "Ada Face"],
-      ["Dead Beef", "Dead Beef"],
-    ]) {
-      const hub = (await createPersonalHub(fakeHubs(), { userId: "u", name })) as {
-        name: string;
-      };
-      expect(hub.name).toBe(expected);
-    }
-  });
-
-  it("never puts a retry suffix in the hub name", async () => {
-    const hub = (await createPersonalHub(fakeHubs(["john-beef"]), {
-      userId: "u",
+      user: { findUniqueOrThrow: async () => ({ username: "john-beef", name: "John Beef" }) },
+      hub: {
+        findUnique: async ({ where }: { where: { ownerUserId?: string; handle?: string } }) =>
+          where.ownerUserId ? hub : where.handle === "john-beef" ? { id: "other" } : null,
+        create: async ({ data }: { data: unknown }) => {
+          hub = data;
+          return data;
+        },
+      },
+    } as unknown as Parameters<typeof ensurePersonalHub>[0];
+    expect(await ensurePersonalHub(db, "u")).toMatchObject({
+      ownerUserId: "u",
+      handle: "john-beef-2",
       name: "John Beef",
-    })) as { handle: string; name: string };
-    expect(hub.handle).toBe("john-beef-2");
-    expect(hub.name).toBe("John Beef");
+    });
+    expect((await ensurePersonalHub(db, "u")) === hub).toBe(true);
   });
+});
 
-  it("drops only the random hex suffix from generated handles", async () => {
-    const hub = (await createPersonalHub(fakeHubs(), { userId: "u", name: "" })) as {
-      handle: string;
-      name: string;
-    };
-    expect(hub.handle).toMatch(/^[a-z]+-[a-z]+-[a-f0-9]{4}$/);
-    expect(hub.name).toMatch(/^[A-Z][a-z]+ [A-Z][a-z]+$/);
-  });
+it("trims a truncated hub stem before suffixing a colliding handle", async () => {
+  const username = `${"a".repeat(54)}-bcdef`;
+  const db = {
+    hubHandleReservation: {
+      findUnique: async ({ where }: { where: { handle: string } }) =>
+        where.handle === username ? { hubId: "occupied" } : null,
+    },
+    user: { findUniqueOrThrow: async () => ({ username, name: "Boundary" }) },
+    hub: {
+      findUnique: async ({ where }: { where: { handle?: string } }) =>
+        where.handle === username ? { id: "occupied" } : null,
+      create: async ({ data }: { data: unknown }) => data,
+    },
+  } as unknown as Parameters<typeof ensurePersonalHub>[0];
+  expect(await ensurePersonalHub(db, "person")).toMatchObject({ handle: `${"a".repeat(54)}-2` });
 });

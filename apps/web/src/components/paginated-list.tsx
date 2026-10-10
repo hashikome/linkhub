@@ -4,12 +4,18 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { browserRead } from "../lib/browser-api";
 import { type ApiPath, type Failure, withCursor } from "../lib/http";
 import { Retry } from "./feedback";
-import { CollectionRow, ResourceRow } from "./primitives";
+import { CollectionRow } from "./primitives";
+import { ResourceSections } from "./resource-sections";
 
 type Props = {
   path: ApiPath;
   nextCursor?: string | null;
   token?: string;
+  itemBase?: string;
+  section?: Resource;
+  selectedItem?: Resource;
+  collectionId?: string;
+  canEdit?: boolean;
   publicHub?: { handle: string; preview?: boolean };
 } & ({ kind: "collections"; initial: Collection[] } | { kind: "resources"; initial: Resource[] });
 export function PaginatedList(props: Props) {
@@ -38,7 +44,7 @@ export function PaginatedList(props: Props) {
         return;
       }
       const main = document.querySelector("main");
-      if (main) main.scrollTop = 0;
+      window.scrollTo(0, 0);
       const controls = continuation.current;
       const bottom = main
         ? main.getBoundingClientRect().bottom -
@@ -57,7 +63,6 @@ export function PaginatedList(props: Props) {
       if (fits) for (let i = count; i < rows.length; i++) rows[i].hidden = true;
       setDesktop(fits);
       setPageCount(count);
-      if (fits && main) main.scrollTop = 0;
     };
     element.closest(".collection-browser")?.classList.add("sized-collections");
     const observer = new ResizeObserver(fit);
@@ -177,21 +182,26 @@ export function PaginatedList(props: Props) {
   const hasPages = history.length > 0 || pageStart + pageCount < items.length || Boolean(cursor);
   return (
     <>
-      <ul ref={list} className={props.kind === "collections" ? "collection-list" : "resource-list"}>
-        {items
-          .slice(desktop ? pageStart : 0)
-          .map((item) =>
-            props.kind === "collections" ? (
-              <CollectionRow
-                key={item.id}
-                item={item as Collection}
-                handle={props.publicHub?.handle}
-              />
-            ) : (
-              <ResourceRow key={item.id} item={item as Resource} />
-            ),
-          )}
-      </ul>
+      {props.kind === "resources" ? (
+        <ResourceSections
+          items={items as Resource[]}
+          section={props.section}
+          itemBase={props.itemBase}
+          collectionId={props.collectionId}
+          canEdit={props.canEdit}
+          selectedItem={props.selectedItem}
+        />
+      ) : (
+        <ul ref={list} className="collection-list">
+          {items.slice(desktop ? pageStart : 0).map((item) => (
+            <CollectionRow
+              key={item.id}
+              item={item as Collection}
+              handle={props.publicHub?.handle}
+            />
+          ))}
+        </ul>
+      )}
       {!items.length && (
         <p className="empty">
           {props.kind === "collections"

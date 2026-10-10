@@ -8,6 +8,7 @@ import { normalizeTags } from "../../common/utils/tags.util";
 import { publicLinkUrl } from "../../common/utils/url.util";
 import { PrismaService } from "../../database/prisma.service";
 import { CollectionPolicyService } from "../hubs/collection-policy.service";
+import { ensurePersonalHub } from "../hubs/hub-onboarding";
 import { ResourcesService } from "../resources/resources.service";
 import { CollectionsService } from "./collections.service";
 import { CaptureDto } from "./dto/capture.dto";
@@ -42,8 +43,7 @@ export class CaptureService {
     if (!["first", "new"].includes(dto.destination) && !isUUID(dto.destination))
       throw appError("bad_request");
     const name = dto.collectionTitle?.trim() || null;
-    const hub = await this.prisma.hub.findUnique({ where: { ownerUserId: user.userId } });
-    if (!hub) throw appError("hub_unavailable");
+    const hub = await ensurePersonalHub(this.prisma, user.userId);
     const fingerprint = createHash("sha256")
       .update(JSON.stringify([links, dto.destination, name]))
       .digest("hex");

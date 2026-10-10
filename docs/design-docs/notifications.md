@@ -1,11 +1,12 @@
 # Notifications
 
 Status: service-role invitation notifications are implemented at `/notifications`.
-The inbox kinds and settings below are planned. Person labels and hub
+The additional inbox kinds and configurable preferences below are planned.
+Settings has a Notifications section showing invitations as always on. Person labels and hub
 subscriptions follow [people and hubs](people-and-hubs.md).
 
 Notifications are one inbox for everything that happened that concerns you,
-with settings in the same place. Like [Manage](manage-workspace.md), the kinds
+with preferences in **Settings › Notifications** (`/settings`). Like [Manage](manage-workspace.md), the kinds
 you see and can configure follow your roles.
 
 ## Kinds
@@ -26,8 +27,9 @@ collection you lost access to drops out of your inbox.
 
 ## Settings
 
-The Notifications page has an inbox and a **Settings** view
-(`/notifications/settings`):
+The Notifications page is the inbox only. A **Notifications** section in
+`/settings` owns all notification preferences; there is no separate
+`/notifications/settings` route. Planned controls:
 
 - one switch per kind you can receive (for example, turn off "Saves and
   subscriptions");
@@ -50,3 +52,12 @@ and security notices require their own workflows.
 Notifications are in-app. Email carries sign-in codes and service invitations; targeted shares and
 security notices are planned. A weekly email digest
 may follow later as a per-kind opt-in, if people ask for it.
+
+## Link-health updates (planned)
+
+Paid [link-health monitoring](link-health.md) informs the owner of confirmed
+unavailability, recovery and redirects awaiting review. Group repeated observations
+into an issue; avoid an alert on every check. Monitoring never changes the saved
+URL. The owner approves or dismisses redirects in the authorized review workflow.
+Channels, digest cadence and reminder policy remain to be set; audience-wide
+updates are not implied. Existing notification preferences continue to apply.

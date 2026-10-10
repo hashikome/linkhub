@@ -28,9 +28,11 @@ export function SessionNav({ session, theme }: { session: SessionView | null; th
       <ThemePicker theme={theme} compact />
       <AccountMenu
         userId={session.userId}
+        hubId={session.hubId}
+        username={session.username}
         name={session.name}
         email={session.email}
-        operator={session.operator}
+        canManage={session.operator || !!session.hubId}
         unreadNotifications={session.unreadNotifications}
       />
     </div>

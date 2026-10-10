@@ -51,7 +51,7 @@ describe("email-entry service invitations (HTTP)", () => {
       operationId: randomUUID(),
       ...extra,
     });
-  async function codeFor(address: string) {
+  async function codeFor(address: string, invitation = false) {
     const mail = await p.emailOutbox.findFirstOrThrow({
       where: {
         recipientKey: emailKey(emailConfig().suppressionSecret, "recipient", address),
@@ -59,7 +59,12 @@ describe("email-entry service invitations (HTTP)", () => {
       },
       orderBy: { createdAt: "desc" },
     });
-    const code = unseal(mail.payload as string, emailConfig().secret).text.match(/^\d{8}$/m)?.[0];
+    const payload = unseal(mail.payload as string, emailConfig().secret);
+    if (invitation) {
+      expect(payload.subject).toBe("Verify your email to accept your nslinkhub invitation");
+      expect(payload.text).toContain("activate your invited role");
+    }
+    const code = payload.text.match(/^\d{8}$/m)?.[0];
     if (!code) throw new Error("Missing captured code");
     return code;
   }
@@ -134,7 +139,7 @@ describe("email-entry service invitations (HTTP)", () => {
     expect(await p.adminGrant.count()).toBe(1);
     await p.session.updateMany({ where: { userId: admin.id }, data: { verifiedAt: new Date() } });
   });
-  it("stores invitations only until acceptance, then creates a named unverified account/hub and sends OTP without establishing a session", async () => {
+  it("stores invitations only until acceptance, then creates a named unverified account without a hub and sends OTP without establishing a session", async () => {
     const i = await invite();
     expect(await p.user.findUnique({ where: { email: i.email } })).toBeNull();
     expect((await preview(i.token).expect(200)).body.needsName).toBe(true);
@@ -151,10 +156,11 @@ describe("email-entry service invitations (HTTP)", () => {
     });
     expect(user.name).toBe("New operator");
     expect(user.emailVerified).toBe(false);
-    expect(user.hub).not.toBeNull();
+    expect(user.hub).toBeNull();
+    expect(user.username).toBeString();
     expect(await p.session.count({ where: { userId: user.id } })).toBe(0);
     expect(await p.operatorGrant.findUnique({ where: { userId: user.id } })).toBeNull();
-    const code = await codeFor(i.email);
+    const code = await codeFor(i.email, true);
     await as("post", "/api/v1/auth/code/verify").send({ email: i.email, code }).expect(400);
     operator = await verifyInvite(i.token, i.email);
     expect((await p.user.findUniqueOrThrow({ where: { id: user.id } })).emailVerified).toBe(true);
@@ -260,7 +266,7 @@ describe("email-entry service invitations (HTTP)", () => {
     );
   });
   it("rolls back new account, hub, grant, acceptance and mail on audit or OTP delivery failure", async () => {
-    for (const table of ["operator_audit", "email_outbox"]) {
+    for (const table of ["audit_logs", "email_outbox"]) {
       const i = await invite(),
         users = await p.user.count(),
         hubs = await p.hub.count();
@@ -301,7 +307,7 @@ describe("email-entry service invitations (HTTP)", () => {
     await as("post", "/api/v1/auth/invitations/resend", target)
       .send({ token: i.token })
       .expect(200);
-    const replacement = await codeFor(target.email);
+    const replacement = await codeFor(target.email, true);
     await as("post", `/api/v1/operations/operator-invitations/${i.id}`, admin)
       .send({ action: "resend", version: 2, operationId: randomUUID() })
       .expect(201);
@@ -322,7 +328,7 @@ describe("email-entry service invitations (HTTP)", () => {
   it("does not accept ordinary login codes as invitation proof or consume proof when grant audit fails", async () => {
     const i = await invite();
     await accept(i.token, undefined, { name: "Verified invitee" }).expect(200);
-    const code = await codeFor(i.email);
+    const code = await codeFor(i.email, true);
     await as("post", "/api/v1/auth/code/send").send({ email: i.email }).expect(200);
     const loginCode = await codeFor(i.email);
     if (loginCode !== code)
@@ -334,7 +340,7 @@ describe("email-entry service invitations (HTTP)", () => {
       "CREATE FUNCTION fail_verify() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test'; END $$",
     );
     await p.$executeRawUnsafe(
-      "CREATE TRIGGER fail_verify BEFORE INSERT ON operator_audit FOR EACH ROW EXECUTE FUNCTION fail_verify()",
+      "CREATE TRIGGER fail_verify BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION fail_verify()",
     );
     try {
       await as("post", "/api/v1/auth/invitations/verify")
@@ -349,7 +355,7 @@ describe("email-entry service invitations (HTTP)", () => {
         "verifying",
       );
     } finally {
-      await p.$executeRawUnsafe("DROP TRIGGER fail_verify ON operator_audit");
+      await p.$executeRawUnsafe("DROP TRIGGER fail_verify ON audit_logs");
       await p.$executeRawUnsafe("DROP FUNCTION fail_verify()");
     }
     await as("post", "/api/v1/auth/invitations/verify").send({ token: i.token, code }).expect(200);

@@ -7,11 +7,32 @@ import type { ApiErrorPayload } from "./errors.js";
 export type IsoTimestamp = string;
 
 export interface CursorMeta {
+  /** Resources only: the section continued by the first item on this page. */
+  section?: import("./resources.js").Resource;
+  /** Audit-only canonical filters. Actor and hub contain full UUIDs after lookup. */
+  auditFilters?: {
+    /** Case-insensitive search of displayed audit content; retained across pages. */
+    q?: string;
+    view?: "actions" | "all";
+    actor?: string;
+    hub?: string;
+    targetId?: string;
+    action?: string;
+    from?: string;
+    to?: string;
+  };
   limit: number;
   nextCursor: string | null;
 }
 
+export interface ApiWarning {
+  code: "optional_field_ignored";
+  field: string;
+  message: string;
+}
+
 export interface ApiSuccess<T, M = undefined> {
+  warnings?: ApiWarning[];
   data: T;
   meta?: M;
 }
@@ -22,10 +43,8 @@ export interface ApiError {
 
 export type ApiResponse<T, M = undefined> = ApiSuccess<T, M> | ApiError;
 
-// How a person appears anywhere in the product: their @handle, linking to
-// their hub (/h/:hubId). A name appears only on their own hub page, and only
-// when they chose "Show my name on my hub"; it is never sent elsewhere.
+// Public person attribution; mutable username links to the profile, IDs bind data.
 export interface PersonRef {
-  hubId: string;
-  handle: string;
+  userId: string;
+  username: string;
 }

@@ -1,18 +1,29 @@
 # Tenancy and access
 
-Status: implemented. The Google-Drive individual model: one hub per user,
+Status: implemented. The Google-Drive individual model: at most one hub per user,
 independent collections, per-collection access through one policy service.
 Settled in [ADR-0001](../engineering-decisions/0001-drive-tenancy-model.md);
 product behavior in [PRODUCT.md](../../PRODUCT.md).
 
-## Accepted changes awaiting implementation
+## Accepted commercial boundary (implementation pending)
 
-[People and hubs](people-and-hubs.md) makes hubs optional and gives people their
-own usernames. Collection grants will use `viewer` / `contributor`, with **Can
-view** / **Can contribute** labels; code still uses `reader` / `editor` below.
-[Manage](manage-workspace.md) is the planned owner workspace; the service console
-will use `/platform`, while its implemented route is `/ops`. These changes do
-not alter the policy order or grant operators private-content access.
+[ADR-0028](../engineering-decisions/0028-free-public-curation-paid-private-sharing.md)
+adds owner entitlements and private quotas to the existing authorization model.
+Public sharing and contributor invitations are free; free private collections are
+owner-only. Private access links and both viewer/contributor invitations require
+the owner's paid entitlement, not the recipient's. Payment never grants access by
+itself. Check public-to-private transitions, existing grants, transfers, invitation
+acceptance and entitlement expiry so contributor grants cannot bypass private
+sharing requirements. Current development code does not yet enforce this boundary.
+
+## Collaborators
+
+[People and hubs](people-and-hubs.md) implements optional hubs and separate
+person usernames. Collection grants use `viewer` / `contributor`, with **Can
+view** / **Can contribute** labels. The role rename preserves the same capabilities.
+[Manage](manage-workspace.md) is the shared owner/operator/admin workspace at
+`/manage`. Its context-aware navigation does not alter the policy order or grant
+operators private-content access.
 
 ## Access model
 
@@ -20,7 +31,7 @@ A single policy service (`CollectionPolicyService`) is the one source of truth.
 For a collection it resolves the strongest independent grant:
 
 1. **Owner** — owns the collection's hub: read, write content and manage.
-2. **Direct share** — reader or editor on that collection.
+2. **Direct share** — viewer or contributor on that collection.
 3. **Active link** — its valid token or recorded link share while enabled.
 4. **Published** — the collection itself is published: read.
 
@@ -28,10 +39,13 @@ Otherwise the collection is **not found** (404, so callers cannot probe for
 things they can't access). Reads that fail resolve to 404; writes a viewer may
 not perform resolve to 403.
 
-- **Manage** (publish, share, delete, settings, rename) is **owner-only**.
-- **Editor** scope is content-only: resources, tags, imports within the shared
-  collection. Editors never manage.
-- A link grant is recorded against the opened collection only.
+- **Manage** (import, publish, share, delete, settings, rename) is **owner-only**.
+- **Contributor** scope is content-only: resources and tags within the shared
+  collection. Contributors never manage.
+- A link grant is recorded against the opened collection only. Manage Access
+  selects people and counts their collections using direct grants or remembered
+  link grants whose collection still has link sharing enabled. Disabled link
+  grants remain stored but do not count as current access.
 - Collection-reference metadata and exports authorize the destination separately.
   A source share token is never forwarded to another collection.
 
@@ -42,15 +56,15 @@ Roles come in two separate scopes ([ADR-0013](../engineering-decisions/0013-perm
 | Role | Scope | Comes from | Can |
 | --- | --- | --- | --- |
 | `owner` | Every collection in the hub | Owning the hub (`hub.ownerUserId`); moves with a collection transfer | Read, write content, manage; planned hub-wide management and blocking in [Manage](manage-workspace.md) |
-| `editor` | One collection | A direct share (`CollectionShare`) | Read, write content |
-| `reader` | One collection | A direct share, or a recorded link share | Read |
+| `contributor` | One collection | A direct share (`CollectionShare`) | Read, write content |
+| `viewer` | One collection | A direct share, or a recorded link share | Read |
 | `operator`, `admin` | The service, site-wide | An accepted, verified invitation (`OperatorGrant`, `AdminGrant`) | Run service operations; never read private collections ([service-operations.md](service-operations.md)) |
 
 The collection's **creator** (`creatorUserId`) is a record, not a role: set once,
 kept through transfers, shown only as attribution, never consulted for access.
 
 Role names are stable identifiers in the API and database; each surface picks
-its own label: the discussion badges replies from the owner or an editor as
+its own label: the discussion badges replies from the owner or a contributor as
 **Contributor**, the planned sharing surface reads **Can view** / **Can contribute**, operations reads
 "service operator" / "service admin". Changing a label never renames a role.
 
@@ -60,7 +74,7 @@ The [service-operator contract](service-operations.md) adds explicit
 product authority for account lookup, suspension/reactivation, all-session
 revocation, public-content distribution holds and operator audit. Grants use
 immutable user IDs, separate from collection roles. Startup invites an initial
-admin; emailed-token consent creates only new recipients' named accounts/hubs.
+admin; emailed-token consent creates only new recipients' named accounts.
 Every recipient then verifies a fresh invitation-bound email OTP, including
 matching signed-in sessions. Only successful verification creates the role and
 session, atomically with proof consumption and audit. Admins invite/revoke
@@ -74,7 +88,7 @@ available to its active owner for correction, but unavailable to non-owners;
 publication, sharing and transfer cannot bypass the hold. References confer no access.
 Recovery preserves owner settings without restoring revoked sessions/grants.
 Actions and audit are atomic. The linked contract owns concurrency, authority
-lifecycle, privacy and retention details. The web console (`/ops`) searches
+lifecycle, privacy and retention details. The web console (`/manage`) searches
 accounts by email or handle, resolves a public collection from its link, manages
 the operator team and filters the audit; search text never appears in URLs.
 
@@ -87,9 +101,9 @@ contribute. No date-range filter until there is a concrete use for one.
 ## Ownership transfer
 
 - **Collection transfer** (`POST /collections/:id/transfer`): an owner transfers
-  one collection to an existing editor. The collection moves to their hub;
+  one collection to an existing contributor. The collection moves to their hub, creating it atomically if absent;
   its resource references keep pointing to unchanged destinations. Recipient
-  shares on this collection are removed, the previous owner receives editor
+  shares on this collection are removed, the previous owner receives contributor
   access, and the immutable creator is untouched. Self-transfer and destination
   slug collisions are rejected.
 - **Account/hub transfer** is not a model — see [identity-and-handles.md](identity-and-handles.md) (email

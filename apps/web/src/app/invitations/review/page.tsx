@@ -26,7 +26,7 @@ export default async function Page({
           one.
         </p>
         <p>
-          Already accepted? <a href="/sign-in?returnTo=%2Fops">Sign in</a>
+          Already accepted? <a href="/sign-in?returnTo=%2Fmanage">Sign in</a>
         </p>
       </section>
     );
@@ -42,8 +42,8 @@ export default async function Page({
         <>
           <p>This invitation is {invite.state}.</p>
           {invite.state === "accepted" && (
-            <a href={invite.session === "match" ? "/ops" : "/sign-in?returnTo=%2Fops"}>
-              Continue to service operations
+            <a href={invite.session === "match" ? "/manage" : "/sign-in?returnTo=%2Fmanage"}>
+              Continue to management
             </a>
           )}
         </>

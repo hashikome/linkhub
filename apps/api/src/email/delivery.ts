@@ -96,8 +96,11 @@ export class EmailDelivery {
       where: { state: { not: "pending" }, createdAt: { lt: metadataCutoff } },
     });
     await this.prisma.emailWebhook.deleteMany({ where: { createdAt: { lt: metadataCutoff } } });
-    await this.prisma.authAudit.deleteMany({
-      where: { createdAt: { lt: new Date(Date.now() - 90 * 86400_000) } },
+    await this.prisma.auditLog.deleteMany({
+      where: {
+        category: "authentication",
+        createdAt: { lt: new Date(Date.now() - 90 * 86400_000) },
+      },
     });
   }
 }

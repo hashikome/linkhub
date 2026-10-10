@@ -1,3 +1,4 @@
+import type { CreateCommentRequest, UpdateCommentRequest } from "@nslinkhub/types";
 import { IsInt, IsOptional, IsString, IsUUID, MaxLength, Min, MinLength } from "class-validator";
 
 import { CursorQueryDto } from "src/common/dto/cursor-query.dto";
@@ -13,7 +14,7 @@ export class CommentQueryDto extends CursorQueryDto {
   replyCursor?: string;
 }
 
-export class CreateCommentDto {
+export class CreateCommentDto implements CreateCommentRequest {
   @IsString()
   @MinLength(1)
   @MaxLength(2000)
@@ -25,7 +26,7 @@ export class CreateCommentDto {
   parentId?: string;
 }
 
-export class UpdateCommentDto {
+export class UpdateCommentDto implements UpdateCommentRequest {
   @IsString()
   @MinLength(1)
   @MaxLength(2000)

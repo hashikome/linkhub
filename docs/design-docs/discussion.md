@@ -12,8 +12,8 @@ account goes. `collections.comments_enabled` (default true) is the owner's
 switch. Access is the collection policy, unchanged: reading the discussion
 requires `canRead`; posting additionally requires a session, comments on and no
 active hold; hiding and marking answers require `canWriteContent` (owner or
-direct editor); edit/delete require authorship. Replies from the owner or an
-editor carry the role in the API (`author.role`: `owner` | `editor`) and are
+direct contributor); edit/delete require authorship. Replies from the owner or a
+contributor carry the role in the API (`author.role`: `owner` | `contributor`) and are
 badged **Contributor** in the web — one label for everyone who maintains the
 collection ([roles and labels](tenancy-and-access.md#roles-and-labels)). Hide is moderation of
 others' comments (spam, abuse, off-topic) — contributors can't delete someone

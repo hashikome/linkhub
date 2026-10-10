@@ -12,7 +12,7 @@ import type { ApiPath } from "./http";
 // double-apply.
 export interface PendingAction {
   path: ApiPath;
-  method?: "POST" | "PATCH" | "DELETE";
+  method?: "POST" | "PATCH" | "DELETE" | "PUT";
   body: Record<string, unknown>;
   /** Where to return afterwards (the page the action was taken from). */
   target: string;
@@ -20,6 +20,8 @@ export interface PendingAction {
   label: string;
   /** Notice shown after a successful replay (defaults to "done"). */
   success?: string;
+  /** Preserve the one-time token returned by a resumed collection link change. */
+  result?: "collection-link";
   /** Fragment to land on after the replay, e.g. the discussion. */
   anchor?: string;
   /** Fingerprint of the account it belongs to; it replays only for them. */
@@ -75,7 +77,8 @@ export async function readPendingAction(now = Date.now()): Promise<PendingAction
       typeof action.path !== "string" ||
       !action.path.startsWith("/api/v1/") ||
       action.path.startsWith("/api/v1/auth/") ||
-      (action.method !== undefined && !["POST", "PATCH", "DELETE"].includes(action.method)) ||
+      (action.method !== undefined &&
+        !["POST", "PATCH", "DELETE", "PUT"].includes(action.method)) ||
       typeof action.target !== "string" ||
       !action.target.startsWith("/") ||
       action.target.startsWith("//") ||

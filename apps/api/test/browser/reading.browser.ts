@@ -11,7 +11,9 @@ import { requestBudgetKey } from "../../src/common/middleware/request-budget";
 import type { PrismaService } from "../../src/database/prisma.service";
 import { emailConfig } from "../../src/email/config";
 import { emailKey, unseal } from "../../src/email/outbox";
-import { signInWithCode } from "../fixtures/sign-in";
+import { ensurePersonalHub } from "../../src/modules/hubs/hub-onboarding";
+import { itemTags } from "../../src/modules/resources/item-tags";
+import { signInHubOwner, signInWithCode } from "../fixtures/sign-in";
 
 const root = resolve(__dirname, "../../../..");
 let app: INestApplication;
@@ -53,7 +55,6 @@ async function create(title: string, slug: string, published = false) {
       slug,
       published,
       description: "Collected notes and practical references.\nA second line for reading.",
-      tags: ["reading", "reference"],
     })
     .expect(201);
   return result.body.data.id as string;
@@ -64,26 +65,22 @@ async function change(id: string, action: string) {
     .auth(owner, { type: "bearer" })
     .expect(201);
 }
-async function freshPage(js = true) {
-  const context = await browser.newContext({ javaScriptEnabled: js });
+async function freshPage(js = true, timezoneId?: string) {
+  const context = await browser.newContext({ javaScriptEnabled: js, timezoneId });
   const page = await context.newPage();
   page.setDefaultTimeout(5000);
   page.setDefaultNavigationTimeout(10000);
   return { page, close: () => context.close() };
 }
-const shareMenu = (page: Page, name = "Share") =>
-  page.locator("summary", { hasText: new RegExp(`^${name}$`) });
-// Collections show sharing beside the sheet on wide screens and in a menu
-// otherwise; hubs show the panel inline.
-const shareControl = (page: Page) =>
-  page.locator(".share-aside:visible, .share-menu > summary:visible").first();
-// "Share link" copies; headless runs have no clipboard, so the panel shows the
-// exact address to copy by hand, which is what these checks read.
-async function shareLink(page: Page, name = "Share", action = "Share link") {
-  const menu = shareMenu(page, name);
-  if (await menu.isVisible()) await menu.click();
-  await page.getByRole("button", { name: action, exact: true }).click();
-  return page.getByRole("textbox", { name: "Copy this link", exact: true });
+async function sidebarAlignment(page: Page) {
+  return page.locator(".reader-side").evaluate((el) => {
+    const summary = el.querySelector(".sidebar-summary")?.getBoundingClientRect();
+    const discussion = el.querySelector(".comments")?.getBoundingClientRect();
+    if (!summary || !discussion) throw new Error("Sidebar summary or discussion missing");
+    return Math.abs(
+      discussion.top - summary.bottom - Number.parseFloat(getComputedStyle(el).rowGap),
+    );
+  });
 }
 // The harness sets a 2 s resend gap. Without JavaScript the button only
 // enables on a fresh render after the gap, so wait it out and reload.
@@ -221,7 +218,7 @@ beforeAll(async () => {
   await app.listen(0, "127.0.0.1");
   apiOrigin = await app.getUrl();
   prisma = app.get(Prisma);
-  const signed = await signInWithCode(app.getHttpServer(), {
+  const signed = await signInHubOwner(app.getHttpServer(), {
     email: "reader-owner@example.com",
     name: "Reader",
   });
@@ -244,7 +241,7 @@ beforeAll(async () => {
       description: "References for curious readers.\nCollected with care.",
     },
   });
-  const other = await signInWithCode(app.getHttpServer(), {
+  const other = await signInHubOwner(app.getHttpServer(), {
     email: "empty-reader@example.com",
     name: "Other reader",
   });
@@ -256,7 +253,7 @@ beforeAll(async () => {
   await request(app.getHttpServer())
     .patch("/api/v1/profile")
     .auth(otherToken, { type: "bearer" })
-    .send({ handle: emptyHandle })
+    .send({ handle: emptyHandle, confirmHandle: true })
     .expect(200);
   await request(app.getHttpServer())
     .post("/api/v1/collections")
@@ -312,7 +309,11 @@ beforeAll(async () => {
     const added = await request(app.getHttpServer())
       .post(`/api/v1/collections/${sourceId}/resources/external`)
       .auth(owner, { type: "bearer" })
-      .send({ url: `https://fixture-links.dev/reference/${position}`, position })
+      .send({
+        url: `https://fixture-links.dev/reference/${position}`,
+        position,
+        tags: position === 21 ? ["late-page-tag", "reading", "reference"] : [],
+      })
       .expect(201);
     await lookedUp(added.body.data.url, `Reference ${position}`);
   }
@@ -491,6 +492,10 @@ describe("explore to resource: production browser journey", () => {
         `© ${new Date().getFullYear()} nslinkhub`,
       );
       await browserExpect(footer.locator(".footer-series")).toHaveText("an ns series product");
+      await browserExpect(footer.getByRole("link", { name: "Discover", exact: true })).toHaveCount(
+        0,
+      );
+      await browserExpect(footer.getByRole("link")).toHaveCount(1);
       await browserExpect(
         footer
           .getByRole("navigation", { name: "Footer" })
@@ -577,11 +582,6 @@ describe("explore to resource: production browser journey", () => {
       const { page, close } = await freshPage();
       try {
         await page.setViewportSize({ width: 390, height: 844 });
-        await page.addInitScript(() => {
-          Object.defineProperty(navigator, "clipboard", {
-            value: { writeText: () => Promise.reject(new Error("Unavailable")) },
-          });
-        });
         if (session) {
           const [name, ...value] = session.split("=");
           await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
@@ -594,9 +594,6 @@ describe("explore to resource: production browser journey", () => {
         await browserExpect(page.locator(".hub-heading time")).toHaveCount(0);
         await browserExpect(page.locator(".hub-heading")).not.toContainText("Created");
         await browserExpect(page.locator(".hub-heading")).not.toContainText("Updated");
-        await browserExpect(page.locator(".hub-share-actions .share-panel")).toBeVisible();
-        await browserExpect(shareMenu(page, "Share hub")).toHaveCount(0);
-        await browserExpect(await shareLink(page, "Share hub")).toHaveValue(`${origin}/h/${hubId}`);
         if (!session)
           await page.screenshot({ path: "/tmp/public-hub-metadata-mobile.png", fullPage: true });
         await browserExpect(
@@ -715,12 +712,6 @@ describe("explore to resource: production browser journey", () => {
     for (const js of [true, false]) {
       const { page, close } = await freshPage(js);
       try {
-        if (js)
-          await page.addInitScript(() => {
-            Object.defineProperty(navigator, "clipboard", {
-              value: { writeText: () => Promise.reject(new Error("Unavailable")) },
-            });
-          });
         await ready(page, `/@${handle}`);
         for (const width of [320, 390, 768, 1280]) {
           await page.setViewportSize({ width, height: 900 });
@@ -745,7 +736,6 @@ describe("explore to resource: production browser journey", () => {
         await page.reload();
         await browserExpect(page.locator(".resource-row")).toHaveCount(20);
         if (js) {
-          await browserExpect(await shareLink(page)).toHaveValue(`${origin}/c/${sourceId}`);
           await page.emulateMedia({ reducedMotion: "reduce" });
           await page.evaluate(() => {
             document.documentElement.style.fontSize = "200%";
@@ -765,7 +755,7 @@ describe("explore to resource: production browser journey", () => {
         await browserExpect(page.locator("h1")).toHaveText("A useful collection");
         await page.getByRole("link", { name: `@${handle}`, exact: true }).click();
         await page.getByRole("link", { name: longTitle }).click();
-        await page.getByRole("link", { name: "Open the reference" }).click();
+        await page.getByRole("link", { name: "Open the reference", exact: true }).click();
         await browserExpect(page.locator("body")).toHaveText("External reference opened");
         expect(captureReferer).toBeNull();
       } finally {
@@ -843,7 +833,7 @@ describe("explore to resource: production browser journey", () => {
     }
   }, 30000);
 
-  it("keeps copied ID links readable after handle and slug renames", async () => {
+  it("keeps immutable ID links readable after handle and slug renames", async () => {
     const { page, close } = await freshPage();
     const renamed = "renamed-reader";
     async function renameSlug(slug: string) {
@@ -862,7 +852,7 @@ describe("explore to resource: production browser journey", () => {
       await request(app.getHttpServer())
         .patch("/api/v1/profile")
         .auth(owner, { type: "bearer" })
-        .send({ handle: renamed })
+        .send({ handle: renamed, confirmHandle: true })
         .expect(200);
       await renameSlug("renamed-guide");
       await ready(page, `/@${renamed}/renamed-guide`);
@@ -877,11 +867,9 @@ describe("explore to resource: production browser journey", () => {
         await browserExpect(page.locator("h1")).toHaveText("This collection isn't available.");
       }
     } finally {
-      await request(app.getHttpServer())
-        .patch("/api/v1/profile")
-        .auth(owner, { type: "bearer" })
-        .send({ handle })
-        .expect(200);
+      // Restore this shared synthetic fixture; product clients cannot unclaim handles.
+      await prisma.hub.update({ where: { id: hubId }, data: { handleClaimedAt: null } });
+      await prisma.hub.update({ where: { id: hubId }, data: { handle } });
       await renameSlug("reading-guide");
       await close();
     }
@@ -937,11 +925,6 @@ describe("explore to resource: production browser journey", () => {
   it("revalidates pretty history and scopes shared access away from public hub discovery", async () => {
     const { page, close } = await freshPage();
     try {
-      await page.addInitScript(() => {
-        Object.defineProperty(navigator, "clipboard", {
-          value: { writeText: () => Promise.reject(new Error("Unavailable")) },
-        });
-      });
       await ready(page, `/@${handle}/reading-guide`);
       await page.getByRole("link", { name: `@${handle}`, exact: true }).click();
       await change(sourceId, "unpublish");
@@ -949,11 +932,6 @@ describe("explore to resource: production browser journey", () => {
       await browserExpect(page.locator("h1")).toHaveText("This collection isn't available.");
       await ready(page, `/@${handle}/reading-guide?s=${linkToken}`);
       await browserExpect(page.locator("h1")).toHaveText(longTitle);
-      const address = await shareLink(page);
-      await browserExpect(address).toHaveValue(`${origin}/c/${sourceId}`);
-      await page.getByRole("button", { name: "Share access link", exact: true }).click();
-      await browserExpect(address).toHaveValue(`${origin}/c/${sourceId}?s=${linkToken}`);
-      await page.keyboard.press("Escape");
       await browserExpect(
         page.getByRole("link", { name: `@${handle}`, exact: true }),
       ).toHaveAttribute("href", `/h/${hubId}`);
@@ -1054,9 +1032,11 @@ describe("explore to resource: production browser journey", () => {
       ).toBeVisible();
       await main.focus();
       await page.keyboard.press("PageDown");
-      await browserExpect.poll(() => main.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+      await browserExpect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
       await page.getByRole("link", { name: "More collections", exact: true }).click();
       await browserExpect(page.locator(".collection-row")).toHaveCount(25);
+      await browserExpect(footer).not.toBeInViewport();
+      await footer.scrollIntoViewIfNeeded();
       await browserExpect(footer).toBeInViewport();
       await page.screenshot({ path: "/tmp/explore-frame-phone.png" });
       await page.setViewportSize({ width: 844, height: 390 });
@@ -1099,21 +1079,21 @@ describe("explore to resource: production browser journey", () => {
     }
   }, 20000);
 
-  it("reads collection references, wraps at all target widths, supports keyboard and clipboard fallback", async () => {
+  it("reads collection references, wraps at all target widths and supports keyboard navigation", async () => {
     const { page, close } = await freshPage();
     try {
-      await page.addInitScript(() => {
-        Object.defineProperty(navigator, "clipboard", {
-          value: { writeText: () => Promise.reject(new Error("Unavailable")) },
-        });
-      });
       await ready(page, `/c/${sourceId}`);
-      for (const width of [320, 390, 768, 1280]) {
+      await browserExpect(page.locator(".resource-row")).toHaveCount(20);
+      await browserExpect(page.locator(".collection-heading .resource-tag-count")).toHaveText(
+        "+1 tag",
+      );
+      await browserExpect(page.locator(".sheet-body")).not.toContainText("late-page-tag");
+      for (const width of [320, 390, 768, 1280, 1440]) {
         await page.setViewportSize({ width, height: 900 });
         expect(
           await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
         ).toBe(true);
-        await browserExpect(shareControl(page)).toBeVisible();
+        await page.screenshot({ path: `/tmp/collection-tag-preview-${width}.png` });
       }
       await browserExpect(page.locator(".resource-row")).toHaveCount(20);
       await page.getByRole("link", { name: "More resources", exact: true }).click();
@@ -1172,16 +1152,17 @@ describe("explore to resource: production browser journey", () => {
         }
       });
       expect(contrast.every((ratio) => ratio >= 4.5)).toBe(true);
-      await browserExpect(await shareLink(page)).toHaveValue(`${origin}/c/${sourceId}`);
       await page.screenshot({ path: "/tmp/w3-reader-desktop.png", fullPage: true });
       await page.setViewportSize({ width: 390, height: 844 });
       await page.screenshot({ path: "/tmp/w3-reader-phone.png", fullPage: true });
-      await browserExpect(page.getByText("reference-tag", { exact: true })).toBeVisible();
+      await browserExpect(
+        page.locator(".sheet-body").getByText("reference-tag", { exact: true }),
+      ).toBeVisible();
       await page.getByRole("link", { name: "A useful collection", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("A useful collection");
       await browserExpect(page.getByText("No resources in this collection yet.")).toBeVisible();
       await ready(page, `/c/${sourceId}`);
-      await page.getByRole("link", { name: "Open the reference" }).click();
+      await page.getByRole("link", { name: "Open the reference", exact: true }).click();
       await browserExpect(page.locator("body")).toHaveText("External reference opened");
       expect(captureReferer).toBeNull();
     } finally {
@@ -1221,15 +1202,19 @@ describe("explore to resource: production browser journey", () => {
     const guideId = await create("An independent guide", "independent-guide", true);
     const { page, close } = await freshPage();
     try {
+      const first = await request(app.getHttpServer())
+        .post(`/api/v1/collections/${guideId}/resources/collection`)
+        .auth(owner, { type: "bearer" })
+        .send({ linkedCollectionId: privateId, position: 0 })
+        .expect(201);
       await request(app.getHttpServer())
         .post(`/api/v1/collections/${guideId}/resources/heading`)
         .auth(owner, { type: "bearer" })
-        .send({ title: "Getting started", position: 0 })
-        .expect(201);
-      await request(app.getHttpServer())
-        .post(`/api/v1/collections/${guideId}/resources/collection`)
-        .auth(owner, { type: "bearer" })
-        .send({ linkedCollectionId: privateId, position: 1 })
+        .send({
+          title: "Getting started",
+          firstItemId: first.body.data.id,
+          firstItemVersion: first.body.data.version,
+        })
         .expect(201);
       await ready(page, `/c/${guideId}`);
       await browserExpect(
@@ -1329,9 +1314,13 @@ describe("explore to resource: production browser journey", () => {
           .getByRole("link", { name: "Discover", exact: true }),
       ).toHaveAttribute("href", "/discover");
       expect(
-        await page.getByRole("link", { name: "Open the reference" }).getAttribute("href"),
+        await page
+          .getByRole("link", { name: "Open the reference", exact: true })
+          .getAttribute("href"),
       ).not.toContain(linkToken);
-      await browserExpect(page.getByText("reference-tag", { exact: true })).toBeVisible();
+      await browserExpect(
+        page.locator(".sheet-body").getByText("reference-tag", { exact: true }),
+      ).toBeVisible();
       await page.getByRole("link", { name: "A useful collection", exact: true }).click();
       expect(new URL(page.url()).searchParams.get("s")).toBeNull();
       await browserExpect(page.locator("h1")).toHaveText("A useful collection");
@@ -1443,7 +1432,7 @@ describe("explore to resource: production browser journey", () => {
   }, 15000);
 
   it("rejects unsafe cookie requests independent of body type, origin absence and bearer headers", async () => {
-    const signed = await signInWithCode(app.getHttpServer(), { email: "csrf-reader@example.com" });
+    const signed = await signInHubOwner(app.getHttpServer(), { email: "csrf-reader@example.com" });
     const token = signed.headers["set-auth-token"];
     const session = (signed.headers["set-cookie"] as unknown as string[])
       .map((value) => value.split(";")[0])
@@ -1478,7 +1467,7 @@ describe("explore to resource: production browser journey", () => {
   }, 15000);
 });
 
-async function capturedCode(email: string) {
+async function capturedCode(email: string, expectedSubject?: string) {
   const row = await prisma.emailOutbox.findFirstOrThrow({
     where: {
       recipientKey: emailKey(emailConfig().suppressionSecret, "recipient", email),
@@ -1486,14 +1475,29 @@ async function capturedCode(email: string) {
     },
     orderBy: { createdAt: "desc" },
   });
-  const code = unseal(
+  const payload = unseal(
     row.payload ?? "",
     process.env.BETTER_AUTH_SECRET ?? "dev-better-auth-secret",
-  ).text.match(/^\d{8}$/m)?.[0];
+  );
+  if (expectedSubject) expect(payload.subject).toBe(expectedSubject);
+  const code = payload.text.match(/^\d{8}$/m)?.[0];
   if (!code) throw new Error("Missing captured browser code");
   return code;
 }
-async function browserSignIn(page: Page, email: string, returnTo = "/ops") {
+async function settingsSection(page: Page, name: "Profile" | "Hub" | "Notifications") {
+  await page
+    .getByRole("navigation", { name: "Settings sections" })
+    .getByRole("link", { name, exact: true })
+    .click();
+}
+async function browserOwnerSettings(page: Page, email: string) {
+  await browserSignIn(page, email, "/settings");
+  const person = await prisma.user.findUniqueOrThrow({ where: { email } });
+  await prisma.withAuthority(() => ensurePersonalHub(prisma, person.id));
+  await ready(page, "/settings");
+}
+
+async function browserSignIn(page: Page, email: string, returnTo = "/manage") {
   await ready(page, `/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
   await page.getByLabel("Email address").fill(email);
   const sent = page.waitForResponse((response) => response.url().endsWith("/forms/code-send"));
@@ -1509,7 +1513,7 @@ async function browserSignIn(page: Page, email: string, returnTo = "/ops") {
 }
 async function operatorFixture(name: string) {
   const email = `${name}-${crypto.randomUUID()}@example.com`;
-  const signed = await signInWithCode(app.getHttpServer(), { email, name });
+  const signed = await signInHubOwner(app.getHttpServer(), { email, name });
   const { changeOperatorGrant } = await import("../fixtures/operator.js");
   await changeOperatorGrant(prisma, {
     userId: signed.body.user.id,
@@ -1517,9 +1521,44 @@ async function operatorFixture(name: string) {
     authority: "browser-fixture",
     version: 1,
   });
-  return { email, id: signed.body.user.id };
+  return { email, id: signed.body.user.id, token: signed.headers["set-auth-token"] as string };
+}
+async function chooseAction(page: Page, action: string, scope = page.locator("body")) {
+  const direct = scope.locator(`.account-actions a[href*="action=${action}"]`);
+  if (await direct.count()) {
+    await direct.click();
+    return;
+  }
+  const labels: Record<string, string> = {
+    hold: "Hold distribution",
+    release: "Release hold",
+    share: "Share",
+    publish: "Publish",
+    unpublish: "Unpublish",
+    delete: "Delete",
+  };
+  const trigger = scope.locator(".action-trigger:visible").first();
+  if (await trigger.count()) {
+    await trigger.click();
+    const dialog = page.getByRole("dialog");
+    await browserExpect(dialog).toBeVisible();
+    await dialog.getByRole("link", { name: labels[action], exact: true }).click();
+  } else {
+    const picker = scope.locator("details.action-menu").first();
+    await picker.locator("summary").click();
+    await picker.getByRole("link", { name: labels[action], exact: true }).click();
+  }
 }
 async function submitOperation(page: Page, name: string, reason: string) {
+  const actions: Record<string, string> = {
+    "Suspend account": "account.suspend",
+    "Reactivate account": "account.reactivate",
+    "End all sessions": "sessions.revoke",
+    "Schedule account deletion": "account.delete",
+    "Cancel account deletion": "account.cancel_deletion",
+  };
+  if (actions[name] && !(await page.getByRole("heading", { name, exact: true }).count()))
+    await chooseAction(page, actions[name]);
   const section = page
     .locator(".operation-section")
     .filter({ has: page.getByRole("heading", { name, exact: true }) });
@@ -1527,13 +1566,121 @@ async function submitOperation(page: Page, name: string, reason: string) {
   await section.getByRole("button", { name, exact: true }).click();
 }
 
-describe("service operations: production browser journey", () => {
+it("appends filtered audit events, retains rows on retry and hides Load more at the end", async () => {
+  const op = await operatorFixture("audit-pagination");
+  await prisma.auditLog.createMany({
+    data: Array.from({ length: 45 }, (_, i) => ({
+      category: "operation",
+      actorKind: "user",
+      actorUserId: op.id,
+      targetUserId: op.id,
+      action: "account.suspend",
+      outcome: "success",
+      createdAt: new Date(Date.now() - i * 60000),
+    })),
+  });
+  for (const js of [true, false]) {
+    const { page, close } = await freshPage(js);
+    try {
+      const denied = await page.request.get(`${origin}/manage/audit/more?action=account.suspend`);
+      expect(denied.status()).toBe(401);
+      await browserSignIn(page, op.email, "/manage/audit");
+      await page.getByRole("searchbox", { name: "Search", exact: true }).fill(op.id);
+      await page.getByLabel("Action", { exact: true }).selectOption("account.suspend");
+      await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+      const rows = page.locator(".ops-table tbody tr");
+      await browserExpect(rows).toHaveCount(20);
+      expect(page.url()).not.toContain(op.email);
+      // Local-time hydration may change the visible timestamp; event instants
+      // and the other cells must survive pagination/retry unchanged.
+      const snapshots = () =>
+        rows.evaluateAll((entries) =>
+          entries.map((row) =>
+            [
+              row.querySelector("time")?.getAttribute("datetime"),
+              ...Array.from(row.querySelectorAll("td"))
+                .slice(1)
+                .map((cell) => cell.textContent),
+            ].join("|"),
+          ),
+        );
+      const first = await snapshots();
+      const load = page.getByRole("link", { name: "Load more", exact: true });
+      const href = await load.getAttribute("href");
+      expect(href).toContain("action=account.suspend");
+      expect(href).toContain(`q=${op.id}`);
+      const panel = page.getByRole("region", { name: "Audit events", exact: true });
+      const top = await page
+        .locator(".ops-filters")
+        .evaluate((el) => el.getBoundingClientRect().top);
+      await panel.focus();
+      await panel.press("End");
+      await browserExpect.poll(() => panel.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+      expect(await page.evaluate(() => scrollY)).toBe(0);
+      expect(
+        await page.locator(".ops-filters").evaluate((el) => el.getBoundingClientRect().top),
+      ).toBe(top);
+      await browserExpect(
+        page.getByRole("columnheader", { name: "Timestamp", exact: true }),
+      ).toBeInViewport();
+      const gap = await load.evaluate((el) => {
+        const table = document.querySelector(".ops-table");
+        if (!table) throw new Error("Missing audit table");
+        return el.getBoundingClientRect().top - table.getBoundingClientRect().bottom;
+      });
+      expect(gap).toBeGreaterThanOrEqual(24);
+      if (js) {
+        const address = page.url();
+        await page.route(
+          "**/manage/audit/more?**",
+          (route) =>
+            route.fulfill({
+              status: 503,
+              contentType: "application/json",
+              body: JSON.stringify({ error: { code: "unavailable" } }),
+            }),
+          { times: 1 },
+        );
+        await load.click();
+        await browserExpect(
+          page.getByText("Couldn't load more. Your current events are still here."),
+        ).toBeVisible();
+        expect(await snapshots()).toEqual(first);
+        await page.getByRole("button", { name: "Try again", exact: true }).click();
+        await browserExpect(rows).toHaveCount(40);
+        expect((await snapshots()).slice(0, 20)).toEqual(first);
+        expect(page.url()).toBe(address);
+        await load.click();
+        await browserExpect(rows).toHaveCount(45);
+        await browserExpect(load).toHaveCount(0);
+        await browserExpect(
+          page.getByRole("status").filter({ hasText: "All events loaded." }),
+        ).toBeAttached();
+        await panel.focus();
+        await panel.press("End");
+        await page.screenshot({ path: "/tmp/audit-load-more-desktop.png" });
+      } else {
+        await load.focus();
+        await load.press("Enter");
+        await browserExpect(page).toHaveURL(/cursor=/);
+        await browserExpect(rows).toHaveCount(20);
+        expect((await snapshots())[0]).not.toBe(first[0]);
+        expect(page.url()).toContain("cursor=");
+        expect(page.url()).toContain(`q=${op.id}`);
+      }
+    } finally {
+      await close();
+    }
+  }
+}, 30000);
+
+describe("management: production browser journey", () => {
   it("signs in and completes account/moderation/audit/recovery with native forms", async () => {
     for (const js of [true, false]) {
       await prisma.requestBudget.deleteMany();
       const op = await operatorFixture(`browser-operator-${js}`);
       const targetEmail = `browser-target-${crypto.randomUUID()}@example.com`;
-      const target = await signInWithCode(app.getHttpServer(), {
+      const target = await signInHubOwner(app.getHttpServer(), {
         email: targetEmail,
         name: "Browser target",
       });
@@ -1551,72 +1698,65 @@ describe("service operations: production browser journey", () => {
       try {
         await browserSignIn(page, op.email);
         await browserExpect(page.locator("h1")).toHaveText("Accounts");
-        const tabs = page.getByRole("navigation", { name: "Service operations" });
+        const tabs = page.getByRole("navigation", { name: "Manage" });
         await browserExpect(tabs.getByRole("link", { name: "Accounts" })).toHaveAttribute(
           "aria-current",
           "page",
         );
-        await page.getByLabel("Email or hub handle", { exact: true }).fill(targetEmail);
+        await page
+          .getByLabel("User ID, username, email or hub handle", { exact: true })
+          .fill(targetEmail);
         await page.getByRole("button", { name: "Search", exact: true }).click();
         // The searched email never appears in the address.
         expect(page.url()).not.toContain(targetEmail);
         const row = page.locator(".ops-table tbody tr");
         await browserExpect(row).toHaveCount(1);
         await browserExpect(row).toContainText("Browser target");
-        // A quick action from the table: reason, then the labelled button.
-        const suspend = row
-          .locator(".quick-action")
-          .filter({ has: page.locator("summary", { hasText: /^Suspend$/ }) });
-        await suspend.locator("summary").click();
-        await suspend.getByLabel("Reason", { exact: true }).selectOption("spam");
-        await suspend.getByRole("button", { name: "Suspend", exact: true }).click();
+        await row.getByRole("button", { name: "Browser target", exact: true }).click();
+        await chooseAction(page, "account.suspend");
+        await submitOperation(page, "Suspend account", "spam");
         await browserExpect(
           page.getByText("The action is complete.", { exact: true }),
         ).toBeVisible();
-        await browserExpect(page.locator(".ops-table tbody tr")).toContainText("Suspended");
-        expect(page.url()).not.toContain(targetEmail);
         expect(
           (await prisma.user.findUniqueOrThrow({ where: { id: target.body.user.id } }))
             .accountState,
         ).toBe("suspended");
-        await page.locator(".ops-table").getByRole("link", { name: "Browser target" }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Browser target");
         await submitOperation(page, "Reactivate account", "review_completed");
-        await browserExpect(
-          page.getByRole("button", { name: "Suspend account", exact: true }),
-        ).toBeVisible();
+        expect(
+          (await prisma.user.findUniqueOrThrow({ where: { id: target.body.user.id } }))
+            .accountState,
+        ).toBe("active");
+        await signInWithCode(app.getHttpServer(), { email: targetEmail });
+        await ready(page, `/manage/accounts/${target.body.user.id}`);
         await submitOperation(page, "End all sessions", "account_compromise");
-        await browserExpect(
-          page.getByText("The action is complete.", { exact: true }),
-        ).toBeVisible();
-        // Collections are found by their link, not an id.
         await tabs.getByRole("link", { name: "Collections" }).click();
-        await page.getByLabel("Collection link", { exact: true }).fill(`${origin}/c/${id}`);
-        await page.getByRole("button", { name: "Review", exact: true }).click();
-        await browserExpect(page).toHaveURL(new RegExp(`/ops/collections/${id}`));
+        await page.getByLabel("Collection ID or link", { exact: true }).fill(`${origin}/c/${id}`);
+        await page.getByRole("button", { name: "Search", exact: true }).click();
+        await browserExpect(page.locator(".ops-table tbody tr")).toHaveCount(1);
+        await chooseAction(page, "hold", page.locator(".ops-table tbody tr"));
+        await browserExpect(page).toHaveURL(new RegExp(`/manage/collections/${id}`));
         await submitOperation(page, "Hold distribution", "harmful_content");
         await browserExpect(
           page.getByRole("button", { name: "Release hold", exact: true }),
         ).toBeVisible();
         await request(app.getHttpServer()).get(`/api/v1/collections/${id}`).expect(404);
         // Held collections are listed and released from their row.
-        await ready(page, "/ops/collections");
+        await ready(page, "/manage/collections");
         const held = page.locator(".ops-table tbody tr").filter({ hasText: id });
-        await held.locator(".quick-action summary").click();
-        await held.getByLabel("Reason", { exact: true }).selectOption("review_completed");
-        await held.getByRole("button", { name: "Release", exact: true }).click();
+        await chooseAction(page, "release", held);
+        await submitOperation(page, "Release hold", "review_completed");
         await browserExpect(
           page.getByText("The action is complete.", { exact: true }),
         ).toBeVisible();
-        await browserExpect(
-          page.locator(".ops-table tbody tr").filter({ hasText: id }),
-        ).toHaveCount(0);
-        await ready(page, `/ops/collections/${id}`);
+        await ready(page, `/manage/collections/${id}`);
         await page.getByRole("link", { name: "View this collection's operator history" }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Audit");
-        await browserExpect(page.locator(".ops-table")).toContainText("collection hold");
+        await browserExpect(page.locator("h1")).toHaveText("Audit Log");
+        await browserExpect(page.locator(".ops-table")).toContainText(
+          "Hold collection publication",
+        );
         await page.getByLabel("Action", { exact: true }).selectOption("collection.release");
-        await page.getByRole("button", { name: "Filter", exact: true }).click();
+        await page.getByRole("button", { name: "Apply filters", exact: true }).click();
         await browserExpect(page.locator(".ops-table tbody tr")).toHaveCount(1);
         await browserExpect(page.getByRole("link", { name: "Clear filters" })).toBeVisible();
         for (const width of [320, 390, 768, 1280]) {
@@ -1633,7 +1773,7 @@ describe("service operations: production browser journey", () => {
             .getByRole("navigation", { name: "Main navigation" })
             .getByRole("link", { name: "Sign in", exact: true }),
         ).toBeVisible();
-        await ready(page, "/ops");
+        await ready(page, "/manage");
         await browserExpect(page.locator("h1")).toHaveText("Sign in");
       } finally {
         await close();
@@ -1661,12 +1801,12 @@ describe("service operations: production browser journey", () => {
       expect(new URL(page.url()).origin).toBe(origin);
       // A sensitive action with a stale verification asks the signed-in
       // operator to confirm it's them, then finishes the action by itself.
-      const member = await signInWithCode(app.getHttpServer(), {
+      const member = await signInHubOwner(app.getHttpServer(), {
         email: `stale-target-${crypto.randomUUID()}@example.com`,
         name: "Stale target",
       });
       const memberId = member.body.user.id;
-      await ready(page, `/ops/accounts/${memberId}`);
+      await ready(page, `/manage/accounts/${memberId}`);
       await prisma.session.updateMany({
         where: { userId: op.id },
         data: { verifiedAt: new Date(0) },
@@ -1690,7 +1830,7 @@ describe("service operations: production browser journey", () => {
       await page.screenshot({ path: "/tmp/verify-code.png" });
       await browserExpect(page.locator("h1")).toHaveText("Confirm it's you");
       // A pasted code with a space ("3368 6575") is accepted.
-      const confirmCode = await capturedCode(op.email);
+      const confirmCode = await capturedCode(op.email, "Confirm it's you · nslinkhub");
       await page
         .getByLabel("Eight-digit code")
         .fill(`${confirmCode.slice(0, 4)} ${confirmCode.slice(4)}`);
@@ -1700,13 +1840,13 @@ describe("service operations: production browser journey", () => {
       expect(
         await prisma.session.count({ where: { userId: memberId, expiresAt: { gt: new Date() } } }),
       ).toBe(0);
-      await ready(page, `/ops/accounts/${op.id}`);
+      await ready(page, `/manage/accounts/${op.id}`);
       await browserExpect(page.locator("h1")).toHaveText("browser-recovery");
       await prisma.operatorGrant.delete({ where: { userId: op.id } });
       await page.reload();
-      await browserExpect(
-        page.getByRole("navigation", { name: "Main navigation" }),
-      ).not.toContainText("Service operations");
+      await browserExpect(page.getByRole("navigation", { name: "Main navigation" })).toContainText(
+        "Manage",
+      );
       await browserExpect(page.locator("main")).not.toContainText(op.email);
     } finally {
       await close();
@@ -1726,7 +1866,13 @@ it("keeps native form budgets source-bound and rejects forged form origins", asy
   async function send(
     source: string,
     claimedOrigin = origin,
-    profile?: { cookie: string; displayName: string; hubName: string; handle: string },
+    profile?: {
+      cookie: string;
+      displayName: string;
+      username: string;
+      hubName: string;
+      handle: string;
+    },
   ) {
     const child = Bun.spawn(
       [
@@ -1748,6 +1894,7 @@ it("keeps native form budgets source-bound and rejects forged form origins", asy
             profile
               ? {
                   displayName: profile.displayName,
+                  username: profile.username,
                   handle: profile.handle,
                   hubName: profile.hubName,
                   hubDescription: "Source-bound profile",
@@ -1771,7 +1918,7 @@ it("keeps native form budgets source-bound and rejects forged form origins", asy
   expect(allowed.status).toBe(303);
   expect(allowed.location).toContain("notice=sent");
   expect((await send("127.0.0.3", "https://untrusted.example")).status).toBe(403);
-  const signed = await signInWithCode(app.getHttpServer(), {
+  const signed = await signInHubOwner(app.getHttpServer(), {
     email: `profile-source-${crypto.randomUUID()}@example.com`,
     name: "Before",
   });
@@ -1781,6 +1928,8 @@ it("keeps native form budgets source-bound and rejects forged form origins", asy
       .map((c) => c.split(";")[0])
       .join("; "),
     displayName: "After",
+    username: (await prisma.user.findUniqueOrThrow({ where: { id: signed.body.user.id } }))
+      .username,
     handle: hub.handle,
     hubName: hub.name,
   };
@@ -1870,6 +2019,19 @@ describe("email invitation onboarding", () => {
         expect(await prisma.session.count({ where: { userId: account.id } })).toBe(0);
         await verifyInvitationCode(page, adminEmail);
         await page.getByRole("link", { name: "Team", exact: true }).click();
+        await browserExpect(page.locator("h1")).toHaveText("Team");
+        await browserExpect(page.getByLabel("Operator's email")).toHaveCount(0);
+        await browserExpect(page.locator(".ops-table")).toContainText(adminEmail);
+        if (js) await page.screenshot({ path: "/tmp/manage-team-desktop.png" });
+        await page.getByRole("link", { name: "Invitations", exact: true }).click();
+        await browserExpect(page.locator("h1")).toHaveText("Invitations");
+        for (const width of [320, 390, 768, 1280]) {
+          await page.setViewportSize({ width, height: 900 });
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+        }
+        if (js) await page.screenshot({ path: "/tmp/manage-invitations-desktop.png" });
         await page.getByLabel("Operator's email").fill(operatorEmail);
         await page.getByRole("button", { name: "Invite operator" }).click();
         await browserExpect(page.locator(".toast")).toContainText("complete");
@@ -1889,13 +2051,16 @@ describe("email invitation onboarding", () => {
         await browserExpect(
           recipient.page.getByRole("link", { name: "Team", exact: true }),
         ).toHaveCount(0);
+        await browserExpect(
+          recipient.page.getByRole("link", { name: "Invitations", exact: true }),
+        ).toHaveCount(0);
         const target = await prisma.user.findUniqueOrThrow({ where: { email: operatorEmail } });
-        await ready(page, `/ops/accounts/${target.id}`);
+        await ready(page, `/manage/accounts/${target.id}`);
         await page.getByRole("button", { name: "Remove operator access", exact: true }).click();
         await browserExpect(page.locator(".toast")).toContainText("complete");
         // Reinvite the same now-existing account. Its matching session accepts
         // with fresh email proof; its existing name is retained.
-        await ready(page, "/ops/team");
+        await ready(page, "/manage/invitations");
         await page.getByLabel("Operator's email").fill(operatorEmail);
         await page.getByRole("button", { name: "Invite operator" }).click();
         await browserExpect(page.locator(".toast")).toContainText("complete");
@@ -1931,7 +2096,7 @@ describe("account shell and appearance", () => {
     let release = () => {};
     let releaseCheck = () => {};
     try {
-      await browserSignIn(page, email, "/settings");
+      await browserOwnerSettings(page, email);
       const name = page.getByLabel("Full name", { exact: true });
       await browserExpect(
         page.getByRole("button", { name: "Save changes", exact: true }),
@@ -1939,6 +2104,13 @@ describe("account shell and appearance", () => {
       await page.route("**/forms/profile-save", (route) => route.abort());
       await name.fill("Draft retained");
       await browserExpect(page.locator(".form-notice.error")).toContainText("edits are still here");
+      await browserExpect(name).toHaveValue("Draft retained");
+      await settingsSection(page, "Notifications");
+      await browserExpect(
+        page.getByRole("heading", { name: "Notifications", exact: true }),
+      ).toBeVisible();
+      await page.goBack();
+      await browserExpect(name).toBeVisible();
       await browserExpect(name).toHaveValue("Draft retained");
       await browserExpect(page.locator(".navigation-loading")).toBeHidden();
       await page.unroute("**/forms/profile-save");
@@ -1988,6 +2160,7 @@ describe("account shell and appearance", () => {
           await route.fulfill({ json: { data: { handle: oldHandle, status: "available" } } });
         },
       );
+      await settingsSection(page, "Hub");
       const handle = page.getByLabel("Handle", { exact: true });
       await handle.fill(oldHandle);
       await checkStarted;
@@ -2005,54 +2178,82 @@ describe("account shell and appearance", () => {
     }
   }, 30000);
 
-  it("persists the hub attribution switch with and without JavaScript", async () => {
+  it("renders public profile and hub connections with and without JavaScript", async () => {
     for (const js of [true, false]) {
       await prisma.requestBudget.deleteMany();
       const email = `attribution-browser-${crypto.randomUUID()}@example.com`;
       const { page, close } = await freshPage(js);
       try {
-        await browserSignIn(page, email, "/settings");
+        await browserOwnerSettings(page, email);
         const user = await prisma.user.findUniqueOrThrow({
           where: { email },
           include: { hub: true },
         });
         if (!user.hub) throw new Error("Expected hub");
         const hub = user.hub;
-        const toggle = page.getByRole("switch", { name: "Show my name on my hub", exact: true });
-        await browserExpect(toggle).toBeChecked();
+        const toggle = page.getByRole("switch", {
+          name: "Show owner",
+          exact: true,
+        });
         await page.getByLabel("Full name", { exact: true }).fill("Named Owner");
+        if (!js) await page.getByRole("button", { name: "Save changes", exact: true }).click();
+        await settingsSection(page, "Hub");
+        await browserExpect(toggle).toBeChecked();
         await page.getByLabel("Hub name", { exact: true }).fill("Independent Hub");
         await toggle.uncheck();
         if (js)
           await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
         else await page.getByRole("button", { name: "Save changes", exact: true }).click();
-        await ready(page, "/settings");
+        await ready(page, "/settings?section=hub");
         await browserExpect(toggle).not.toBeChecked();
-        await browserExpect(page.getByLabel("Full name", { exact: true })).toHaveValue(
-          "Named Owner",
+        await browserExpect(page.locator("#display-name")).toHaveValue("Named Owner");
+        expect((await prisma.hub.findUniqueOrThrow({ where: { id: hub.id } })).showOwner).toBe(
+          false,
         );
-        expect(
-          (await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).showNameOnHub,
-        ).toBe(false);
         for (const path of [`/h/${hub.id}`, `/@${hub.handle}`, `/h/${hub.id}?view=public`]) {
           await ready(page, path);
           await browserExpect(page.locator("h1")).toHaveText("Independent Hub");
           await browserExpect(page.locator(".hub-identity")).not.toContainText("Named Owner");
         }
-        await ready(page, "/settings");
+        await ready(page, `/${user.username}`);
+        await browserExpect(page.locator("h1")).toHaveText("Named Owner");
+        await browserExpect(page.locator(".hub-identity")).toHaveText(user.username);
+        await browserExpect(
+          page.getByRole("button", { name: "Create hub", exact: true }),
+        ).toHaveCount(0);
+        await ready(page, "/settings?section=hub");
         await toggle.check();
         if (js)
           await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
         else await page.getByRole("button", { name: "Save changes", exact: true }).click();
-        await ready(page, "/settings");
+        await ready(page, "/settings?section=hub");
         await browserExpect(toggle).toBeChecked();
         if (js) {
-          await page.screenshot({ path: "/tmp/attribution-settings-desktop.png" });
+          await page.screenshot({ path: "/tmp/attribution-settings-desktop.png", fullPage: true });
+          await page.emulateMedia({ colorScheme: "dark" });
+          await page.screenshot({ path: "/tmp/attribution-settings-dark.png", fullPage: true });
           await page.setViewportSize({ width: 390, height: 844 });
-          await page.screenshot({ path: "/tmp/attribution-settings-mobile.png" });
+          await page.screenshot({ path: "/tmp/attribution-settings-mobile.png", fullPage: true });
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
         }
         await ready(page, `/h/${hub.id}?view=public`);
-        await browserExpect(page.locator(".hub-identity")).toContainText("Named Owner");
+        await browserExpect(page.locator(".hub-identity")).toHaveText(
+          `@${hub.handle} by Named Owner`,
+        );
+        await browserExpect(page.locator(".hub-identity a")).toHaveAttribute(
+          "href",
+          `/${user.username}`,
+        );
+        await ready(page, `/${user.username}`);
+        await browserExpect(page.locator(".hub-identity")).toHaveText(
+          `${user.username} of Independent Hub`,
+        );
+        await browserExpect(page.locator(".hub-identity a")).toHaveAttribute(
+          "href",
+          `/h/${hub.id}`,
+        );
       } finally {
         await close();
       }
@@ -2064,7 +2265,7 @@ describe("account shell and appearance", () => {
     const email = `hub-autosave-${crypto.randomUUID()}@example.com`;
     const { page, close } = await freshPage();
     try {
-      await browserSignIn(page, email, "/settings");
+      await browserOwnerSettings(page, email);
       const user = await prisma.user.findUniqueOrThrow({
         where: { email },
         include: { hub: true },
@@ -2081,6 +2282,7 @@ describe("account shell and appearance", () => {
         0,
       );
       await page.getByLabel("Full name", { exact: true }).fill("Private Account Owner");
+      await settingsSection(page, "Hub");
       await page.getByLabel("Hub name", { exact: true }).fill("The Reference Shelf");
       await page.getByLabel("Description", { exact: true }).fill("Resources for curious readers.");
       await browserExpect(page.getByLabel("About you", { exact: true })).toHaveCount(0);
@@ -2108,36 +2310,29 @@ describe("account shell and appearance", () => {
       await browserExpect(
         page.getByRole("button", { name: "Save changes", exact: true }),
       ).toHaveCount(0);
-      await page.evaluate(() => {
-        Object.defineProperty(navigator, "clipboard", {
-          configurable: true,
-          value: {
-            writeText: async (link: string) => {
-              document.documentElement.dataset.copiedHubLink = link;
-            },
-          },
-        });
-      });
-      await page.getByRole("button", { name: "Copy hub link", exact: true }).click();
-      await browserExpect(page.locator("html")).toHaveAttribute(
-        "data-copied-hub-link",
-        `${origin}/h/${hub.id}`,
-      );
-      await browserExpect(page.locator(".toast")).toHaveText("Link copied");
-      await page.evaluate(() => {
-        Object.defineProperty(navigator, "clipboard", {
-          value: { writeText: () => Promise.reject(new Error("Unavailable")) },
-        });
-      });
-      await page.getByRole("button", { name: "Copy hub link", exact: true }).click();
-      await browserExpect(page.getByRole("textbox", { name: "Copy this link" })).toHaveValue(
-        `${origin}/h/${hub.id}`,
-      );
+      await settingsSection(page, "Hub");
+      await browserExpect(
+        page.getByRole("button", { name: "Copy hub link", exact: true }),
+      ).toHaveCount(0);
+      await browserExpect(
+        page
+          .locator("#handle-help")
+          .getByRole("link", { name: "View your public hub", exact: true }),
+      ).toHaveAttribute("href", `/h/${hub.id}?view=public`);
+      await settingsSection(page, "Profile");
+      const username = `updated-${crypto.randomUUID().slice(0, 8)}`;
+      await page.getByLabel("Username", { exact: true }).fill(username);
+      await page
+        .locator("#username-help")
+        .getByRole("link", { name: "View your public profile", exact: true })
+        .click();
+      await browserExpect(page).toHaveURL(`${origin}/${username}`);
+      await browserExpect(page.locator("h1")).toHaveText("Changed Account Owner");
+      await ready(page, "/settings");
+      await page.screenshot({ path: "/tmp/profile-quick-link-desktop.png", fullPage: true });
+      await settingsSection(page, "Hub");
       await page.screenshot({ path: "/tmp/account-final-desktop.png", fullPage: true });
-      await page.locator(".hub-share-actions").scrollIntoViewIfNeeded();
-      await page.screenshot({ path: "/tmp/hub-sharing-desktop.png", fullPage: true });
       await page.setViewportSize({ width: 390, height: 844 });
-      await page.locator(".hub-share-actions").scrollIntoViewIfNeeded();
       await page.screenshot({ path: "/tmp/account-final-mobile.png", fullPage: true });
     } finally {
       await close();
@@ -2182,7 +2377,7 @@ describe("account shell and appearance", () => {
       const email = `profile-${crypto.randomUUID()}@example.com`;
       const { page, close } = await freshPage(js);
       try {
-        await browserSignIn(page, email, "/settings");
+        await browserOwnerSettings(page, email);
         await browserExpect(page.locator("h1")).toHaveText("Settings");
         await browserExpect(page.locator(".wordmark")).toHaveAttribute(
           "href",
@@ -2214,17 +2409,20 @@ describe("account shell and appearance", () => {
           )
           .toBe(64);
         await page.getByLabel("Full name", { exact: true }).fill("Mina Reader");
+        if (!js) await page.getByRole("button", { name: "Save changes", exact: true }).click();
+        await settingsSection(page, "Hub");
         const handle = `mina-${crypto.randomUUID().slice(0, 8)}`;
         await page.getByLabel("Handle", { exact: true }).fill(handle);
         if (js) await browserExpect(page.locator("#handle-status")).toHaveText("Available");
         await page
           .getByLabel("Description", { exact: true })
           .fill("A small library of useful references.");
-        if (!js) await page.getByRole("button", { name: "Save changes", exact: true }).click();
+        await page.getByLabel("I choose this permanent hub handle.").check();
+        await page.getByRole("button", { name: "Claim handle", exact: true }).click();
         await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
         await browserExpect(page.locator("#handle-status")).toBeHidden();
         await page.screenshot({ path: `/tmp/profile-saved-${js}.png`, fullPage: true });
-        if (js) expect(new URL(page.url()).search).toBe("");
+        if (js) expect(new URL(page.url()).search).toBe("?section=hub");
         const account = await prisma.user.findUniqueOrThrow({
           where: { email },
           include: { hub: true },
@@ -2245,8 +2443,6 @@ describe("account shell and appearance", () => {
         await browserExpect(
           page.getByRole("link", { name: "View your public hub", exact: true }),
         ).toHaveCount(0);
-        await browserExpect(page.locator(".hub-share-actions .share-panel")).toBeVisible();
-        await browserExpect(shareMenu(page, "Share hub")).toHaveCount(0);
         if (js) {
           for (const width of [390, 1280]) {
             await page.setViewportSize({ width, height: 900 });
@@ -2263,7 +2459,7 @@ describe("account shell and appearance", () => {
           page
             .getByRole("navigation", { name: "Account navigation" })
             .getByRole("link", { name: "Profile", exact: true }),
-        ).toHaveCount(0);
+        ).toHaveAttribute("href", `/${account.username}`);
         await page
           .getByRole("navigation", { name: "Account navigation" })
           .getByRole("link", { name: "Settings", exact: true })
@@ -2271,16 +2467,21 @@ describe("account shell and appearance", () => {
         await browserExpect(page.locator("h1")).toHaveText("Settings");
         await browserExpect(
           page.getByRole("navigation", { name: "Settings sections" }),
-        ).toHaveCount(0);
+        ).toBeVisible();
+        await settingsSection(page, "Hub");
         await browserExpect(page.locator(".hub-id")).toContainText(
           account.hub?.id ?? "missing hub",
         );
         await browserExpect(
-          page.getByRole("group", { name: "Profile", exact: true }),
-        ).toBeVisible();
+          page
+            .locator("fieldset")
+            .filter({ has: page.locator("legend", { hasText: /^Profile$/ }) }),
+        ).toBeHidden();
         await browserExpect(page.getByRole("group", { name: "Hub", exact: true })).toBeVisible();
         await browserExpect(
-          page.getByRole("group", { name: "Profile", exact: true }),
+          page
+            .locator("fieldset")
+            .filter({ has: page.locator("legend", { hasText: /^Profile$/ }) }),
         ).toContainText(email);
         expect(originalAvatar).toBe(`/api/v1/users/${account.id}/avatar`);
         await browserExpect(page.locator("header .avatar")).toHaveAttribute(
@@ -2298,19 +2499,20 @@ describe("account shell and appearance", () => {
               .evaluate((image) => (image as HTMLImageElement).naturalWidth),
           )
           .toBe(64);
-        await page.getByLabel("Handle", { exact: true }).fill("api");
-        if (js) await browserExpect(page.locator("#handle-status")).toContainText("reserved");
-        else {
-          await page.getByRole("button", { name: "Save changes", exact: true }).click();
-          await browserExpect(page.locator(".form-notice")).toContainText("different hub handle");
-        }
+        await browserExpect(page.getByLabel("Handle", { exact: true })).toHaveAttribute(
+          "readonly",
+          "",
+        );
+        await browserExpect(
+          page.getByRole("button", { name: "Claim handle", exact: true }),
+        ).toHaveCount(0);
         expect(
           (await prisma.hub.findUniqueOrThrow({ where: { id: account.hub?.id } })).handle,
         ).toBe(handle);
         await page.getByLabel("Account menu", { exact: true }).click();
         await browserExpect(
           page.getByRole("navigation", { name: "Account navigation" }),
-        ).not.toContainText("Service operations");
+        ).toContainText("Manage");
         await page.getByRole("link", { name: "Settings", exact: true }).click();
         await browserExpect(page.locator("h1")).toHaveText("Settings");
         await browserExpect(page).toHaveTitle("Settings · nslinkhub");
@@ -2378,7 +2580,10 @@ describe("account shell and appearance", () => {
         await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "light");
         await page.screenshot({ path: `/tmp/profile-light-${js}.png`, fullPage: true });
         await page.getByLabel("Account menu", { exact: true }).click();
-        await page.getByRole("link", { name: "Notifications", exact: true }).click();
+        await page
+          .getByRole("navigation", { name: "Account navigation" })
+          .getByRole("link", { name: "Notifications", exact: true })
+          .click();
         await browserExpect(page.locator("h1")).toHaveText("Notifications");
         await browserExpect(page).toHaveTitle("Notifications · nslinkhub");
         await browserExpect(page.locator("main")).toContainText("You're all caught up");
@@ -2416,7 +2621,9 @@ describe("account shell and appearance", () => {
           await page.reload();
           await page.getByLabel("Account menu", { exact: true }).click();
           await browserExpect(
-            page.getByRole("link", { name: "Notifications", exact: true }),
+            page
+              .getByRole("navigation", { name: "Account navigation" })
+              .getByRole("link", { name: "Notifications", exact: true }),
           ).toBeVisible();
           await page.getByLabel("Account menu", { exact: true }).click();
           await browserExpect(page.locator(".notification.unread")).toHaveCount(0);
@@ -2499,6 +2706,7 @@ it("saves a first private link through email, preserves retries, then adds and r
       await page.getByLabel("Email address").fill(email);
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
+      await capturedCode(email, "Verify your email to save your first link · nslinkhub");
       expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
       await page.getByLabel("Eight-digit code").fill("00000000");
       await page.getByRole("button", { name: "Verify and save" }).click();
@@ -2506,7 +2714,9 @@ it("saves a first private link through email, preserves retries, then adds and r
       await waitForResend(page);
       await page.getByRole("button", { name: "Send a new code", exact: true }).click();
       await browserExpect(page.locator(".toast")).toContainText("sent a new code");
-      await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+      await page
+        .getByLabel("Eight-digit code")
+        .fill(await capturedCode(email, "Verify your email to save your first link · nslinkhub"));
       failCapture = js;
       await page.getByRole("button", { name: "Verify and save" }).click();
       if (js) {
@@ -2519,15 +2729,14 @@ it("saves a first private link through email, preserves retries, then adds and r
           where: { email },
           include: { hub: true },
         });
-        if (!verified.hub) throw new Error("Missing fixture hub");
-        expect(await prisma.collection.count({ where: { hubId: verified.hub.id } })).toBe(0);
+        expect(verified.hub).toBeNull();
         failCapture = false;
         await page.reload();
         await page.getByRole("button", { name: "Save link", exact: true }).click();
       }
       await browserExpect(page.locator("h1")).toHaveText(/^Saved links, [A-Z][a-z]{2} \d{1,2}$/);
       await browserExpect(page.locator(".toast")).toContainText("Link saved");
-      await browserExpect(page.locator(".resource-row a")).toHaveAttribute("href", url);
+      await browserExpect(page.locator(".resource-row h2 a")).toHaveAttribute("href", url);
       const account = await prisma.user.findUniqueOrThrow({
         where: { email },
         include: { hub: true },
@@ -2567,21 +2776,10 @@ it("saves a first private link through email, preserves retries, then adds and r
       await page
         .getByLabel("Description", { exact: true })
         .fill("Useful references for everyday projects.");
-      // Tags open from "Add tags", as on Save a link (a button, or a native
-      // disclosure without JavaScript).
-      await page.locator(".tag-add").click();
-      await page.getByLabel("Tags", { exact: true }).fill("x".repeat(81));
-      await page.getByRole("button", { name: "Save changes", exact: true }).click();
-      await browserExpect(page.locator(".edit-form").getByRole("alert")).toContainText(
-        "80 characters",
-      );
-      await browserExpect(page.getByLabel("Description", { exact: true })).toHaveValue(
-        "Useful references for everyday projects.",
-      );
-      // The too-long tag reopens the field after the failed save.
-      await page.getByLabel("Tags", { exact: true }).fill("design, reading");
+      await browserExpect(page.getByLabel("Tags", { exact: true })).toHaveCount(0);
+      await browserExpect(page.locator(".tag-add")).toHaveCount(0);
       if (js) {
-        for (const width of [390, 1280]) {
+        for (const width of [390, 768, 1280, 1440]) {
           await page.setViewportSize({ width, height: 900 });
           expect(
             await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
@@ -2611,7 +2809,11 @@ it("saves a first private link through email, preserves retries, then adds and r
       await browserExpect(page.locator(".page-heading .description")).toHaveText(
         "Useful references for everyday projects.",
       );
-      await browserExpect(page.locator(".page-heading")).toContainText("design");
+      await browserExpect(page.locator(".page-heading > .tags")).toHaveCount(0);
+      await page
+        .locator(".collection-actions")
+        .getByRole("link", { name: "Edit", exact: true })
+        .click();
       await page.getByRole("link", { name: "Add a link", exact: true }).click();
       await page.getByLabel("Link URL", { exact: true }).fill("https://fixture-links.dev/second");
       if (js)
@@ -2700,7 +2902,7 @@ it("saves several links with tags into a newly named collection, typing no title
   const { page, close } = await freshPage();
   try {
     const email = `multi-${crypto.randomUUID()}@example.com`;
-    const signed = await signInWithCode(app.getHttpServer(), { email });
+    const signed = await signInHubOwner(app.getHttpServer(), { email });
     const token = signed.headers["set-auth-token"];
     await request(app.getHttpServer())
       .post("/api/v1/collections")
@@ -2815,10 +3017,10 @@ it("saves several links with tags into a newly named collection, typing no title
   }
 }, 30000);
 
-it("shows collection descriptions and hub attribution without repeated separators or a visible main scrollbar", async () => {
+it("shows collection descriptions and hub attribution without repeated separators or a nested main scroller", async () => {
   const { page, close } = await freshPage();
   try {
-    const signed = await signInWithCode(app.getHttpServer(), {
+    const signed = await signInHubOwner(app.getHttpServer(), {
       email: `description-${crypto.randomUUID()}@example.com`,
     });
     const token = signed.headers["set-auth-token"];
@@ -2845,8 +3047,8 @@ it("shows collection descriptions and hub attribution without repeated separator
     );
     await browserExpect(row.locator("time")).toBeVisible();
     expect(await row.evaluate((el) => getComputedStyle(el).borderTopWidth)).toBe("0px");
-    expect(await page.locator("main").evaluate((el) => getComputedStyle(el).scrollbarWidth)).toBe(
-      "none",
+    expect(await page.locator("main").evaluate((el) => getComputedStyle(el).overflowY)).toBe(
+      "visible",
     );
     await page.locator("main").focus();
     await page.keyboard.press("PageDown");
@@ -2873,7 +3075,7 @@ describe("collection discussion", () => {
   it("prompts signed-out readers, lets signed-in readers post and reply, shows the contributor's answer and honours the switch, with and without JavaScript", async () => {
     // Earlier journeys end the shared owner's session; this one has its own contributor.
     const curator = (
-      await signInWithCode(app.getHttpServer(), {
+      await signInHubOwner(app.getHttpServer(), {
         email: `curator-${crypto.randomUUID()}@example.com`,
         name: "Curator",
       })
@@ -2997,10 +3199,19 @@ describe("collection discussion", () => {
         const discussionBody = page.locator(".comments-body");
         const positions = () =>
           page.locator(".reader-side").evaluate((el) => ({
-            share: el.querySelector(".share-aside")?.getBoundingClientRect().top,
             heading: el.querySelector(".comments-heading")?.getBoundingClientRect().top,
           }));
         const fixed = await positions();
+        if (js) {
+          await browserExpect.poll(() => sidebarAlignment(page)).toBeLessThanOrEqual(1);
+          const layoutBottom = await page
+            .locator(".reader-layout")
+            .evaluate((el) => el.getBoundingClientRect().bottom);
+          const discussionBottom = await discussion.evaluate(
+            (el) => el.getBoundingClientRect().bottom,
+          );
+          expect(discussionBottom).toBeLessThanOrEqual(layoutBottom + 1);
+        }
         await discussionBody.focus();
         await discussionBody.press("End");
         await browserExpect
@@ -3027,7 +3238,7 @@ describe("collection discussion", () => {
           .send({ body: `From the contributor (${js})` })
           .expect(201);
         await page.reload();
-        // TikTok-style: "@handle · Contributor", then the age leads the actions.
+        // "username · Contributor", then the age leads the actions.
         const mine = discussion.locator(".comment", { hasText: `From the contributor (${js})` });
         await browserExpect(mine.locator(".comment-head .comment-role")).toHaveText("Contributor");
         await browserExpect(mine.locator(".comment-head")).not.toContainText("Curator");
@@ -3045,32 +3256,6 @@ describe("collection discussion", () => {
             await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
           ).toBe(true);
           if (js) await page.screenshot({ path: `/tmp/collection-discussion-${width}.png` });
-        }
-        if (js) {
-          await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin });
-          const discussionTop = await discussion.evaluate((el) => el.getBoundingClientRect().top);
-          await page
-            .getByRole("complementary", { name: "Share" })
-            .getByRole("button", { name: "Share link", exact: true })
-            .click();
-          await browserExpect(page.locator(".share-aside .share-status")).toHaveText(
-            "Link copied to clipboard.",
-          );
-          expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
-            `${origin}/c/${id}`,
-          );
-          // Clicked share controls show no ring, even when focus is restored.
-          const shareButton = page
-            .getByRole("complementary", { name: "Share" })
-            .getByRole("button", { name: "Share link", exact: true });
-          await page.evaluate(() => window.dispatchEvent(new Event("focus")));
-          await shareButton.focus();
-          expect(await shareButton.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe(
-            "none",
-          );
-          expect(await discussion.evaluate((el) => el.getBoundingClientRect().top)).toBe(
-            discussionTop,
-          );
         }
 
         const current = await request(app.getHttpServer())
@@ -3147,7 +3332,7 @@ it("preserves a throttled resend journey beyond the normal resend interval", asy
 }, 30000);
 
 it("continues replies on an older question page with the share token and answer intact", async () => {
-  const signed = await signInWithCode(app.getHttpServer(), {
+  const signed = await signInHubOwner(app.getHttpServer(), {
     email: `reply-pages-${crypto.randomUUID()}@example.com`,
     name: "Reply contributor",
   });
@@ -3240,6 +3425,9 @@ it("folds the collection introduction before scrolling links", async () => {
       await browserExpect(overview).toBeVisible();
       await body.focus();
       const before = await body.evaluate((el) => el.clientHeight);
+      const discussionTop = await page
+        .locator(".comments")
+        .evaluate((el) => el.getBoundingClientRect().top);
       await body.hover();
       if (reducedMotion === "no-preference") {
         const motion = await overview.evaluate((el) => {
@@ -3271,6 +3459,10 @@ it("folds the collection introduction before scrolling links", async () => {
       }
       await browserExpect(heading).toHaveAttribute("data-folded", "true");
       await browserExpect(overview).toBeHidden();
+      await browserExpect.poll(() => sidebarAlignment(page)).toBeLessThanOrEqual(1);
+      expect(await page.locator(".comments").evaluate((el) => el.getBoundingClientRect().top)).toBe(
+        discussionTop,
+      );
       await browserExpect(heading.locator("h1")).toBeVisible();
       await browserExpect(heading.locator(".row-meta")).toBeVisible();
       await browserExpect(heading.locator(":scope > .tags")).toBeVisible();
@@ -3292,6 +3484,10 @@ it("folds the collection introduction before scrolling links", async () => {
       await browserExpect(overview).toBeVisible();
       await body.press("ArrowDown");
       await browserExpect(overview).toBeHidden();
+      await browserExpect.poll(() => sidebarAlignment(page)).toBeLessThanOrEqual(1);
+      expect(await page.locator(".comments").evaluate((el) => el.getBoundingClientRect().top)).toBe(
+        discussionTop,
+      );
       expect(await body.evaluate((el) => el.scrollTop)).toBe(0);
       await page.mouse.wheel(0, -60);
       await browserExpect(overview).toBeVisible();
@@ -3303,6 +3499,10 @@ it("folds the collection introduction before scrolling links", async () => {
       });
       await page.mouse.wheel(0, 60);
       await browserExpect(overview).toBeHidden();
+      await browserExpect.poll(() => sidebarAlignment(page)).toBeLessThanOrEqual(1);
+      expect(await page.locator(".comments").evaluate((el) => el.getBoundingClientRect().top)).toBe(
+        discussionTop,
+      );
       await page.setViewportSize({ width: 390, height: 844 });
       await browserExpect(overview).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
@@ -3328,7 +3528,7 @@ describe("activity and attribution", () => {
   it("shows contributors and a History of who changed what, for contributors only", async () => {
     const login = async (label: string, name: string) => {
       const email = `${label}-${crypto.randomUUID()}@example.com`;
-      const res = await signInWithCode(app.getHttpServer(), { email, name });
+      const res = await signInHubOwner(app.getHttpServer(), { email, name });
       return { email, token: res.headers["set-auth-token"] as string };
     };
     const owner = await login("history-owner", "Hana Owner");
@@ -3342,12 +3542,21 @@ describe("activity and attribution", () => {
     await request(app.getHttpServer())
       .post(`/api/v1/collections/${id}/shares`)
       .auth(owner.token, { type: "bearer" })
-      .send({ email: editor.email, role: "editor" })
+      .send({ email: editor.email, role: "contributor" })
+      .expect(201);
+    const firstItem = await request(app.getHttpServer())
+      .post(`/api/v1/collections/${id}/resources/external`)
+      .auth(editor.token, { type: "bearer" })
+      .send({ url: "https://fixture-links.dev/history-section", position: 0 })
       .expect(201);
     await request(app.getHttpServer())
       .post(`/api/v1/collections/${id}/resources/heading`)
       .auth(editor.token, { type: "bearer" })
-      .send({ title: "Basics", position: 0 })
+      .send({
+        title: "Basics",
+        firstItemId: firstItem.body.data.id,
+        firstItemVersion: firstItem.body.data.version,
+      })
       .expect(201);
     // The owner acts last: the header still names the owner once.
     const current = await request(app.getHttpServer())
@@ -3362,25 +3571,37 @@ describe("activity and attribution", () => {
     try {
       await browserSignIn(page, editor.email, `/c/${id}`);
       await browserExpect(page.locator("h1")).toHaveText("Shared guide");
-      await browserExpect(page.locator(".row-meta .contributors")).toHaveText("2 contributors");
+      await browserExpect(page.locator(".collection-contributors .contributors-count")).toHaveText(
+        "2",
+      );
+      for (const username of ["hana-owner", "eli-editor"]) {
+        const person = page
+          .locator(".contributor-list")
+          .getByRole("link", { name: username, exact: true });
+        await browserExpect(person).toHaveAttribute("href", `/${username}`);
+        await browserExpect(person.locator("img")).toBeVisible();
+        await browserExpect(person).toHaveText(username);
+      }
       await page.screenshot({ path: "/tmp/attribution-header-desktop.png" });
       await page.setViewportSize({ width: 390, height: 844 });
       await page.screenshot({ path: "/tmp/attribution-header-mobile.png" });
-      // The share panel opens within a phone screen.
-      await page.locator(".collection-actions .share-menu > summary").click();
-      const panel = await page.locator(".collection-actions .share-panel").boundingBox();
-      expect(panel?.x).toBeGreaterThanOrEqual(0);
-      expect((panel?.x ?? 0) + (panel?.width ?? 0)).toBeLessThanOrEqual(390);
-      await page.screenshot({ path: "/tmp/attribution-share-mobile.png" });
-      await page.locator(".collection-actions .share-menu > summary").click();
       await page.setViewportSize({ width: 1280, height: 800 });
+      await page
+        .locator(".collection-actions")
+        .getByRole("link", { name: "Edit", exact: true })
+        .click();
+      await browserExpect(page.getByLabel("Collection name", { exact: true })).toHaveCount(0);
+      await browserExpect(page.getByRole("link", { name: "Reorder", exact: true })).toBeVisible();
+      await browserExpect(
+        page.getByRole("link", { name: "Add section", exact: true }),
+      ).toBeVisible();
       await page.getByRole("link", { name: "History", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("History");
       const latest = page.locator(".history-list li").first();
-      await browserExpect(latest).toContainText("@hana-owner");
+      await browserExpect(latest).toContainText("hana-owner");
       await browserExpect(latest).toContainText("changed the collection's details");
       const section = page.locator(".history-list li", { hasText: "added a section" });
-      await browserExpect(section).toContainText("@eli-editor");
+      await browserExpect(section).toContainText("eli-editor");
       await browserExpect(section).toContainText("Basics");
       await browserExpect(page.locator(".history-list")).toContainText("created the collection");
       // Sharing is the owner's to see.
@@ -3393,3 +3614,2368 @@ describe("activity and attribution", () => {
     }
   }, 60000);
 });
+
+it("edits a hubless person's username and profile without creating a hub, with and without JavaScript", async () => {
+  for (const js of [true, false]) {
+    await prisma.requestBudget.deleteMany();
+    const email = `hubless-browser-${crypto.randomUUID()}@example.com`;
+    const { page, close } = await freshPage(js);
+    try {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await browserSignIn(page, email, "/settings");
+      const person = await prisma.user.findUniqueOrThrow({ where: { email } });
+      expect(await prisma.hub.count({ where: { ownerUserId: person.id } })).toBe(0);
+      await browserExpect(page.getByLabel("Handle", { exact: true })).toHaveCount(0);
+      await settingsSection(page, "Notifications");
+      await browserExpect(
+        page.getByRole("heading", { name: "Notifications", exact: true }),
+      ).toBeVisible();
+      await settingsSection(page, "Hub");
+      await browserExpect(
+        page.getByRole("link", { name: "Save your first link", exact: true }),
+      ).toBeVisible();
+      await settingsSection(page, "Profile");
+      const username = `rowan-${crypto.randomUUID().replaceAll("-", "").slice(0, 14)}`;
+      await page.getByLabel("Full name", { exact: true }).fill("Rowan Reader");
+      await browserExpect(page.getByLabel("Username", { exact: true })).toHaveAttribute(
+        "maxlength",
+        js ? "255" : "20",
+      );
+      await page.getByLabel("Username", { exact: true }).fill(username.toUpperCase());
+      const bio = "Reader and curious builder.\nI write about <useful> things.";
+      await page.getByLabel("Bio", { exact: true }).fill(bio);
+      if (!js) await page.getByRole("button", { name: "Save changes", exact: true }).click();
+      await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
+      await page.screenshot({ path: `/tmp/people-settings-hubless-${js}.png`, fullPage: true });
+      await page.getByLabel("Account menu", { exact: true }).click();
+      await page
+        .getByRole("navigation", { name: "Account navigation" })
+        .getByRole("link", { name: "Profile", exact: true })
+        .click();
+      await browserExpect(page).toHaveURL(`${origin}/${username}`);
+      await browserExpect(page.locator("h1")).toHaveText("Rowan Reader");
+      await browserExpect(page.locator("main")).toContainText("No public contributions yet.");
+      await browserExpect(page.locator(".person-bio")).toHaveText(bio);
+      await browserExpect(page.locator(".person-bio useful")).toHaveCount(0);
+      expect(
+        await page
+          .locator(".person-bio")
+          .evaluate((element) => getComputedStyle(element).whiteSpace),
+      ).toBe("pre-wrap");
+      await page.screenshot({ path: `/tmp/people-profile-hubless-${js}.png`, fullPage: true });
+      await page.getByLabel("Account menu", { exact: true }).click();
+      await page
+        .getByRole("navigation", { name: "Account navigation" })
+        .getByRole("link", { name: "Hub", exact: true })
+        .click();
+      await browserExpect(page).toHaveURL(`${origin}/hub`);
+      await browserExpect(page.locator("h1")).toHaveText("Your hub");
+      await browserExpect(
+        page.getByRole("button", { name: "Create hub", exact: true }),
+      ).toBeVisible();
+      await page.screenshot({ path: `/tmp/optional-hub-entry-${js}.png`, fullPage: true });
+      expect(await prisma.hub.count({ where: { ownerUserId: person.id } })).toBe(0);
+      await ready(page, "/settings");
+      await browserExpect(
+        page.getByRole("switch", { name: "Show owner", exact: true }),
+      ).toHaveCount(0);
+      await browserExpect(page.getByLabel("Bio", { exact: true })).toHaveValue(bio);
+      await page.getByLabel("Bio", { exact: true }).fill("");
+      if (!js) await page.getByRole("button", { name: "Save changes", exact: true }).click();
+      await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
+      await ready(page, `/${username}`);
+      await browserExpect(page.locator(".person-bio")).toHaveCount(0);
+      await browserExpect(page.locator("h1")).toHaveText("Rowan Reader");
+      await browserExpect(page.locator(".page-heading .meta").first()).toHaveText(username);
+      const bounds = await page.evaluate(() => ({
+        width: document.documentElement.clientWidth,
+        scroll: document.documentElement.scrollWidth,
+      }));
+      expect(bounds.scroll).toBeLessThanOrEqual(bounds.width);
+      await browserExpect(
+        page.locator("main").getByRole("link", { name: "Edit profile", exact: true }),
+      ).toHaveCount(0);
+      await ready(page, "/hub");
+      await page.getByRole("button", { name: "Create hub", exact: true }).click();
+      await browserExpect(page).toHaveURL(/\/h\/[a-f0-9-]+$/);
+      const hub = await prisma.hub.findUniqueOrThrow({ where: { ownerUserId: person.id } });
+      expect(await prisma.collection.count({ where: { hubId: hub.id } })).toBe(0);
+      await ready(page, `/${username}`);
+      await browserExpect(
+        page.locator("main").getByRole("link", { name: new RegExp(hub.name) }),
+      ).toHaveCount(1);
+      await browserExpect(
+        page.getByRole("button", { name: "Create hub", exact: true }),
+      ).toHaveCount(0);
+      await page.getByLabel("Account menu", { exact: true }).click();
+      const accountNav = page.getByRole("navigation", { name: "Account navigation", exact: true });
+      await browserExpect(accountNav.getByRole("link")).toHaveText([
+        "Profile",
+        "Hub",
+        "Notifications",
+        "Settings",
+        "Manage",
+      ]);
+      await page.screenshot({ path: `/tmp/profile-hub-menu-${js}.png`, fullPage: true });
+      await accountNav.getByRole("link", { name: "Hub", exact: true }).click();
+      await browserExpect(page).toHaveURL(`${origin}/h/${hub.id}`);
+    } finally {
+      await close();
+    }
+  }
+}, 45000);
+
+it("finds only the title and validates links before sign-in, with a saveable lookup-failure fallback", async () => {
+  const { page, close } = await freshPage();
+  const setting = process.env.LINK_TITLES;
+  const url = `https://fixture-links.dev/first-title-${crypto.randomUUID()}`;
+  await prisma.linkMetadata.create({
+    data: {
+      url,
+      title: "Why WorkLog became a notebook",
+      description: "This belongs in collection details, not the save form.",
+      siteName: "A notebook",
+      state: "ready",
+    },
+  });
+  process.env.LINK_TITLES = "on";
+  try {
+    await ready(page, "/capture");
+    await browserExpect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+    const input = page.getByLabel("Link URL", { exact: true });
+    await input.fill(url);
+    await browserExpect(page.locator(".capture-title")).toHaveText("Why WorkLog became a notebook");
+    await browserExpect(input).toHaveAttribute("data-state", "valid");
+    await browserExpect(page.locator("main")).not.toContainText(
+      "This belongs in collection details",
+    );
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.screenshot({ path: "/tmp/first-link-title-dark.png", fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: "/tmp/first-link-title-mobile.png", fullPage: true });
+    await input.fill("http://localhost/private");
+    await input.blur();
+    await browserExpect(input).toHaveAttribute("aria-invalid", "true");
+    expect(await input.evaluate((element: HTMLInputElement) => element.checkValidity())).toBe(
+      false,
+    );
+    await page.route("**/api/v1/link-preview?**", (route) => route.abort());
+    await input.fill("https://fixture-links.dev/unavailable-title");
+    await browserExpect(page.locator(".capture-note")).toContainText(
+      "The link will still be saved.",
+    );
+    await browserExpect(page.locator(".capture-title.pending")).toHaveCount(0);
+    expect(await input.evaluate((element: HTMLInputElement) => element.checkValidity())).toBe(true);
+    await page.getByRole("button", { name: "Save link", exact: true }).click();
+    await browserExpect(page.getByLabel("Email address", { exact: true })).toBeVisible();
+  } finally {
+    await close();
+    if (setting === undefined) delete process.env.LINK_TITLES;
+    else process.env.LINK_TITLES = setting;
+  }
+}, 30000);
+
+it("shares Manage across owner and service contexts without exposing service controls to owners", async () => {
+  const email = `manage-owner-${crypto.randomUUID()}@example.com`;
+  const signed = await signInHubOwner(app.getHttpServer(), { email, name: "Manage owner" });
+  const token = signed.headers["set-auth-token"];
+  const created = await request(app.getHttpServer())
+    .post("/api/v1/collections")
+    .auth(token, { type: "bearer" })
+    .send({ slug: `manage-${crypto.randomUUID()}`, title: "My private managed collection" })
+    .expect(201);
+  const colleagueEmail = `manage-colleague-${crypto.randomUUID()}@example.com`;
+  const colleague = await signInWithCode(app.getHttpServer(), {
+    email: colleagueEmail,
+    name: "Colleague",
+  });
+  await request(app.getHttpServer())
+    .post(`/api/v1/collections/${created.body.data.id}/shares`)
+    .auth(token, { type: "bearer" })
+    .send({ email: colleagueEmail })
+    .expect(201);
+  const person = await prisma.user.findUniqueOrThrow({ where: { id: colleague.body.user.id } });
+  for (const js of [true, false]) {
+    const { page, close } = await freshPage(js);
+    try {
+      await browserSignIn(page, email);
+      await browserExpect(page.locator("h1")).toHaveText("Collections");
+      const nav = page.getByRole("navigation", { name: "Manage", exact: true });
+      await browserExpect(nav.getByRole("link")).toHaveText(["Access", "Collections", "Audit Log"]);
+      await browserExpect(page.locator(".ops-table")).toContainText(
+        "My private managed collection",
+      );
+      await nav.getByRole("link", { name: "Access", exact: true }).click();
+      await browserExpect(page.locator(".ops-table")).toContainText(person.username);
+      await nav.getByRole("link", { name: "Audit Log", exact: true }).click();
+      await browserExpect(page.locator(".ops-table")).toContainText("Create collection");
+      expect((await page.request.get(`${origin}/manage/audit/more`)).status()).toBe(200);
+      if (js) await page.screenshot({ path: "/tmp/manage-owner-audit.png" });
+    } finally {
+      await close();
+    }
+  }
+  await prisma.adminGrant.create({
+    data: { userId: signed.body.user.id, invitationId: crypto.randomUUID() },
+  });
+  const { page, close } = await freshPage(true);
+  try {
+    await browserSignIn(page, email);
+    const nav = page.getByRole("navigation", { name: "Manage", exact: true });
+    await browserExpect(nav.getByRole("link")).toHaveText([
+      "Accounts",
+      "Access",
+      "Collections",
+      "Team",
+      "Invitations",
+      "Analytics",
+      "Audit Log",
+    ]);
+    await nav.getByRole("link", { name: "Collections", exact: true }).click();
+    await browserExpect(page.getByRole("link", { name: "My hub", exact: true })).toHaveCount(0);
+    await browserExpect(page.getByRole("link", { name: "Service", exact: true })).toHaveCount(0);
+    await browserExpect(page.locator(".ops-table")).toContainText("My private managed collection");
+    await page.screenshot({ path: "/tmp/manage-admin-context.png" });
+  } finally {
+    await close();
+  }
+}, 60000);
+
+it("sizes discussion by its own content within the reader frame, with and without JavaScript", async () => {
+  for (const js of [true, false]) {
+    await prisma.requestBudget.deleteMany();
+    const email = `discussion-sizing-${crypto.randomUUID()}@example.com`;
+    const signed = await signInWithCode(app.getHttpServer(), { email, name: "Reader" });
+    const made = await request(app.getHttpServer())
+      .post("/api/v1/collections")
+      .auth(signed.headers["set-auth-token"] as string, { type: "bearer" })
+      .send({
+        title: "Flexible discussion",
+        slug: `sizing-${crypto.randomUUID()}`,
+        published: true,
+      })
+      .expect(201);
+    const id = made.body.data.id as string;
+    await prisma.resource.createMany({
+      data: Array.from({ length: 20 }, (_, position) => ({
+        collectionId: id,
+        kind: "heading",
+        titleOverride: `Reading section ${position + 1}`,
+        position,
+        addedByUserId: signed.body.user.id,
+      })),
+    });
+    const { page, close } = await freshPage(js);
+    try {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await browserSignIn(page, email, `/c/${id}`);
+      const bounds = () =>
+        page.evaluate(() => {
+          const rect = (selector: string) => {
+            const element = document.querySelector(selector);
+            if (!element) throw new Error(`Missing layout element: ${selector}`);
+            return element.getBoundingClientRect();
+          };
+          const sheet = rect(".collection-sheet");
+          const discussion = rect(".comments");
+          const layout = rect(".reader-layout");
+          const footer = rect(".site-footer");
+          return {
+            sheetHeight: sheet.height,
+            sheetBottom: sheet.bottom,
+            discussionHeight: discussion.height,
+            discussionBottom: discussion.bottom,
+            layoutBottom: layout.bottom,
+            footerTop: footer.top,
+          };
+        });
+      const empty = await bounds();
+      expect(empty.sheetHeight).toBeGreaterThan(600);
+      expect(empty.discussionHeight).toBeLessThan(250);
+      await page.screenshot({ path: `/tmp/discussion-empty-${js}.png` });
+      await page.locator(".comment-compose > summary").click();
+      await browserExpect(page.getByLabel("Add to the discussion")).toBeVisible();
+      expect((await bounds()).discussionHeight).toBeGreaterThan(empty.discussionHeight);
+      await page.locator(".comment-compose > summary").click();
+
+      await prisma.resource.deleteMany({ where: { collectionId: id, position: { gt: 0 } } });
+      await ready(page, `/c/${id}`);
+      const short = await bounds();
+      await prisma.collectionComment.createMany({
+        data: Array.from({ length: 20 }, (_, index) => ({
+          collectionId: id,
+          authorUserId: signed.body.user.id,
+          body: `Discussion note ${index + 1}: a useful question about the reading.`,
+        })),
+      });
+      await ready(page, `/c/${id}`);
+      const busy = await bounds();
+      expect(Math.abs(busy.sheetHeight - short.sheetHeight)).toBeLessThanOrEqual(1);
+      expect(busy.discussionBottom).toBeGreaterThan(busy.sheetBottom + 100);
+      expect(Math.abs(busy.discussionBottom - busy.layoutBottom)).toBeLessThanOrEqual(1);
+      expect(busy.discussionBottom).toBeLessThan(busy.footerTop);
+      const body = page.locator(".comments-body");
+      const headingTop = await page
+        .locator(".comments-heading")
+        .evaluate((el) => el.getBoundingClientRect().top);
+      await body.focus();
+      await body.press("End");
+      await browserExpect.poll(() => body.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+      expect(
+        await page.locator(".comments-heading").evaluate((el) => el.getBoundingClientRect().top),
+      ).toBe(headingTop);
+      expect(await page.evaluate(() => window.scrollY)).toBe(0);
+      await page.screenshot({ path: `/tmp/discussion-busy-short-collection-${js}.png` });
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      expect(await body.evaluate((el) => el.scrollHeight <= el.clientHeight + 1)).toBe(true);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+    } finally {
+      await close();
+    }
+  }
+}, 30000);
+
+it("appends Manage table pages with fixed headers, retry and native fallback", async () => {
+  await prisma.requestBudget.deleteMany();
+  const op = await operatorFixture("manage-pagination");
+  await prisma.adminGrant.deleteMany();
+  await prisma.adminGrant.create({ data: { userId: op.id, invitationId: crypto.randomUUID() } });
+  const hub = await prisma.hub.findUniqueOrThrow({ where: { ownerUserId: op.id } });
+  const prefix = `page-${crypto.randomUUID().slice(0, 8)}`;
+  const people = await prisma.user.createManyAndReturn({
+    data: Array.from({ length: 45 }, (_, i) => ({
+      name: `${prefix} Person ${i}`,
+      username: `${prefix}-${i}`,
+      email: `${prefix}-${i}@example.com`,
+    })),
+  });
+  await prisma.operatorGrant.createMany({
+    data: people.map((p) => ({ userId: p.id, authority: "browser-pagination" })),
+  });
+  const collections = await prisma.collection.createManyAndReturn({
+    data: Array.from({ length: 45 }, (_, i) => ({
+      hubId: hub.id,
+      title: `${prefix} Collection ${i}`,
+      slug: `${prefix}-${i}`,
+      creatorUserId: op.id,
+    })),
+  });
+  await prisma.collectionShare.createMany({
+    data: people.map((p) => ({
+      collectionId: collections[0].id,
+      userId: p.id,
+      role: "viewer",
+      source: "direct",
+    })),
+  });
+  await prisma.serviceInvitation.createMany({
+    data: people.map((p) => ({
+      role: "operator",
+      email: p.email,
+      invitedById: op.id,
+      expiresAt: new Date(Date.now() + 86400000),
+    })),
+  });
+  await prisma.collectionHold.createMany({
+    data: collections.map((c) => ({ collectionId: c.id, actorUserId: op.id, reason: "spam" })),
+  });
+  const paths = [
+    "/manage",
+    "/manage/people",
+    "/manage/collections",
+    "/manage/collections",
+    "/manage/team",
+    "/manage/invitations",
+  ];
+  for (const js of [true, false]) {
+    const { page, close } = await freshPage(js);
+    try {
+      await browserSignIn(page, op.email, "/manage");
+      for (const path of paths) {
+        await ready(page, path);
+        if (path === "/manage") {
+          await page.getByRole("searchbox").fill(prefix);
+          await page.getByRole("button", { name: "Search", exact: true }).click();
+          expect(page.url()).not.toContain(prefix);
+        }
+        const rows = page.locator(".ops-table tbody tr");
+        await browserExpect(rows).toHaveCount(20);
+        // Hydration localizes timestamps; compare their stable values while
+        // retaining the complete row content in the pagination/retry assertion.
+        const contents = () =>
+          rows.evaluateAll((elements) =>
+            elements.map((element) => {
+              const row = element.cloneNode(true) as HTMLElement;
+              for (const time of row.querySelectorAll("time")) time.textContent = time.dateTime;
+              return row.textContent;
+            }),
+          );
+        const first = await contents();
+        const load = page.getByRole("link", { name: "Load more", exact: true });
+        const panel = page.locator(".ops-table-scroll");
+        const headingTop = await page
+          .locator("h1")
+          .evaluate((el) => el.getBoundingClientRect().top);
+        await panel.focus();
+        await panel.press("End");
+        await browserExpect.poll(() => panel.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+        expect(await page.evaluate(() => scrollY)).toBe(0);
+        expect(await page.locator("h1").evaluate((el) => el.getBoundingClientRect().top)).toBe(
+          headingTop,
+        );
+        await browserExpect(page.getByRole("columnheader").first()).toBeInViewport();
+        if (!js) {
+          await load.focus();
+          await load.press("Enter");
+          await browserExpect(page).toHaveURL(/cursor=/);
+          await browserExpect(rows).toHaveCount(20);
+          expect((await contents())[0]).not.toBe(first[0]);
+          continue;
+        }
+        const address = page.url();
+        if (path === "/manage") {
+          await page.route(
+            "**/manage?**",
+            async (route) => {
+              if (route.request().headers()["next-action"]) await route.abort();
+              else await route.continue();
+            },
+            { times: 1 },
+          );
+          await load.click();
+          await browserExpect(
+            page.getByText("Couldn't load more. Your current results are still here."),
+          ).toBeVisible();
+          expect(await contents()).toEqual(first);
+          await page.getByRole("button", { name: "Try again", exact: true }).click();
+        } else await load.click();
+        await browserExpect(rows).toHaveCount(40);
+        expect((await contents()).slice(0, 20)).toEqual(first);
+        expect(page.url()).toBe(address);
+        for (let i = 0; i < 10 && (await load.count()); i++) {
+          const before = await rows.count();
+          await load.click();
+          await browserExpect.poll(() => rows.count()).toBeGreaterThan(before);
+        }
+        await browserExpect(load).toHaveCount(0);
+        expect(await rows.count()).toBeGreaterThanOrEqual(45);
+        await browserExpect(
+          page.getByRole("status").filter({ hasText: "All rows loaded." }),
+        ).toBeAttached();
+        if (path === "/manage/team") {
+          const removable = rows
+            .filter({ has: page.getByRole("button", { name: "Remove", exact: true }) })
+            .last();
+          await removable.getByRole("button", { name: "Remove", exact: true }).focus();
+          await browserExpect(removable.locator('input[name="operationId"]')).toHaveAttribute(
+            "value",
+            /^[a-f0-9-]{36}$/,
+          );
+        }
+      }
+      if (js) {
+        await ready(page, "/manage");
+        await page.context().clearCookies();
+        await page.getByRole("link", { name: "Load more", exact: true }).click();
+        await browserExpect(page).toHaveURL(/sign-in/);
+      }
+    } finally {
+      await close();
+    }
+  }
+  await prisma.adminGrant.deleteMany({ where: { userId: op.id } });
+}, 60000);
+
+it("normalizes hub and service audit identities with full ID copying and stable actor filters", async () => {
+  const op = await operatorFixture("audit-identities");
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: op.id } });
+  const hub = await prisma.hub.findUniqueOrThrow({ where: { ownerUserId: op.id } });
+  const missing = "019abcde-0123-7000-8000-aaaa12345678";
+  const other = "019abcde-0123-7000-8000-bbbb12345678";
+  const collectionId = "019abcde-0123-7000-8000-cccc12345678";
+  const resourceId = "019abcde-0123-7000-8000-dddd12345678";
+  await prisma.auditLog.createMany({
+    data: [missing, other].map((actorUserId) => ({
+      hubId: hub.id,
+      actorUserId,
+      action: "collection.updated",
+      collectionId,
+    })),
+  });
+  await prisma.auditLog.create({
+    data: { hubId: hub.id, actorUserId: op.id, action: "hub.name_changed" },
+  });
+  await prisma.auditLog.create({
+    data: {
+      hubId: hub.id,
+      actorUserId: op.id,
+      action: "item.link_added",
+      collectionId,
+      resourceId,
+    },
+  });
+  await prisma.auditLog.create({
+    data: {
+      category: "operation",
+      actorKind: "user",
+      actorUserId: op.id,
+      targetUserId: op.id,
+      action: "account.suspend",
+      outcome: "success",
+      beforeState: "active",
+      afterState: "suspended",
+      reason: "spam",
+    },
+  });
+  for (const js of [true, false]) {
+    const { page, close } = await freshPage(js);
+    try {
+      await browserSignIn(page, op.email, "/manage/audit");
+      await browserExpect(page.getByRole("link", { name: "Clear filters" })).toHaveCount(0);
+      const actorCells = page.locator('td[data-label="Actor"]');
+      await browserExpect(
+        actorCells
+          .locator("code")
+          .filter({ hasText: op.id.split("-").at(-1) })
+          .first(),
+      ).toBeVisible();
+      const itemTarget = page
+        .locator("tr")
+        .filter({ hasText: "Add link" })
+        .locator('td[data-label="Target"]');
+      await browserExpect(itemTarget.locator("code")).toHaveText("dddd12345678");
+      await browserExpect(itemTarget.locator("[title]")).toHaveAttribute("title", resourceId);
+      await browserExpect(itemTarget.locator("details")).toHaveCount(0);
+      await browserExpect(
+        page
+          .locator("tr")
+          .filter({ hasText: "Update collection details" })
+          .first()
+          .locator('td[data-label="Target"] code'),
+      ).toHaveText("cccc12345678");
+      const actorCell = actorCells.filter({ has: page.locator('code:text-is("aaaa12345678")') });
+      await browserExpect(actorCell.locator("[title]")).toHaveAttribute("title", missing);
+      await browserExpect(actorCell.locator("details")).toHaveCount(0);
+      if (!js)
+        await browserExpect(page.getByRole("button", { name: "Copy user ID" })).toHaveCount(0);
+      if (js) {
+        await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+        await itemTarget.getByRole("button", { name: "Copy target ID", exact: true }).click();
+        expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(resourceId);
+        await browserExpect(itemTarget.getByRole("status")).toHaveText("Copied");
+        await browserExpect(itemTarget.getByRole("status")).toBeEmpty();
+        const actorCopy = actorCell.getByRole("button", { name: "Copy user ID", exact: true });
+        await actorCopy.focus();
+        await actorCopy.press("Enter");
+        expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(missing);
+        await browserExpect(actorCopy).toContainText("aaaa12345678");
+        await browserExpect(actorCell.getByRole("status")).toHaveText("Copied");
+      }
+      await page.screenshot({ path: `/tmp/audit-identities-expanded-${js}.png` });
+      await page.getByRole("searchbox", { name: "Search", exact: true }).fill(user.username);
+      await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+      await browserExpect(page).toHaveURL(new RegExp(`q=${user.username}`));
+      await browserExpect(
+        actorCells.locator("code").filter({ hasText: "aaaa12345678" }),
+      ).toHaveCount(0);
+      expect(page.url()).not.toContain("scope=");
+      await browserExpect(page.getByRole("navigation", { name: "Management context" })).toHaveCount(
+        0,
+      );
+      await page.screenshot({ path: `/tmp/audit-identities-hub-${js}.png` });
+      await ready(page, "/manage/audit");
+      await page.getByRole("searchbox", { name: "Search", exact: true }).fill(user.username);
+      await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+      await browserExpect(page).toHaveURL(new RegExp(`q=${user.username}`));
+      await browserExpect(page.locator('td[data-label="Actor"] code').first()).toHaveText(
+        op.id.split("-").at(-1) ?? op.id,
+      );
+      await page.screenshot({ path: `/tmp/audit-identities-service-${js}.png` });
+      await browserExpect(page.locator(".ops-table thead th")).toHaveText([
+        "Timestamp",
+        "Actor",
+        "Action",
+        "Target",
+        "Outcome",
+        "Change",
+      ]);
+      let actorId = op.id;
+      if (js) {
+        await page
+          .locator('td[data-label="Actor"]')
+          .first()
+          .getByRole("button", { name: "Copy user ID", exact: true })
+          .click();
+        actorId = await page.evaluate(() => navigator.clipboard.readText());
+        expect(actorId).toBe(op.id);
+      }
+      await ready(page, "/manage");
+      await page
+        .getByRole("searchbox", { name: "User ID, username, email or hub handle", exact: true })
+        .fill(actorId);
+      await page.getByRole("button", { name: "Search", exact: true }).click();
+      await browserExpect(page.locator(".ops-table tbody tr")).toHaveCount(1);
+      await browserExpect(page.locator('td[data-label="Email"]')).toContainText(op.email);
+      await browserExpect(page.locator('td[data-label="Email"]')).not.toContainText("Verified");
+      await browserExpect(page.locator('td[data-label="Account"] .ops-primary')).toHaveText(
+        user.name,
+      );
+      await browserExpect(page.locator('td[data-label="Account"] .ops-secondary')).toHaveText(
+        user.username,
+      );
+      const accountRow = page.locator(".ops-table tbody tr").filter({ hasText: op.email });
+      const loggedIn = await prisma.user.findUniqueOrThrow({ where: { id: op.id } });
+      await browserExpect(accountRow.locator('td[data-label="Last login"] time')).toHaveAttribute(
+        "datetime",
+        loggedIn.lastLoginAt?.toISOString() ?? "missing-login",
+      );
+      await page.screenshot({ path: `/tmp/accounts-stable-id-${js}.png` });
+      for (const width of [1280, 1024, 768, 390]) {
+        await page.setViewportSize({ width, height: 844 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+      }
+      await page.screenshot({ path: `/tmp/audit-identities-mobile-${js}.png`, fullPage: true });
+      await browserExpect(accountRow.locator('td[data-label="Member since"] time')).toHaveAttribute(
+        "datetime",
+        user.createdAt.toISOString(),
+      );
+      if (js) {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await accountRow.locator('td[data-label="Email"]').click();
+      } else await accountRow.getByRole("button", { name: user.name, exact: true }).click();
+      await browserExpect(page.locator(".account-details")).toContainText("Last login");
+      const currentUser = await prisma.user.findUniqueOrThrow({ where: { id: op.id } });
+      await browserExpect(
+        page
+          .locator(".account-details dt")
+          .filter({ hasText: /^Last login$/ })
+          .locator("+ dd time"),
+      ).toHaveAttribute("datetime", currentUser.lastLoginAt?.toISOString() ?? "missing-login");
+      await browserExpect(page.locator("details.action-menu")).toHaveCount(0);
+      await browserExpect(
+        page
+          .locator(".account-profile-heading")
+          .getByRole("link", { name: user.username, exact: true }),
+      ).toHaveAttribute("href", `/${encodeURIComponent(user.username)}`);
+      await browserExpect(
+        page.locator(".account-details").getByRole("link", { name: hub.name, exact: true }),
+      ).toHaveAttribute("href", `/h/${hub.id}`);
+      const sessions = page.getByRole("region", { name: "Active sessions", exact: true });
+      await browserExpect(sessions).toContainText("Your current session");
+      await browserExpect(sessions).toContainText("Last verified");
+      await page.screenshot({ path: `/tmp/account-profile-${js}.png`, fullPage: true });
+    } finally {
+      await close();
+    }
+  }
+}, 30000);
+
+it("shows recorded audit effects, honest legacy gaps, international dates and optional reads", async () => {
+  const op = await operatorFixture("audit-effects");
+  const created = await request(app.getHttpServer())
+    .post("/api/v1/collections")
+    .auth(op.token, { type: "bearer" })
+    .send({ title: "Audit evidence fixture", slug: `audit-evidence-${crypto.randomUUID()}` })
+    .expect(201);
+  const id = created.body.data.id as string;
+  for (let i = 0; i < 2; i++)
+    await request(app.getHttpServer())
+      .post(`/api/v1/collections/${id}/publish`)
+      .auth(op.token, { type: "bearer" })
+      .expect(201);
+  const captured = await prisma.auditLog.findFirstOrThrow({
+    where: { collectionId: id, action: "collection.published", outcome: "success" },
+  });
+  const expectedLocal = new Date(captured.createdAt.getTime() + 3 * 3600000)
+    .toISOString()
+    .slice(0, 19)
+    .replace("T", " ");
+  const expectedUtc = captured.createdAt.toISOString().slice(0, 19).replace("T", " ");
+  const invitationId = crypto.randomUUID();
+  await prisma.auditLog.create({
+    data: {
+      category: "operation",
+      actorKind: "user",
+      actorUserId: op.id,
+      targetUserId: op.id,
+      invitationId,
+      action: "invitation.verified",
+      beforeState: "verifying",
+      afterState: "accepted",
+      outcome: "success",
+    },
+  });
+  for (const js of [true, false]) {
+    const { page, close } = await freshPage(js, "Africa/Dar_es_Salaam");
+    try {
+      await browserSignIn(page, op.email, "/manage/audit");
+      const table = page.locator(".ops-table");
+      await browserExpect(table).not.toContainText("View audit");
+      const changed = table.locator("tbody tr").filter({ hasText: "Unpublished → Published" });
+      await browserExpect(changed.locator('td[data-label="Outcome"]')).toHaveText("Succeeded");
+      await browserExpect(changed.locator('td[data-label="Change"]')).toHaveText(
+        "Unpublished → Published",
+      );
+      await browserExpect(changed.locator('td[data-label="Target"] code')).toHaveText(
+        id.split("-").at(-1) ?? id,
+      );
+      await browserExpect(table.locator("tbody tr").filter({ hasText: "No change" })).toContainText(
+        "No change",
+      );
+      await browserExpect(
+        table.locator("tbody tr").filter({ hasText: "Create collection" }),
+      ).toContainText("Not recorded");
+      await browserExpect(changed.locator("time")).toHaveText(
+        /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/,
+      );
+      await browserExpect(changed.locator("time")).toHaveText(js ? expectedLocal : expectedUtc);
+      const day = (js ? expectedLocal : expectedUtc).slice(0, 10);
+      await page.getByLabel("From", { exact: true }).fill(day);
+      await page.getByLabel("To", { exact: true }).fill(day);
+      await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+      await browserExpect(page.getByLabel("From", { exact: true })).toHaveValue(day);
+      const start = new Date(`${day}T00:00:00.000Z`).getTime() - (js ? 3 * 3600000 : 0);
+      const query = new URL(page.url()).searchParams;
+      expect(query.get("from")).toBe(new Date(start).toISOString());
+      expect(query.get("to")).toBe(new Date(start + 86400000 - 1).toISOString());
+
+      await page
+        .getByRole("searchbox", { name: "Search", exact: true })
+        .fill("Unpublished Published Succeeded");
+      await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+      await browserExpect(table.locator("tbody tr")).toHaveCount(1);
+      await browserExpect(table.locator('td[data-label="Change"]')).toHaveText(
+        "Unpublished → Published",
+      );
+      await browserExpect(page.getByRole("searchbox", { name: "Search", exact: true })).toHaveValue(
+        "unpublished published succeeded",
+      );
+      await page.getByRole("searchbox", { name: "Search", exact: true }).fill("");
+      await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+
+      for (const width of [320, 390, 768, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+      }
+      await page.screenshot({ path: `/tmp/audit-effects-hub-${js}.png`, fullPage: true });
+      await page.emulateMedia({ colorScheme: "dark" });
+      await page.screenshot({ path: `/tmp/audit-effects-dark-${js}.png`, fullPage: true });
+      await page.getByRole("checkbox", { name: "Include read events", exact: true }).check();
+      await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+      await browserExpect(table).toContainText("View audit");
+      await page.getByRole("link", { name: "Clear filters" }).click();
+      await browserExpect(table).not.toContainText("View audit");
+      await browserExpect(page.getByRole("link", { name: "Clear filters" })).toHaveCount(0);
+      await page.getByRole("combobox", { name: "Action", exact: true }).selectOption("audit.read");
+      await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+      await browserExpect(
+        page.getByRole("checkbox", { name: "Include read events", exact: true }),
+      ).toBeChecked();
+      await browserExpect(table).toContainText("Read only");
+      await ready(page, `/manage/audit?targetId=${invitationId}`);
+      const invitation = table
+        .locator("tbody tr")
+        .filter({ hasText: "Verify invitation acceptance" });
+      await browserExpect(invitation.locator('td[data-label="Target"] code')).toHaveText(
+        invitationId.split("-").at(-1) ?? invitationId,
+      );
+      await browserExpect(invitation).toContainText("Verifying → Accepted");
+      await page.screenshot({ path: `/tmp/audit-effects-service-${js}.png`, fullPage: true });
+    } finally {
+      await close();
+    }
+  }
+}, 60000);
+
+it("uses action dialogs and owner collection operations with native fallback", async () => {
+  for (const js of [true, false]) {
+    const actor = await operatorFixture(`collection-actions-${js}`);
+    const made = await request(app.getHttpServer())
+      .post("/api/v1/collections")
+      .auth(actor.token, { type: "bearer" })
+      .send({ title: "Collection action fixture", slug: `actions-${crypto.randomUUID()}` })
+      .expect(201);
+    const id = made.body.data.id;
+    const { page, close } = await freshPage(js);
+    try {
+      await browserSignIn(page, actor.email, "/manage/collections");
+      await browserExpect(page.getByRole("link", { name: "My hub", exact: true })).toHaveCount(0);
+      await page.getByLabel("Collection ID or link", { exact: true }).fill(id);
+      await page.getByRole("button", { name: "Search", exact: true }).click();
+      const row = page.locator(".ops-table tbody tr");
+      await browserExpect(row).toHaveCount(1);
+      await browserExpect(
+        page.getByRole("columnheader", { name: "Action", exact: true }),
+      ).toHaveCount(0);
+      if (js) {
+        // Slow scripts must never expose a native disclosure before hydration.
+        let releaseScripts = () => {};
+        const scriptsReady = new Promise<void>((resolve) => {
+          releaseScripts = resolve;
+        });
+        await page.route(/\/_next\/static\/.*\.js(?:\?.*)?$/, async (route) => {
+          await scriptsReady;
+          await route.continue();
+        });
+        try {
+          await page.reload({ waitUntil: "commit" });
+          const trigger = row.getByRole("button", {
+            name: "Actions for Collection action fixture",
+          });
+          await browserExpect(trigger).toBeVisible();
+          await browserExpect(trigger).toBeDisabled();
+          await trigger.click({ force: true });
+          await browserExpect(row.locator(".action-choices:visible")).toHaveCount(0);
+          releaseScripts();
+          await browserExpect(trigger).toBeEnabled();
+          await row.locator('td[data-label="Status"]').click();
+          await browserExpect(page.getByRole("dialog")).toBeVisible();
+          await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+          await browserExpect(trigger).toBeFocused();
+          await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+          await row.getByRole("button", { name: "Copy collection ID" }).click();
+          expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(id);
+          await browserExpect(page.getByRole("dialog")).toHaveCount(0);
+          await trigger.focus();
+          await page.keyboard.press("Enter");
+          await browserExpect(page.getByRole("dialog")).toBeVisible();
+          await page.keyboard.press("Escape");
+          await browserExpect(trigger).toBeFocused();
+        } finally {
+          releaseScripts();
+          await page.unroute(/\/_next\/static\/.*\.js(?:\?.*)?$/);
+        }
+      }
+      if (js) {
+        await row.locator('td[data-label="Status"]').click();
+        const dialog = page.getByRole("dialog");
+        await browserExpect(
+          dialog.getByRole("link", { name: "View", exact: true }),
+        ).toHaveAttribute("href", `/c/${id}`);
+        await browserExpect(
+          dialog.getByRole("link", { name: "Edit", exact: true }),
+        ).toHaveAttribute("href", `/c/${id}/edit`);
+        await browserExpect(
+          dialog.getByRole("link", { name: "History", exact: true }),
+        ).toHaveAttribute("href", `/c/${id}/history`);
+        const shareHref = await dialog
+          .getByRole("link", { name: "Share", exact: true })
+          .getAttribute("href");
+        const shareUrl = new URL(shareHref ?? "", origin);
+        expect(shareUrl.pathname).toBe("/share");
+        expect(Object.fromEntries(shareUrl.searchParams)).toEqual({
+          kind: "collection",
+          id,
+          returnTo: `/manage/collections?q=${id}`,
+        });
+        const publish = dialog.getByRole("link", { name: "Publish", exact: true });
+        const destination = await publish.getAttribute("href");
+        // Keep the current document in place: disappearance must come from
+        // selecting the action, not from the destination replacing the page.
+        await publish.evaluate((link) => {
+          link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+        });
+        await publish.click();
+        await browserExpect(dialog).toHaveCount(0);
+        await ready(page, destination ?? "/manage/collections");
+      } else {
+        await chooseAction(page, "publish", row);
+      }
+      await page.getByRole("button", { name: "Publish collection", exact: true }).click();
+      await browserExpect(page.getByText("The action is complete.", { exact: true })).toBeVisible();
+      expect((await prisma.collection.findUniqueOrThrow({ where: { id } })).published).toBe(true);
+      await ready(page, `/c/${id}`);
+      await page.locator(".sheet-bar").getByRole("link", { name: "Share", exact: true }).click();
+      await browserExpect(page.getByLabel("Collection link", { exact: true })).toHaveValue(
+        `${origin}/c/${id}`,
+      );
+      const copyLink = page.getByRole("button", { name: "Copy link", exact: true });
+      await browserExpect(copyLink).toBeVisible();
+      await browserExpect(
+        page.getByRole("link", { name: "Back to collection", exact: true }),
+      ).toHaveAttribute("href", `/c/${id}`);
+      if (js) {
+        await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+        await copyLink.click();
+        await browserExpect(
+          page.getByRole("status").filter({ hasText: "Link copied." }),
+        ).toBeVisible();
+        const copied = new URL(await page.evaluate(() => navigator.clipboard.readText()));
+        expect(copied.origin + copied.pathname).toBe(`${origin}/c/${id}`);
+        expect(copied.searchParams.get("via")).toBeTruthy();
+        for (const width of [1280, 390]) {
+          await page.setViewportSize({ width, height: 900 });
+          const copy = page.getByRole("button", { name: "Copy link", exact: true });
+          await browserExpect(copy).toBeVisible();
+          await browserExpect(page.getByRole("link", { name: "Cancel", exact: true })).toHaveCount(
+            0,
+          );
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+          await page.screenshot({ path: `/tmp/collection-share-buttons-${width}.png` });
+        }
+        await page.setViewportSize({ width: 1280, height: 900 });
+      } else {
+        await browserExpect(copyLink).toBeDisabled();
+        await browserExpect(
+          page.getByText("Select the link above and copy it.", { exact: true }),
+        ).toBeVisible();
+      }
+      await page.getByRole("link", { name: "Back to collection", exact: true }).click();
+      await browserExpect(page).toHaveURL(`${origin}/c/${id}`);
+      await ready(page, `/manage/collections?q=${id}`);
+      await chooseAction(page, "share", page.locator(".ops-table tbody tr"));
+      await page.screenshot({ path: `/tmp/collection-share-${js}.png` });
+      await page.reload();
+      await page.getByRole("link", { name: "Back to collections", exact: true }).click();
+      await browserExpect(page).toHaveURL(`${origin}/manage/collections?q=${id}`);
+      const direct = await freshPage(js);
+      try {
+        await ready(direct.page, `/share?kind=collection&id=${id}`);
+        await browserExpect(
+          direct.page.getByRole("link", { name: "Back to collection", exact: true }),
+        ).toHaveAttribute("href", `/c/${id}`);
+        await direct.page.getByRole("link", { name: "Back to collection", exact: true }).click();
+        await browserExpect(direct.page).toHaveURL(`${origin}/c/${id}`);
+      } finally {
+        await direct.close();
+      }
+      if (js) {
+        const trigger = page.getByRole("button", { name: "Actions for Collection action fixture" });
+        await trigger.click();
+        const dialog = page.getByRole("dialog");
+        await browserExpect(dialog).toBeVisible();
+        const bounds = await dialog.boundingBox();
+        expect(
+          Math.abs(
+            (bounds?.x ?? 0) + (bounds?.width ?? 0) / 2 - (page.viewportSize()?.width ?? 0) / 2,
+          ),
+        ).toBeLessThan(2);
+        await browserExpect(dialog.getByRole("link", { name: "Share", exact: true })).toBeVisible();
+        await page.screenshot({ path: "/tmp/manage-action-dialog.png", animations: "disabled" });
+        await page.emulateMedia({ colorScheme: "dark" });
+        await page.screenshot({
+          path: "/tmp/manage-action-dialog-dark.png",
+          animations: "disabled",
+        });
+        await page.keyboard.press("Escape");
+        await browserExpect(trigger).toBeFocused();
+        await page.setViewportSize({ width: 390, height: 844 });
+        await trigger.click();
+        expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+        await page.screenshot({ path: "/tmp/manage-action-dialog-mobile.png" });
+        await page.keyboard.press("Escape");
+      }
+      await chooseAction(page, "unpublish", page.locator(".ops-table tbody tr"));
+      await page.getByRole("button", { name: "Unpublish collection", exact: true }).click();
+      await ready(page, `/share?kind=collection&id=${id}`);
+      await page.getByRole("button", { name: "Create share link", exact: true }).click();
+      const link = page.getByLabel("Collection link", { exact: true }).last();
+      await browserExpect(link).toHaveValue(new RegExp(`/c/${id}\\?s=`));
+      expect(
+        (await prisma.collection.findUniqueOrThrow({ where: { id } })).linkSharingEnabled,
+      ).toBe(true);
+      await ready(page, `/manage/collections?q=${id}`);
+      await chooseAction(page, "delete", page.locator(".ops-table tbody tr"));
+      await browserExpect(page.getByText(/This cannot be undone/)).toBeVisible();
+      await page.getByRole("button", { name: "Delete collection", exact: true }).click();
+      await browserExpect(page.locator("h1")).toHaveText("Collections");
+      expect(await prisma.collection.findUnique({ where: { id } })).toBeNull();
+    } finally {
+      await close();
+    }
+  }
+}, 60000);
+
+it("shares profiles, hubs, collections and the site through one contextual page", async () => {
+  const signed = await signInHubOwner(app.getHttpServer(), {
+    email: `sharing-${crypto.randomUUID()}@example.com`,
+    name: "Sharing fixture",
+  });
+  const actor = await prisma.user.findUniqueOrThrow({
+    where: { id: signed.body.user.id },
+    include: { hub: true },
+  });
+  const token = signed.headers["set-auth-token"];
+  const create = async (published: boolean) =>
+    (
+      await request(app.getHttpServer())
+        .post("/api/v1/collections")
+        .auth(token, { type: "bearer" })
+        .send({
+          title: published ? "Shareable collection" : "Restricted share fixture",
+          slug: `share-${crypto.randomUUID()}`,
+          published,
+        })
+        .expect(201)
+    ).body.data.id as string;
+  const publicId = await create(true),
+    restrictedId = await create(false);
+  const access = (
+    await request(app.getHttpServer())
+      .put(`/api/v1/collections/${restrictedId}/link-sharing`)
+      .auth(token, { type: "bearer" })
+      .send({ enabled: true })
+      .expect(200)
+  ).body.data.token as string;
+  const ownedHub = actor.hub;
+  if (!ownedHub) throw new Error("Sharing fixture requires a hub");
+  for (const js of [true, false]) {
+    const { page, close } = await freshPage(js);
+    try {
+      const cases = [
+        {
+          from: `/${actor.username}`,
+          kind: "profile",
+          path: `/people/${actor.id}`,
+          label: "Profile link",
+          heading: "Share profile",
+          back: "Back to profile",
+          trigger: "Share",
+        },
+        {
+          from: `/@${ownedHub.handle}?view=public`,
+          kind: "hub",
+          path: `/h/${ownedHub.id}`,
+          label: "Hub link",
+          heading: "Share hub",
+          back: "Back to hub",
+          trigger: "Share",
+        },
+        {
+          from: `/c/${publicId}`,
+          kind: "collection",
+          path: `/c/${publicId}`,
+          label: "Collection link",
+          heading: "Share collection",
+          back: "Back to collection",
+          trigger: "Share",
+        },
+        {
+          from: "/",
+          kind: "site",
+          path: "/",
+          label: "Site link",
+          heading: "Share nslinkhub",
+          back: "Back to home",
+          trigger: "Share nslinkhub",
+        },
+      ];
+      if (js) await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+      for (const item of cases) {
+        await ready(page, item.from);
+        await page.getByRole("link", { name: item.trigger, exact: true }).click();
+        await browserExpect(page.locator("h1")).toHaveText(item.heading);
+        expect(new URL(page.url()).pathname).toBe("/share");
+        await browserExpect(page.getByLabel(item.label, { exact: true })).toHaveValue(
+          `${origin}${item.path}`,
+        );
+        const copy = page.getByRole("button", { name: "Copy link", exact: true });
+        await browserExpect(copy).toBeVisible();
+        if (js) {
+          await copy.click();
+          expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+            `${origin}${item.path}`,
+          );
+        } else await browserExpect(copy).toBeDisabled();
+        for (const width of [390, 1280]) {
+          await page.setViewportSize({ width, height: 900 });
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+          await page.screenshot({ path: `/tmp/share-${item.kind}-${js}-${width}.png` });
+        }
+        await page.getByRole("link", { name: item.back, exact: true }).click();
+        await browserExpect(page).toHaveURL(`${origin}${item.from}`);
+      }
+      await ready(page, `/share?kind=collection&id=${restrictedId}`);
+      await browserExpect(page.getByLabel("Collection link", { exact: true })).toHaveCount(0);
+      await browserExpect(page.locator("main")).not.toContainText("Restricted share fixture");
+      await ready(
+        page,
+        `/share?${new URLSearchParams({ kind: "collection", id: restrictedId, s: access })}`,
+      );
+      await browserExpect(page.getByLabel("Collection link", { exact: true })).toHaveValue(
+        `${origin}/c/${restrictedId}?s=${encodeURIComponent(access)}`,
+      );
+      await ready(
+        page,
+        `/share?${new URLSearchParams({ kind: "collection", id: publicId, s: access, returnTo: "https://outside.invalid/", url: "https://outside.invalid/", name: "Untrusted title" })}`,
+      );
+      await browserExpect(page.getByLabel("Collection link", { exact: true })).toHaveValue(
+        `${origin}/c/${publicId}`,
+      );
+      await browserExpect(
+        page.getByRole("link", { name: "Back to home", exact: true }),
+      ).toHaveAttribute("href", "/");
+      await browserExpect(page.locator("main")).not.toContainText("Untrusted title");
+      await ready(page, `/people/${actor.id}`);
+      await browserExpect(page.locator("h1")).toHaveText("Sharing fixture");
+      const unavailable = await page.goto(`${origin}/share?kind=unsupported`);
+      expect(unavailable?.status()).toBe(404);
+      await browserExpect(page.getByRole("button", { name: "Copy link", exact: true })).toHaveCount(
+        0,
+      );
+    } finally {
+      await close();
+    }
+  }
+}, 60000);
+
+it("records authenticated copy links and successful opens across all share targets", async () => {
+  const signed = await signInHubOwner(app.getHttpServer(), {
+    email: `share-cycle-${crypto.randomUUID()}@example.com`,
+    name: "Sharing cycle",
+  });
+  const actor = await prisma.user.findUniqueOrThrow({
+    where: { id: signed.body.user.id },
+    include: { hub: true },
+  });
+  const collection = (
+    await request(app.getHttpServer())
+      .post("/api/v1/collections")
+      .auth(signed.headers["set-auth-token"], { type: "bearer" })
+      .send({ title: "Sharing cycle guide", slug: `cycle-${crypto.randomUUID()}`, published: true })
+      .expect(201)
+  ).body.data;
+  const { page, close } = await freshPage();
+  const recipient = await freshPage();
+  try {
+    for (const raw of signed.headers["set-cookie"] as unknown as string[]) {
+      const [name, ...value] = raw.split(";")[0].split("=");
+      await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
+    }
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    for (const [kind, id, label] of [
+      ["profile", actor.id, "Profile link"],
+      ["hub", actor.hub?.id, "Hub link"],
+      ["collection", collection.id, "Collection link"],
+      ["site", null, "Site link"],
+    ]) {
+      const query = new URLSearchParams({ kind: kind as string });
+      if (id) query.set("id", id);
+      const before = await prisma.shareEntry.count({ where: { createdByUserId: actor.id } });
+      await ready(page, `/share?${query}`);
+      expect(await prisma.shareEntry.count({ where: { createdByUserId: actor.id } })).toBe(before);
+      await page.getByRole("button", { name: "Copy link", exact: true }).click();
+      await browserExpect(
+        page.getByRole("status").filter({ hasText: "Link copied." }),
+      ).toBeVisible();
+      const link = await page.evaluate(() => navigator.clipboard.readText());
+      await browserExpect(page.getByLabel(label as string, { exact: true })).toHaveValue(link);
+      const shareId = new URL(link).searchParams.get("via");
+      expect(shareId).toBeTruthy();
+      const stored = await prisma.shareEntry.findUniqueOrThrow({
+        where: { id: shareId as string },
+      });
+      expect(stored.createdByUserId).toBe(actor.id);
+      expect(stored.context).toEqual({ destination: "copy_link" });
+      expect(stored.message).toBe(`Share ${kind}`);
+      expect(stored.resourceId).toBe(id);
+      expect(stored.openCount).toBe(0);
+      await page.getByRole("button", { name: "Copy link", exact: true }).click();
+      expect(await prisma.shareEntry.count({ where: { createdByUserId: actor.id } })).toBe(
+        before + 1,
+      );
+      await recipient.page.request.get(link);
+      expect(
+        (await prisma.shareEntry.findUniqueOrThrow({ where: { id: stored.id } })).openCount,
+      ).toBe(0);
+      const attributedLink = new URL(link);
+      attributedLink.searchParams.set("utm_source", "newsletter");
+      attributedLink.searchParams.set("utm_campaign", "reading-week");
+      attributedLink.searchParams.set("unrelated", "do-not-store");
+      await recipient.page.goto(attributedLink.href);
+      await browserExpect
+        .poll(
+          async () =>
+            (await prisma.shareEntry.findUniqueOrThrow({ where: { id: stored.id } })).openCount,
+        )
+        .toBe(1);
+      await recipient.page.reload();
+      await browserExpect
+        .poll(
+          async () =>
+            (await prisma.shareEntry.findUniqueOrThrow({ where: { id: stored.id } })).openCount,
+        )
+        .toBe(2);
+      expect(await prisma.shareOpen.count({ where: { shareId: stored.id } })).toBe(2);
+      const opens = await prisma.shareOpen.findMany({ where: { shareId: stored.id } });
+      expect(opens[0].eventId).not.toBe(opens[1].eventId);
+      expect(opens[0].payloadHash).toBe(opens[1].payloadHash);
+      expect(opens[0].occurredAt).toBeInstanceOf(Date);
+      expect(opens[0].attribution).toEqual({
+        utm_source: "newsletter",
+        utm_campaign: "reading-week",
+      });
+      expect(JSON.stringify(opens)).not.toContain("do-not-store");
+    }
+    const privateCollection = (
+      await request(app.getHttpServer())
+        .post("/api/v1/collections")
+        .auth(signed.headers["set-auth-token"], { type: "bearer" })
+        .send({ title: "Private tracked collection", slug: `private-cycle-${crypto.randomUUID()}` })
+        .expect(201)
+    ).body.data;
+    const privateEntry = (
+      await request(app.getHttpServer())
+        .post("/api/v1/share")
+        .auth(signed.headers["set-auth-token"], { type: "bearer" })
+        .send({ kind: "collection", id: privateCollection.id })
+        .expect(201)
+    ).body.data;
+    await recipient.page.goto(`${privateEntry.resource.url}&utm_source=email`);
+    await browserExpect(recipient.page.locator("h1")).toHaveText(
+      "This collection isn't available.",
+    );
+    const signIn = recipient.page
+      .locator("main")
+      .getByRole("link", { name: "Sign in", exact: true });
+    const resumePath = new URL(
+      (await signIn.getAttribute("href")) as string,
+      origin,
+    ).searchParams.get("returnTo");
+    expect(resumePath).toBe(`${privateEntry.resource.path}&utm_source=email`);
+    expect(
+      (await prisma.shareEntry.findUniqueOrThrow({ where: { id: privateEntry.id } })).openCount,
+    ).toBe(0);
+    await browserSignIn(recipient.page, actor.email, resumePath as string);
+    await browserExpect(recipient.page.locator("h1")).toHaveText("Private tracked collection");
+    await browserExpect
+      .poll(
+        async () =>
+          (await prisma.shareEntry.findUniqueOrThrow({ where: { id: privateEntry.id } })).openCount,
+      )
+      .toBe(1);
+  } finally {
+    await close();
+    await recipient.close();
+  }
+}, 60000);
+
+it("shows sharing analytics to operators and admins and refreshes after copying and opening", async () => {
+  await prisma.shareEntry.deleteMany();
+  const operator = await signInHubOwner(app.getHttpServer(), {
+    email: `analytics-op-${crypto.randomUUID()}@example.com`,
+    name: "Analytics operator",
+  });
+  const admin = await signInWithCode(app.getHttpServer(), {
+    email: `analytics-admin-${crypto.randomUUID()}@example.com`,
+    name: "Analytics admin",
+  });
+  await prisma.operatorGrant.create({ data: { userId: operator.body.user.id, authority: "test" } });
+  await prisma.adminGrant.create({
+    data: { userId: admin.body.user.id, invitationId: crypto.randomUUID() },
+  });
+  const operatorBrowser = await freshPage();
+  const adminBrowser = await freshPage(false);
+  const recipient = await freshPage();
+  const page = operatorBrowser.page;
+  try {
+    for (const [target, signed] of [
+      [page, operator],
+      [adminBrowser.page, admin],
+    ] as const) {
+      for (const raw of signed.headers["set-cookie"] as unknown as string[]) {
+        const [name, ...value] = raw.split(";")[0].split("=");
+        await target.context().addCookies([{ name, value: value.join("="), url: origin }]);
+      }
+    }
+    await recipient.page.goto(`${origin}/manage/analytics`);
+    await browserExpect(recipient.page).toHaveURL(/\/sign-in\?/);
+    expect(new URL(recipient.page.url()).searchParams.get("returnTo")).toBe("/manage/analytics");
+    await ready(page, "/manage/analytics");
+    await browserExpect(page.locator("[data-metric=shares]")).toHaveText("0");
+    await browserExpect(page.locator("[data-metric=opens]")).toHaveText("0");
+    await browserExpect(page.getByText(/No shares recorded yet/)).toBeVisible();
+    const nav = page.getByRole("navigation", { name: "Manage", exact: true });
+    expect((await nav.getByRole("link").allTextContents()).slice(-2)).toEqual([
+      "Analytics",
+      "Audit Log",
+    ]);
+    await browserExpect(nav.getByRole("link", { name: "Analytics", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    const sharing = await page.context().newPage();
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    await ready(sharing, "/share?kind=site");
+    await sharing.getByRole("button", { name: "Copy link", exact: true }).click();
+    await browserExpect(
+      sharing.getByRole("status").filter({ hasText: "Link copied." }),
+    ).toBeVisible();
+    const link = await sharing.getByLabel("Site link", { exact: true }).inputValue();
+    const shareId = new URL(link).searchParams.get("via") as string;
+    expect(shareId).toBeTruthy();
+    expect((await prisma.shareEntry.findUniqueOrThrow({ where: { id: shareId } })).message).toBe(
+      "Share site",
+    );
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await browserExpect(page.locator("[data-metric=shares]")).toHaveText("1");
+    await browserExpect(page.locator("[data-metric=opens]")).toHaveText("0");
+    await recipient.page.goto(link);
+    await browserExpect
+      .poll(
+        async () =>
+          (await prisma.shareEntry.findUniqueOrThrow({ where: { id: shareId } })).openCount,
+      )
+      .toBe(1);
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await browserExpect(page.locator("[data-metric=opens]")).toHaveText("1");
+    await browserExpect(page.getByRole("table", { name: "Sharing by destination" })).toContainText(
+      "Copy link",
+    );
+    await browserExpect(page.getByRole("table", { name: "Sharing by resource" })).toContainText(
+      "Site",
+    );
+    await page.screenshot({ path: "/tmp/manage-analytics-light.png", fullPage: true });
+    await recipient.page.reload();
+    await browserExpect
+      .poll(
+        async () =>
+          (await prisma.shareEntry.findUniqueOrThrow({ where: { id: shareId } })).openCount,
+      )
+      .toBe(2);
+    await ready(adminBrowser.page, "/manage/analytics");
+    await browserExpect(adminBrowser.page.locator("[data-metric=opens]")).toHaveText("2");
+    expect(
+      (
+        await adminBrowser.page
+          .getByRole("navigation", { name: "Manage", exact: true })
+          .getByRole("link")
+          .allTextContents()
+      ).slice(-2),
+    ).toEqual(["Analytics", "Audit Log"]);
+    await adminBrowser.page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await browserExpect(adminBrowser.page.locator("[data-metric=shares]")).toHaveText("1");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.reload();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true);
+    await page.screenshot({ path: "/tmp/manage-analytics-dark-phone.png", fullPage: true });
+    await prisma.operatorGrant.delete({ where: { userId: operator.body.user.id } });
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await browserExpect(page.locator("h1")).toHaveText("Manage unavailable");
+    await ready(page, "/manage/collections");
+    await browserExpect(
+      page
+        .getByRole("navigation", { name: "Manage", exact: true })
+        .getByRole("link", { name: "Analytics", exact: true }),
+    ).toHaveCount(0);
+  } finally {
+    await operatorBrowser.close();
+    await adminBrowser.close();
+    await recipient.close();
+  }
+}, 60000);
+
+describe("item details routes", () => {
+  for (const js of [true, false]) {
+    it(`opens items beyond the first page on both addresses, preserves access and toggles inline (${js})`, async () => {
+      const signed = await signInHubOwner(app.getHttpServer(), {
+        email: `item-routes-${crypto.randomUUID()}@example.com`,
+        name: "Item owner",
+      });
+      const owner = signed.headers["set-auth-token"] as string;
+      const profile = await request(app.getHttpServer())
+        .get("/api/v1/profile")
+        .auth(owner, { type: "bearer" })
+        .expect(200);
+      const handle = profile.body.data.handle;
+      const slug = `item-routes-${crypto.randomUUID()}`;
+      const created = await request(app.getHttpServer())
+        .post("/api/v1/collections")
+        .auth(owner, { type: "bearer" })
+        .send({
+          title: "Item route guide",
+          slug,
+          description: "A guide with enough context to fold while reading its items.",
+        })
+        .expect(201);
+      const id = created.body.data.id as string;
+      await prisma.resource.create({
+        data: {
+          collectionId: id,
+          kind: "heading",
+          titleOverride: "A later section",
+          sectionDescription: "Context stays visible when this section is collapsed.",
+          position: 22,
+        },
+      });
+      await prisma.resource.createMany({
+        data: Array.from({ length: 21 }, (_, position) => ({
+          collectionId: id,
+          kind: "external_link",
+          url: `https://fixture-links.dev/earlier-${position}`,
+          position,
+        })),
+      });
+      const link = await prisma.resource.create({
+        data: {
+          collectionId: id,
+          kind: "external_link",
+          url: "https://fixture-links.dev/details",
+          position: 23,
+          tags: await itemTags(prisma, ["reference"]),
+        },
+      });
+      await prisma.linkMetadata.upsert({
+        where: { url: link.url as string },
+        create: {
+          url: link.url as string,
+          state: "ready",
+          fetchedAt: new Date(),
+          title: "A useful resource",
+          description: "Context for this saved link.",
+          siteName: "Reference library",
+        },
+        update: {
+          state: "ready",
+          fetchedAt: new Date(),
+          title: "A useful resource",
+          description: "Context for this saved link.",
+          siteName: "Reference library",
+        },
+      });
+      const shared = await request(app.getHttpServer())
+        .put(`/api/v1/collections/${id}/link-sharing`)
+        .auth(owner, { type: "bearer" })
+        .send({ enabled: true })
+        .expect(200);
+      const token = shared.body.data.token;
+      const first = await request(app.getHttpServer())
+        .get(`/api/v1/collections/${id}/resources`)
+        .query({ s: token })
+        .expect(200);
+      const cursor = first.body.meta.nextCursor;
+      const { page, close } = await freshPage(js);
+      try {
+        for (const base of [`/c/${id}`, `/@${handle}/${slug}`]) {
+          const query = new URLSearchParams({ s: token, cursor });
+          await ready(page, `${base}?${query}`);
+          const sectionGroup = page.locator(".resource-section");
+          const sectionToggle = sectionGroup.locator("summary").first();
+          const row = page.locator(`#item-${link.id}`);
+          const details = row.locator(".item-context");
+          await browserExpect(page.getByRole("dialog")).toHaveCount(0);
+          await browserExpect(details).not.toBeVisible();
+          await row.locator(".resource-meta").click();
+          await browserExpect(details).toBeVisible();
+          await row.locator(".resource-meta").click();
+          await browserExpect(details).not.toBeVisible();
+          await row.locator("summary").focus();
+          await page.keyboard.press("Enter");
+          await browserExpect(details).toContainText("Context for this saved link.");
+          await browserExpect(details).toBeVisible();
+          if (js) {
+            await details.locator(".description").evaluate((element) => {
+              const range = document.createRange();
+              range.selectNodeContents(element);
+              window.getSelection()?.removeAllRanges();
+              window.getSelection()?.addRange(range);
+              (element as HTMLElement).click();
+            });
+            await browserExpect(details).toBeVisible();
+            await page.evaluate(() => window.getSelection()?.removeAllRanges());
+            await details.locator(".description").click();
+            await browserExpect(details).not.toBeVisible();
+            await row.locator(".resource-meta").click();
+            await browserExpect(details).toBeVisible();
+            await row.locator(".resource-disclosure").click({ position: { x: 2, y: 2 } });
+            await browserExpect(details).not.toBeVisible();
+            await row.locator(".resource-meta").click();
+            await row.locator("h2 a").evaluate((element) =>
+              element.addEventListener("click", (event) => event.preventDefault(), {
+                once: true,
+              }),
+            );
+            await row.locator("h2 a").click();
+            await browserExpect(details).toBeVisible();
+          }
+          if (js)
+            await browserExpect
+              .poll(() => new URL(page.url()).searchParams.get("item"))
+              .toBe(link.id);
+          else expect(new URL(page.url()).searchParams.has("item")).toBe(false);
+          const destination = await details
+            .getByRole("link", { name: "Link to this item" })
+            .getAttribute("href");
+          const selected = new URL(destination ?? "", origin);
+          expect(decodeURIComponent(selected.pathname)).toBe(base);
+          expect(selected.searchParams.get("item")).toBe(link.id);
+          expect(selected.searchParams.get("s")).toBe(token);
+          expect(selected.searchParams.get("cursor")).toBe(cursor);
+          await sectionToggle.click();
+          await browserExpect(row).not.toBeVisible();
+          await browserExpect(
+            sectionGroup.getByText("Context stays visible when this section is collapsed."),
+          ).toBeVisible();
+          await sectionToggle.click();
+          if (js) await browserExpect(details).not.toBeVisible();
+          else await browserExpect(details).toBeVisible();
+          await browserExpect(
+            page.getByRole("button", { name: /^(Expand|Collapse)$/ }),
+          ).toHaveCount(0);
+          if (js) await row.locator(".resource-meta").click();
+          // Native exclusive disclosure groups keep exactly one item open.
+          const another = page.locator(`.resource-row:not(#item-${link.id})`).first();
+          await another.locator(".resource-meta").click();
+          await browserExpect(details).not.toBeVisible();
+          await browserExpect(page.locator(".resource-disclosure[open]")).toHaveCount(1);
+          if (js)
+            await browserExpect
+              .poll(() => new URL(page.url()).searchParams.get("item"))
+              .toBe((await another.getAttribute("id"))?.replace("item-", ""));
+          await row.locator(".resource-meta").click();
+          await browserExpect(another.locator(".item-context")).not.toBeVisible();
+          await details.getByRole("link", { name: "Link to this item" }).click();
+          await browserExpect(details).toBeVisible();
+          await page.reload();
+          await browserExpect(details).toBeVisible();
+          await browserExpect(sectionGroup.locator("details.section-disclosure")).toHaveAttribute(
+            "open",
+            "",
+          );
+          await row.locator("summary").focus();
+          await page.keyboard.press("Space");
+          await browserExpect(details).not.toBeVisible();
+          // A direct item URL still opens an item beyond the first page.
+          await page.goto(`${origin}${base}?s=${token}&item=${link.id}`);
+          await browserExpect(details).toBeVisible();
+          if (js) {
+            await browserExpect(row.locator("summary")).toBeInViewport();
+            expect(new URL(page.url()).searchParams.get("item")).toBe(link.id);
+          }
+          await browserExpect(
+            row.getByRole("link", { name: "A useful resource", exact: true }),
+          ).toHaveAttribute("referrerpolicy", "no-referrer");
+          for (const width of [1280, 390]) {
+            await page.setViewportSize({ width, height: 800 });
+            await page.emulateMedia({ colorScheme: width === 390 ? "dark" : "light" });
+            await page.screenshot({
+              path: `/tmp/item-details-${js}-${width}.png`,
+              animations: "disabled",
+            });
+            expect(await details.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+          }
+          if (js) {
+            await page.setViewportSize({ width: 1280, height: 800 });
+            await page.goto(`${origin}${base}?s=${token}&item=${link.id}`);
+            const chosen = page.locator(`.resource-row:not(#item-${link.id})`).first();
+            const chosenRowId = await chosen.getAttribute("id");
+            if (!chosenRowId) throw new Error("Selected item has no row ID");
+            const chosenId = chosenRowId.replace("item-", "");
+            await chosen.locator(".resource-meta").click();
+            await page.getByRole("link", { name: "More resources", exact: true }).click();
+            await browserExpect(page.locator(".linked-item")).toHaveCount(0);
+            await browserExpect(chosen.locator(".item-context")).toBeVisible();
+            await browserExpect(row.locator(".item-context")).not.toBeVisible();
+            expect(new URL(page.url()).searchParams.get("item")).toBe(chosenId);
+            const insidePageId = first.body.data[first.body.data.length - 1].id;
+            await page.goto(`${origin}${base}?s=${token}&item=${insidePageId}`);
+            const insidePage = page.locator(`#item-${insidePageId}`);
+            await browserExpect(insidePage.locator(".item-context")).toBeVisible();
+            // Wait for the header fold before judging the final scroll destination.
+            await browserExpect(page.locator(".collection-heading")).toHaveAttribute(
+              "data-folded",
+              "true",
+            );
+            await browserExpect
+              .poll(() =>
+                insidePage.locator("summary").evaluate((element) => {
+                  const body = element.closest(".sheet-body");
+                  if (!body) return false;
+                  const rect = element.getBoundingClientRect(),
+                    area = body.getBoundingClientRect();
+                  return (
+                    rect.top >= Math.max(0, area.top) &&
+                    rect.bottom <= Math.min(window.innerHeight, area.bottom)
+                  );
+                }),
+              )
+              .toBe(true);
+          }
+          await page.goto(`${origin}${base}?s=${token}&item=${crypto.randomUUID()}`);
+          await browserExpect(
+            page.getByRole("status").filter({ hasText: "Item unavailable" }),
+          ).toBeVisible();
+          await page.goto(`${origin}${base}?s=${token}&item=bad-id`);
+          await browserExpect(
+            page.getByRole("status").filter({ hasText: "Item unavailable" }),
+          ).toBeVisible();
+        }
+        await request(app.getHttpServer())
+          .put(`/api/v1/collections/${id}/link-sharing`)
+          .auth(owner, { type: "bearer" })
+          .send({ enabled: false })
+          .expect(200);
+        for (const base of [`/c/${id}`, `/@${handle}/${slug}`]) {
+          const destination = `${base}?s=${token}&item=${link.id}`;
+          await page.goto(origin + destination);
+          await browserExpect(page.getByRole("dialog")).toHaveCount(0);
+          await browserExpect(page.locator("body")).not.toContainText("A useful resource");
+          const signIn = await page
+            .locator(".feedback-actions")
+            .getByRole("link", { name: "Sign in", exact: true })
+            .getAttribute("href");
+          expect(new URL(signIn ?? "", origin).searchParams.get("returnTo")).toBe(destination);
+        }
+      } finally {
+        await close();
+      }
+    }, 60000);
+  }
+});
+
+it("preserves private sharing destinations and resumes access, link and transfer forms after session expiry, with and without JavaScript", async () => {
+  for (const js of [true, false]) {
+    await prisma.requestBudget.deleteMany();
+    const email = `resume-owner-${crypto.randomUUID()}@example.com`;
+    const signed = await signInHubOwner(app.getHttpServer(), { email, name: "Resume owner" });
+    const receiverEmail = `resume-receiver-${crypto.randomUUID()}@example.com`;
+    const receiver = await signInWithCode(app.getHttpServer(), { email: receiverEmail });
+    const id = (
+      await request(app.getHttpServer())
+        .post("/api/v1/collections")
+        .auth(signed.headers["set-auth-token"], { type: "bearer" })
+        .send({ title: "Resume sharing", slug: `resume-${crypto.randomUUID()}` })
+        .expect(201)
+    ).body.data.id as string;
+    const path = `/share?${new URLSearchParams({ kind: "collection", id, returnTo: `/c/${id}` })}`;
+    const { page, close } = await freshPage(js);
+    const verify = async () => {
+      await page.getByLabel("Email address").fill(email);
+      await page.getByRole("button", { name: "Send code", exact: true }).click();
+      await browserExpect(page.locator("h1")).toHaveText("Check your email");
+      await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+      await page.getByRole("button", { name: "Verify and continue" }).click();
+    };
+    const expire = async () => {
+      await prisma.requestBudget.deleteMany();
+      await prisma.session.updateMany({
+        where: { user: { email } },
+        data: { expiresAt: new Date(0) },
+      });
+    };
+    try {
+      await ready(page, path);
+      const signIn = page.locator('main a[href^="/sign-in?"]');
+      const destination = new URL(
+        (await signIn.getAttribute("href")) ?? "",
+        origin,
+      ).searchParams.get("returnTo");
+      expect(destination).toBe(path);
+      await signIn.click();
+      await verify();
+      await browserExpect(page.locator("h1")).toHaveText("Share collection");
+      await browserExpect(
+        page.getByRole("link", { name: "Back to collection", exact: true }),
+      ).toHaveAttribute("href", `/c/${id}`);
+
+      await page.getByLabel("Email", { exact: true }).fill(receiverEmail);
+      await page.locator('select[name="role"]').selectOption("contributor");
+      await expire();
+      await page.getByRole("button", { name: "Grant access", exact: true }).click();
+      await browserExpect(page.locator(".verify-reason")).toContainText(
+        "grant access to this collection",
+      );
+      await verify();
+      await browserExpect(page.locator("h1")).toHaveText("Share collection");
+      expect(
+        await prisma.collectionShare.findFirst({
+          where: { collectionId: id, userId: receiver.body.user.id },
+        }),
+      ).toMatchObject({ role: "contributor" });
+
+      let previousToken: string | null = null;
+      for (const label of ["Create share link", "Replace share link", "Turn off link access"]) {
+        await expire();
+        await page.getByRole("button", { name: label, exact: true }).click();
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to continue");
+        await verify();
+        await browserExpect(page.locator("h1")).toHaveText("Share collection");
+        const link = new URL(
+          await page.getByLabel("Collection link", { exact: true }).inputValue(),
+        );
+        if (label === "Turn off link access") {
+          expect(link.searchParams.get("s")).toBeNull();
+          await request(app.getHttpServer())
+            .get(`/api/v1/collections/${id}`)
+            .set("x-share-token", previousToken ?? "")
+            .expect(404);
+        } else {
+          const token = link.searchParams.get("s");
+          expect(token).toBeTruthy();
+          expect(token).not.toBe(previousToken);
+          await request(app.getHttpServer())
+            .get(`/api/v1/collections/${id}`)
+            .set("x-share-token", token ?? "")
+            .expect(200);
+          if (previousToken)
+            await request(app.getHttpServer())
+              .get(`/api/v1/collections/${id}`)
+              .set("x-share-token", previousToken)
+              .expect(404);
+          previousToken = token;
+        }
+        expect(
+          (await page.context().cookies()).some((cookie) => cookie.name === "pending_action"),
+        ).toBe(false);
+      }
+
+      await ready(page, `/c/${id}/actions?action=transfer`);
+      await page.getByLabel("New owner's email").fill(receiverEmail);
+      await expire();
+      await page.getByRole("button", { name: "Transfer ownership", exact: true }).click();
+      await browserExpect(page.locator(".verify-reason")).toContainText("transfer this collection");
+      await verify();
+      await browserExpect(page).toHaveURL(`${origin}/manage/collections?notice=done`);
+      const transferred = await prisma.collection.findUniqueOrThrow({
+        where: { id },
+        include: { hub: true },
+      });
+      expect(transferred.hub.ownerUserId).toBe(receiver.body.user.id);
+    } finally {
+      await close();
+    }
+  }
+}, 120000);
+
+it("binds resumed collection commands to their account and rechecks current authority", async () => {
+  for (const js of [true, false]) {
+    for (const switchAccount of [true, false]) {
+      await prisma.requestBudget.deleteMany();
+      const email = `pending-owner-${crypto.randomUUID()}@example.com`;
+      const nextEmail = `pending-next-${crypto.randomUUID()}@example.com`;
+      const next = await signInHubOwner(app.getHttpServer(), { email: nextEmail });
+      const { page, close } = await freshPage(js);
+      try {
+        await browserSignIn(page, email, "/settings");
+        await browserExpect(page.locator("h1")).toHaveText("Settings");
+        const person = await prisma.user.findUniqueOrThrow({ where: { email } });
+        const hub = await prisma.withAuthority(() => ensurePersonalHub(prisma, person.id));
+        const collection = await prisma.collection.create({
+          data: {
+            hubId: hub.id,
+            title: "Pending authority",
+            slug: `pending-${crypto.randomUUID()}`,
+          },
+        });
+        await ready(page, `/c/${collection.id}/actions?action=delete`);
+        await prisma.session.updateMany({
+          where: { userId: person.id },
+          data: { expiresAt: new Date(0) },
+        });
+        await page.getByRole("button", { name: "Delete collection", exact: true }).click();
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to continue");
+        // Ownership changes while the command is waiting. The new owner could
+        // delete it, but must never inherit the previous account's pending action.
+        const nextHub = await prisma.hub.findUniqueOrThrow({
+          where: { ownerUserId: next.body.user.id },
+        });
+        await prisma.collection.update({
+          where: { id: collection.id },
+          data: { hubId: nextHub.id },
+        });
+        const verifyingEmail = switchAccount ? nextEmail : email;
+        await page.getByLabel("Email address").fill(verifyingEmail);
+        await page.getByRole("button", { name: "Send code", exact: true }).click();
+        await browserExpect(page.locator("h1")).toHaveText("Check your email");
+        await page.getByLabel("Eight-digit code").fill(await capturedCode(verifyingEmail));
+        await page.getByRole("button", { name: "Verify and continue" }).click();
+        await browserExpect(page).toHaveURL(/\/manage\/collections(?:\?|$)/);
+        expect(await prisma.collection.count({ where: { id: collection.id } })).toBe(1);
+        expect(
+          (await page.context().cookies()).some((cookie) => cookie.name === "pending_action"),
+        ).toBe(false);
+        if (switchAccount) expect(new URL(page.url()).searchParams.has("notice")).toBe(false);
+        else expect(new URL(page.url()).searchParams.get("notice")).not.toBe("done");
+      } finally {
+        await close();
+      }
+    }
+  }
+}, 90000);
+
+it("offers checked shorter usernames without replacing a draft until chosen", async () => {
+  const { page, close } = await freshPage();
+  let release = () => {};
+  try {
+    const email = `short-name-${crypto.randomUUID()}@example.com`;
+    await browserSignIn(page, email, "/settings");
+    await browserExpect(page.locator("h1")).toHaveText("Settings");
+    const before = await prisma.user.findUniqueOrThrow({ where: { email } });
+    const input = page.getByLabel("Username", { exact: true });
+    await browserExpect(input).toHaveAttribute("maxlength", "255");
+    const long = "somethingverylongwhatwillyoudoaboutthat";
+    await input.fill(long);
+    const choice = page.getByRole("button", { name: /^Use / });
+    await browserExpect(choice).toHaveText(/^Use somethingverylo-[a-z0-9]{4}$/);
+    const first = (await choice.innerText()).slice(4);
+    await browserExpect(input).toHaveValue(long);
+    await browserExpect(page.locator("#username-status")).toContainText("3–20");
+    expect((await prisma.user.findUniqueOrThrow({ where: { email } })).username).toBe(
+      before.username,
+    );
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.screenshot({
+      path: "/tmp/username-suggestion-mobile.png",
+      fullPage: true,
+      animations: "disabled",
+    });
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.screenshot({
+      path: "/tmp/username-suggestion-desktop.png",
+      fullPage: true,
+      animations: "disabled",
+    });
+
+    // Checking is not reserving: a competing claim must still block acceptance.
+    await prisma.user.create({
+      data: {
+        name: "Competing claim",
+        email: `claim-${crypto.randomUUID()}@example.com`,
+        username: first.replaceAll("-", ""),
+      },
+    });
+    await choice.click();
+    await browserExpect(page.locator("#username-status")).toContainText("already in use");
+    expect((await prisma.user.findUniqueOrThrow({ where: { email } })).username).toBe(
+      before.username,
+    );
+    await input.fill(long);
+    await browserExpect(choice).toHaveText(/^Use somethingverylo-[a-z0-9]{4}$/);
+    await browserExpect(choice).not.toHaveText(`Use ${first}`);
+    const suggested = (await choice.innerText()).slice(4);
+    expect(suggested.length).toBeLessThanOrEqual(20);
+    await choice.click();
+    await browserExpect(input).toBeFocused();
+    await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
+    expect((await prisma.user.findUniqueOrThrow({ where: { email } })).username).toBe(suggested);
+
+    let started = () => {};
+    const checking = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const stale = "anotherverylongusernametocheck";
+    const route = `**/api/v1/profile/username-availability?username=${stale}`;
+    await page.route(route, async (request) => {
+      started();
+      await held;
+      await request.fulfill({
+        json: { data: { username: stale, status: "invalid", suggestion: "stale-name-a7k2" } },
+      });
+    });
+    await input.fill(stale);
+    await checking;
+    await input.fill("share");
+    await browserExpect(page.locator("#username-status")).toContainText("reserved");
+    release();
+    await browserExpect(choice).toHaveCount(0);
+    await browserExpect(input).toHaveValue("share");
+    await page.unroute(route);
+    await page.route("**/api/v1/profile/username-availability?*", (request) => request.abort());
+    await input.fill(long);
+    await browserExpect(page.locator("#username-status")).toContainText("couldn't");
+    await browserExpect(input).toHaveValue(long);
+    await browserExpect(choice).toHaveCount(0);
+    expect((await prisma.user.findUniqueOrThrow({ where: { email } })).username).toBe(suggested);
+  } finally {
+    release();
+    await close();
+  }
+}, 30000);
+
+it("adopts a hub created in another tab during a profile save while preserving newer edits", async () => {
+  for (const newerEdit of [false, true]) {
+    await prisma.requestBudget.deleteMany();
+    const email = `hub-settings-sync-${crypto.randomUUID()}@example.com`;
+    const { page, close } = await freshPage();
+    let release = () => {};
+    try {
+      await browserSignIn(page, email, "/settings");
+      const name = page.getByLabel("Full name", { exact: true });
+      await browserExpect(name).toBeVisible();
+      await browserExpect(
+        page.getByRole("button", { name: "Save changes", exact: true }),
+      ).toHaveCount(0);
+      let started = () => {};
+      const waiting = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await page.route("**/forms/profile-save", async (route) => {
+        started();
+        await held;
+        await route.continue();
+      });
+      await name.fill("Earlier profile name");
+      await waiting;
+      const otherTab = await page.context().newPage();
+      await ready(otherTab, "/hub");
+      await otherTab.getByRole("button", { name: "Create hub", exact: true }).click();
+      await browserExpect(otherTab).toHaveURL(/\/h\/[a-f0-9-]+$/);
+      const person = await prisma.user.findUniqueOrThrow({ where: { email } });
+      const hub = await prisma.hub.update({
+        where: { ownerUserId: person.id },
+        data: {
+          name: "Newly created hub",
+          handle: `sync-${crypto.randomUUID().slice(0, 8)}`,
+          description: "Created in another tab",
+          showOwner: false,
+        },
+      });
+      await otherTab.close();
+      if (newerEdit) await name.fill("Newer profile name");
+      release();
+      await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
+      await browserExpect(name).toHaveValue(
+        newerEdit ? "Newer profile name" : "Earlier profile name",
+      );
+      await settingsSection(page, "Hub");
+      await browserExpect(page.getByLabel("Hub name", { exact: true })).toHaveValue(hub.name);
+      await browserExpect(page.getByLabel("Handle", { exact: true })).toHaveValue(hub.handle);
+      await browserExpect(page.getByLabel("Description", { exact: true })).toHaveValue(
+        hub.description ?? "",
+      );
+      await browserExpect(
+        page.getByRole("switch", { name: "Show owner", exact: true }),
+      ).not.toBeChecked();
+      await browserExpect(page.locator(".hub-id")).toHaveText(hub.id);
+      await page.getByLabel("Hub name", { exact: true }).fill("Updated after mounting");
+      await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
+      const updated = await prisma.hub.findUniqueOrThrow({ where: { id: hub.id } });
+      expect(updated.name).toBe("Updated after mounting");
+      expect(updated.handle).toBe(hub.handle);
+      expect(updated.description).toBe(hub.description);
+      expect(updated.showOwner).toBe(false);
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: person.id } })).name).toBe(
+        newerEdit ? "Newer profile name" : "Earlier profile name",
+      );
+    } finally {
+      release();
+      await close();
+    }
+  }
+}, 60000);
+
+it("tracks copies and opens of newly created and repeatedly rotated collection links", async () => {
+  await prisma.requestBudget.deleteMany();
+  const email = `issued-copy-${crypto.randomUUID()}@example.com`;
+  const signed = await signInWithCode(app.getHttpServer(), { email, name: "Link owner" });
+  const created = await request(app.getHttpServer())
+    .post("/api/v1/collections")
+    .auth(signed.headers["set-auth-token"], { type: "bearer" })
+    .send({ title: "Issued link guide", slug: `issued-${crypto.randomUUID()}` })
+    .expect(201);
+  const id = created.body.data.id as string;
+  const { page, close } = await freshPage();
+  const recipient = await freshPage();
+  try {
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+    const path = `/share?kind=collection&id=${id}&returnTo=${encodeURIComponent(`/c/${id}`)}`;
+    await browserSignIn(page, email, path);
+    let previousToken: string | null = null;
+    let previousUrl = "";
+    for (let i = 0; i < 3; i++) {
+      if (i === 1) await ready(page, path);
+      await page
+        .getByRole("button", {
+          name: i === 0 ? "Create share link" : "Replace share link",
+          exact: true,
+        })
+        .click();
+      const field = page.getByLabel("Collection link", { exact: true }).last();
+      await browserExpect(field).toHaveValue(/\?s=/);
+      await browserExpect(field).not.toHaveValue(previousUrl);
+      const issued = new URL(await field.inputValue());
+      expect(issued.searchParams.get("s")).toBeTruthy();
+      expect(issued.searchParams.get("s")).not.toBe(previousToken);
+      expect(issued.searchParams.has("via")).toBe(false);
+      const copy = page.getByRole("button", { name: "Copy link", exact: true }).last();
+      await copy.click();
+      await browserExpect(field).toHaveValue(/via=/);
+      const tracked = await field.inputValue();
+      await browserExpect
+        .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+        .toBe(tracked);
+      const url = new URL(tracked);
+      expect(url.searchParams.get("s")).toBe(issued.searchParams.get("s"));
+      const shareId = url.searchParams.get("via") as string;
+      const entry = await prisma.shareEntry.findUniqueOrThrow({ where: { id: shareId } });
+      expect(entry.resourceId).toBe(id);
+      expect(entry.createdByUserId).toBe(signed.body.user.id);
+      expect(entry.context).toEqual({ destination: "copy_link" });
+      await copy.click();
+      expect(await prisma.shareEntry.count({ where: { resourceId: id } })).toBe(i + 1);
+      await recipient.page.goto(tracked);
+      await browserExpect(recipient.page.locator("h1")).toHaveText("Issued link guide");
+      await browserExpect
+        .poll(
+          async () =>
+            (await prisma.shareEntry.findUniqueOrThrow({ where: { id: shareId } })).openCount,
+        )
+        .toBe(1);
+      previousToken = issued.searchParams.get("s");
+      previousUrl = tracked;
+    }
+  } finally {
+    await close();
+    await recipient.close();
+  }
+}, 60000);
+
+describe("section authoring", () => {
+  for (const js of [true, false]) {
+    it(`creates sections, edits context and retains native disclosure behavior (${js})`, async () => {
+      const signed = await signInHubOwner(app.getHttpServer(), {
+        email: `section-author-${crypto.randomUUID()}@example.com`,
+        name: "Section author",
+      });
+      const token = signed.headers["set-auth-token"] as string;
+      const id = (
+        await request(app.getHttpServer())
+          .post("/api/v1/collections")
+          .auth(token, { type: "bearer" })
+          .send({ title: "A practical guide", slug: `sections-${crypto.randomUUID()}` })
+          .expect(201)
+      ).body.data.id as string;
+      await prisma.resource.createMany({
+        data: Array.from({ length: 24 }, (_, position) => ({
+          collectionId: id,
+          kind: "external_link",
+          url: `https://fixture-links.dev/guide-${position}`,
+          position,
+        })),
+      });
+      const first = await prisma.resource.findFirstOrThrow({
+        where: { collectionId: id },
+        orderBy: { position: "asc" },
+      });
+      const { page, close } = await freshPage(js);
+      try {
+        for (const raw of signed.headers["set-cookie"] as unknown as string[]) {
+          const [name, ...value] = raw.split(";")[0].split("=");
+          await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
+        }
+        await ready(page, `/c/${id}/sections`);
+        await page.getByLabel("Section heading", { exact: true }).fill("Start here");
+        await page
+          .getByLabel("Section description (optional)")
+          .fill("Read the introduction.\nThen choose a reference.");
+        await page.getByLabel("Start section at").selectOption(`${first.id}:1`);
+        // Simulate a change in another client while preserving the typed draft.
+        await request(app.getHttpServer())
+          .patch(`/api/v1/collections/${id}/resources/${first.id}`)
+          .auth(token, { type: "bearer" })
+          .send({ version: 1, tags: ["start"] })
+          .expect(200);
+        await page.getByRole("button", { name: "Create section", exact: true }).click();
+        await browserExpect(page.locator("main").getByRole("alert")).toContainText(
+          "changed elsewhere",
+        );
+        await browserExpect(page.getByLabel("Section heading", { exact: true })).toHaveValue(
+          "Start here",
+        );
+        await browserExpect(page.getByLabel("Section description (optional)")).toHaveValue(
+          "Read the introduction.\nThen choose a reference.",
+        );
+        await page.getByRole("button", { name: "Create section", exact: true }).click();
+        await browserExpect(page.locator("h1")).toHaveText("A practical guide");
+        const group = page.locator(".resource-section");
+        const description = group.locator(".section-description");
+        const row = page.locator(`#item-${first.id}`);
+        await browserExpect(description).toHaveText(
+          "Read the introduction.\nThen choose a reference.",
+        );
+        await group.locator("summary").first().click();
+        await browserExpect(row).not.toBeVisible();
+        await browserExpect(description).toBeVisible();
+        if (js) {
+          await page.getByRole("link", { name: "More resources", exact: true }).click();
+          await browserExpect(page.locator(".resource-row")).toHaveCount(24);
+          await browserExpect(group).toHaveCount(1);
+          await browserExpect(row).not.toBeVisible();
+          await group.locator("summary").first().click();
+          await browserExpect(row).toBeVisible();
+          await browserExpect(row.locator(".item-context")).not.toBeVisible();
+        } else {
+          await page.getByRole("link", { name: "More resources", exact: true }).click();
+          await browserExpect(page.locator(".resource-section")).toHaveCount(1);
+          await browserExpect(page.locator(".section-description")).toBeVisible();
+        }
+        await page
+          .locator(".collection-actions")
+          .getByRole("link", { name: "Edit", exact: true })
+          .click();
+        await page.getByRole("link", { name: "Edit section description", exact: true }).click();
+        await browserExpect(page.getByLabel("Section description (optional)")).toHaveAttribute(
+          "maxlength",
+          "500",
+        );
+        await page
+          .getByLabel("Section description (optional)")
+          .fill("Updated context for this guide.");
+        await page.getByRole("button", { name: "Save description", exact: true }).click();
+        await browserExpect(page.locator(".section-description")).toHaveText(
+          "Updated context for this guide.",
+        );
+        await browserExpect(page.getByRole("dialog")).toHaveCount(0);
+        for (const width of [1280, 390]) {
+          await page.setViewportSize({ width, height: 800 });
+          await page.emulateMedia({ colorScheme: width === 390 ? "dark" : "light" });
+          await page.screenshot({
+            path: `/tmp/sections-${js}-${width}.png`,
+            animations: "disabled",
+          });
+          expect(
+            await page.locator("body").evaluate((el) => el.scrollWidth <= window.innerWidth),
+          ).toBe(true);
+        }
+      } finally {
+        await close();
+      }
+    }, 60000);
+  }
+});
+
+describe("reorder", () => {
+  for (const js of [true, false]) {
+    it(`moves items with native controls and preserves expired-session commands (${js})`, async () => {
+      await prisma.requestBudget.deleteMany();
+      const email = `reorder-${crypto.randomUUID()}@example.com`;
+      const signed = await signInHubOwner(app.getHttpServer(), { email, name: "Reorder author" });
+      const token = signed.headers["set-auth-token"] as string;
+      const id = (
+        await request(app.getHttpServer())
+          .post("/api/v1/collections")
+          .auth(token, { type: "bearer" })
+          .send({ title: "Ordered guide", slug: `order-${crypto.randomUUID()}`, published: true })
+          .expect(201)
+      ).body.data.id as string;
+      await prisma.resource.createMany({
+        data: Array.from({ length: 22 }, (_, position) => ({
+          collectionId: id,
+          kind: "external_link",
+          url: `https://fixture-links.dev/ordered-${position}`,
+          position,
+        })),
+      });
+      const rows = () =>
+        prisma.resource.findMany({ where: { collectionId: id }, orderBy: { position: "asc" } });
+      const original = await rows();
+      const { page, close } = await freshPage(js);
+      try {
+        await ready(page, `/c/${id}`);
+        await browserExpect(page.getByRole("link", { name: "Reorder", exact: true })).toHaveCount(
+          0,
+        );
+        await browserExpect(
+          page.locator(".collection-actions").getByRole("link", { name: "Edit", exact: true }),
+        ).toHaveCount(0);
+        await browserSignIn(page, email, `/c/${id}`);
+        await browserExpect(page.locator(".collection-actions > a")).toHaveCount(2);
+        await browserExpect(page.getByRole("link", { name: "Reorder", exact: true })).toHaveCount(
+          0,
+        );
+        await browserExpect(
+          page.getByRole("link", { name: "Add section", exact: true }),
+        ).toHaveCount(0);
+        await page
+          .locator(".collection-actions")
+          .getByRole("link", { name: "Edit", exact: true })
+          .click();
+        await browserExpect(page.getByLabel("Collection name", { exact: true })).toBeVisible();
+        await browserExpect(
+          page.getByRole("link", { name: "Add a link", exact: true }),
+        ).toBeVisible();
+        for (const width of [1280, 390]) {
+          await page.setViewportSize({ width, height: 800 });
+          await page.screenshot({
+            path: `/tmp/collection-edit-${js}-${width}.png`,
+            fullPage: true,
+          });
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+        }
+        await page.setViewportSize({ width: 1280, height: 800 });
+        await page.getByRole("link", { name: "Reorder", exact: true }).click();
+        await browserExpect(page.locator("h1")).toHaveText("Reorder items");
+        await page
+          .locator(`#reorder-${original[1].id}`)
+          .getByRole("button", { name: "Move up", exact: true })
+          .click();
+        await browserExpect(page.getByRole("status")).toHaveText("Order saved.");
+        expect((await rows()).slice(0, 3).map((row) => row.id)).toEqual([
+          original[1].id,
+          original[0].id,
+          original[2].id,
+        ]);
+        if (js) {
+          await browserExpect(
+            page.locator(`#reorder-${original[2].id} .reorder-title`),
+          ).toHaveAttribute("draggable", "true");
+          await page.evaluate(() => window.scrollTo(0, 0));
+          await page
+            .locator(`#reorder-${original[2].id} .reorder-title`)
+            .dragTo(page.locator(`#reorder-${original[1].id}`));
+          await browserExpect.poll(async () => (await rows())[0].id).toBe(original[2].id);
+          await browserExpect(page.locator(".reorder-list > li").first()).toHaveAttribute(
+            "id",
+            `reorder-${original[2].id}`,
+          );
+        }
+        // Native moves can cross the visible page boundary without a partial reorder payload.
+        await page.getByRole("link", { name: "More items", exact: true }).click();
+        const boundary = (await rows())[20];
+        await page
+          .locator(`#reorder-${boundary.id}`)
+          .getByRole("button", { name: "Move up", exact: true })
+          .click();
+        await browserExpect(page.getByRole("status")).toHaveText("Order saved.");
+        expect((await rows())[19].id).toBe(boundary.id);
+        await page.getByRole("link", { name: "First items", exact: true }).click();
+        const current = await rows();
+        await prisma.session.updateMany({
+          where: { user: { email } },
+          data: { expiresAt: new Date(0) },
+        });
+        await page
+          .locator(`#reorder-${current[1].id}`)
+          .getByRole("button", { name: "Move up", exact: true })
+          .click();
+        await browserExpect(page.locator(".verify-reason")).toContainText("move this item");
+        await page.getByLabel("Email address").fill(email);
+        await page.getByRole("button", { name: "Send code", exact: true }).click();
+        await browserExpect(page.locator("h1")).toHaveText("Check your email");
+        await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+        await page.getByRole("button", { name: "Verify and continue" }).click();
+        await browserExpect(page.locator("h1")).toHaveText("Reorder items");
+        expect((await rows())[0].id).toBe(current[1].id);
+        // A stale form reports the conflict; it never silently reapplies the move.
+        const stale = (await rows())[1];
+        await prisma.resource.update({
+          where: { id: stale.id },
+          data: { version: { increment: 1 } },
+        });
+        await page
+          .locator(`#reorder-${stale.id}`)
+          .getByRole("button", { name: "Move up", exact: true })
+          .click();
+        await browserExpect(page.locator("main").getByRole("alert")).toContainText(
+          "changed elsewhere",
+        );
+        expect((await rows())[1].id).toBe(stale.id);
+        for (const width of [1280, 390]) {
+          await page.setViewportSize({ width, height: 800 });
+          await page.screenshot({ path: `/tmp/reorder-${js}-${width}.png` });
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+          ).toBe(true);
+        }
+      } finally {
+        await close();
+      }
+    }, 60000);
+  }
+});
+
+it("claims a permanent hub handle and deactivates/reactivates through native account forms", async () => {
+  for (const js of [true, false]) {
+    await prisma.requestBudget.deleteMany();
+    const email = `self-service-browser-${crypto.randomUUID()}@example.com`;
+    const { page, close } = await freshPage(js);
+    try {
+      await browserOwnerSettings(page, email);
+      await settingsSection(page, "Hub");
+      const chosen = `permanent-${crypto.randomUUID().slice(0, 8)}`;
+      await page.getByLabel("Handle", { exact: true }).fill(chosen);
+      if (js) await browserExpect(page.locator("#handle-status")).toHaveText("Available");
+      await page.getByLabel("I choose this permanent hub handle.").check();
+      if (js)
+        for (const width of [390, 768, 1280, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.screenshot({ path: `/tmp/handle-claim-${width}.png`, fullPage: true });
+        }
+      await page.getByRole("button", { name: "Claim handle", exact: true }).click();
+      await browserExpect(page.getByLabel("Handle", { exact: true })).toHaveAttribute(
+        "readonly",
+        "",
+      );
+      await ready(page, "/account?action=deactivate");
+      if (js)
+        for (const width of [390, 768, 1280, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.screenshot({ path: `/tmp/account-deactivate-${width}.png`, fullPage: true });
+        }
+      await page.getByRole("button", { name: "Send confirmation code" }).click();
+      await page.getByLabel("Verification code").fill("00000000");
+      await page.getByRole("button", { name: "Confirm: deactivate account" }).click();
+      await browserExpect(page.getByRole("alert")).toContainText("incorrect");
+      await page.getByLabel("Verification code").fill(await capturedCode(email));
+      await page.getByRole("button", { name: "Confirm: deactivate account" }).click();
+      await browserExpect(page.getByRole("status")).toContainText("deactivated");
+      const person = await prisma.user.findUniqueOrThrow({ where: { email } });
+      expect(person.accountState).toBe("inactive");
+      // Advance only this fixture's resend gap.
+      await prisma.$executeRaw`UPDATE request_budgets SET expires_at = clock_timestamp() WHERE key = ${emailKey(emailConfig().secret, "issue-gap", email)}`;
+      await page.getByRole("link", { name: "Reactivate account", exact: true }).click();
+      await page.getByLabel("Account email").fill(email);
+      await page.getByRole("button", { name: "Send confirmation code" }).click();
+      await page.getByLabel("Verification code").fill(await capturedCode(email));
+      await page.getByRole("button", { name: "Confirm: reactivate account" }).click();
+      await browserExpect(page.getByRole("status")).toContainText("active again");
+      expect((await prisma.user.findUniqueOrThrow({ where: { email } })).accountState).toBe(
+        "active",
+      );
+      expect(await prisma.session.count({ where: { userId: person.id } })).toBe(0);
+    } finally {
+      await close();
+    }
+  }
+}, 60000);
+
+it("rejects an account confirmation replaced by another tab", async () => {
+  await prisma.requestBudget.deleteMany();
+  const email = `account-tabs-${crypto.randomUUID()}@example.com`;
+  const { page, close } = await freshPage();
+  try {
+    await browserOwnerSettings(page, email);
+    await ready(page, "/account?action=deactivate");
+    await page.getByRole("button", { name: "Send confirmation code" }).click();
+    await browserExpect(page.getByLabel("Verification code")).toBeVisible();
+    await prisma.$executeRaw`UPDATE request_budgets SET expires_at = clock_timestamp() WHERE key = ${emailKey(emailConfig().secret, "issue-gap", email)}`;
+    const otherTab = await page.context().newPage();
+    await ready(otherTab, "/account?action=delete");
+    await otherTab.getByRole("button", { name: "Send confirmation code" }).click();
+    await browserExpect(otherTab.getByLabel("Verification code")).toBeVisible();
+    // Even a valid code from the newest email must not change the older form's action.
+    await page.getByLabel("Verification code").fill(await capturedCode(email));
+    await page.getByRole("button", { name: "Confirm: deactivate account" }).click();
+    await browserExpect(page.getByRole("alert")).toContainText("expired");
+    const account = await prisma.user.findUniqueOrThrow({ where: { email } });
+    expect(account.accountState).toBe("active");
+    expect(account.deletionScheduledFor).toBeNull();
+  } finally {
+    await close();
+  }
+}, 30000);

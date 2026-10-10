@@ -1,3 +1,4 @@
+import { type SignInCodePurpose, signInCodePurposes } from "@nslinkhub/types";
 import { emailOTP } from "better-auth/plugins";
 import { AppException, appError } from "../common/errors/app-exception";
 import { AUTHORITY_LOCK } from "../database/authority-context";
@@ -10,10 +11,12 @@ import {
   previewInvitation,
   verificationContext,
 } from "../operations/recipient";
+import { accountActionContext, completeAccountAction } from "./account-lifecycle";
 import { createAuth } from "./create-auth";
 import { bindHandoverProofs, bindProofIdentifiers, handoverIdentifiers } from "./handover-proofs";
 
 const basePath = "/api/v1/auth";
+const accountPaths = new Set(["/account/send", "/account/confirm"]);
 const codePaths = new Set([
   "/code/send",
   "/code/verify",
@@ -145,7 +148,10 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
       }
       if (
         request.method !== "POST" ||
-        (!codePaths.has(path) && !nativePaths.has(path) && !invitationPaths.has(path))
+        (!codePaths.has(path) &&
+          !nativePaths.has(path) &&
+          !invitationPaths.has(path) &&
+          !accountPaths.has(path))
       )
         return failure(404);
       const origin = request.headers.get("origin");
@@ -179,11 +185,51 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
               }))
             )
               return failure(401);
+            let lifecycle: Awaited<ReturnType<typeof accountActionContext>> | undefined;
+            if (accountPaths.has(path)) {
+              if (
+                Object.keys(body).some(
+                  (key) =>
+                    !["action", "email", ...(path.endsWith("confirm") ? ["code"] : [])].includes(
+                      key,
+                    ),
+                )
+              )
+                return failure(400);
+              if (
+                path.endsWith("confirm") &&
+                (typeof body.code !== "string" || !/^\d{8}$/.test(body.code))
+              )
+                return failure(400);
+              lifecycle = await accountActionContext(tx, secret, body, signedIn);
+              const sending = path.endsWith("send");
+              if (sending) {
+                const wait = await cooldown(
+                  tx,
+                  emailKey(secret, "issue-gap", lifecycle.address),
+                  resendGap,
+                );
+                if (wait) return coolingDown(wait);
+              }
+              if (
+                !(await budget(
+                  tx,
+                  emailKey(secret, sending ? "issue" : "verify", lifecycle.address),
+                  sending ? 5 : 15,
+                ))
+              )
+                return failure(429, "too_many_requests");
+              if (!lifecycle.account)
+                return sending
+                  ? Response.json({ success: true }, { headers: { "Cache-Control": "no-store" } })
+                  : failure(400);
+            }
             let deliveryFailed = false;
             let deliveryCount = 0;
             let target: string | undefined;
             let proofIdentifiers: ReturnType<typeof handoverIdentifiers> | undefined;
             let invitationIdentifier: string | undefined;
+            let emailPurpose: SignInCodePurpose = "sign-in";
             const localAuth = createAuth({
               prisma: tx,
               secret,
@@ -202,7 +248,7 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                         throw new Error("Missing workflow");
                       const identifier =
                         type === "sign-in"
-                          ? (invitationIdentifier ?? `sign-in-otp-${to}`)
+                          ? (lifecycle?.identifier ?? invitationIdentifier ?? `sign-in-otp-${to}`)
                           : type === "change-email"
                             ? proofIdentifiers?.next
                             : proofIdentifiers?.current;
@@ -220,6 +266,8 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                               ? "new-email"
                               : "current-email",
                         identifier,
+                        purpose:
+                          lifecycle?.action ?? (invitationIdentifier ? "invitation" : emailPurpose),
                         newEmail: target,
                       });
                       deliveryCount++;
@@ -295,13 +343,18 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
             if (codePaths.has(path)) {
               const allowed =
                 path === "/code/send"
-                  ? ["email"]
+                  ? ["email", "purpose"]
                   : path === "/code/verify"
                     ? ["email", "code", "name"]
                     : path === "/email-change/start"
                       ? ["newEmail"]
                       : ["code"];
               if (Object.keys(body).some((k) => !allowed.includes(k))) return failure(400);
+              if (path === "/code/send" && body.purpose !== undefined) {
+                if (!signInCodePurposes.some((purpose) => purpose === body.purpose))
+                  return failure(400);
+                emailPurpose = body.purpose as SignInCodePurpose;
+              }
               if (!issuing && (typeof body.code !== "string" || !/^\d{8}$/.test(body.code)))
                 return failure(400);
               if (
@@ -327,7 +380,7 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                   where: { email: address },
                   select: { accountState: true },
                 });
-                if (account?.accountState === "suspended") {
+                if (account && account.accountState !== "active") {
                   if (
                     !(await budget(
                       tx,
@@ -445,6 +498,19 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
               nativeBody = { email: acceptance.email, type: "sign-in" };
               expectedDelivery = true;
             }
+            if (lifecycle) {
+              bindProofIdentifiers(
+                await localAuth.$context,
+                new Map([[`sign-in-otp-${lifecycle.address}`, lifecycle.identifier]]),
+              );
+              expectedDelivery = path.endsWith("send");
+              nativePath = expectedDelivery
+                ? "/email-otp/send-verification-otp"
+                : "/sign-in/email-otp";
+              nativeBody = expectedDelivery
+                ? { email: lifecycle.address, type: "sign-in" }
+                : { email: lifecycle.address, otp: body.code };
+            }
             const headers = new Headers(request.headers);
             headers.set("content-type", "application/json");
             headers.delete("content-length");
@@ -461,6 +527,29 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
               response.status >= 500
             )
               throw new Error("Auth transaction failed");
+            if (lifecycle && path.endsWith("confirm")) {
+              if (!response.ok) {
+                await tx.auditLog.create({
+                  data: {
+                    category: "authentication",
+                    actorKind: signedIn ? "user" : "anonymous",
+                    actorUserId: signedIn?.user.id,
+                    targetUserId: lifecycle.account?.id,
+                    action: `account.${lifecycle.action}.confirm`,
+                    outcome: "rejected",
+                  },
+                });
+                return failure(response.status);
+              }
+              const verified = (await response.clone().json()) as { user?: { id?: string } };
+              if (verified.user?.id !== lifecycle.account?.id)
+                throw new Error("Account proof mismatch");
+              const result = await completeAccountAction(tx, secret, lifecycle);
+              await options.beforeCommit?.();
+              // The native proof endpoint issues a session; completion revokes it.
+              // Never expose that session token/cookie to the client.
+              return Response.json(result, { headers: { "Cache-Control": "no-store" } });
+            }
             if (response.ok && (path === "/code/verify" || verifyInvitation)) {
               const verified = (await response.clone().json()) as {
                 token?: string;
@@ -468,9 +557,16 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
               };
               if (!verified.token || !verified.user?.id)
                 throw new Error("Missing verified session");
+              const loggedInAt = new Date();
               await tx.session.updateMany({
                 where: { token: verified.token, userId: verified.user.id },
-                data: { verifiedAt: new Date() },
+                data: { verifiedAt: loggedInAt },
+              });
+              // Persist the completed sign-in, not session reads or refreshes.
+              // This rolls back with the session if invitation/commit work fails.
+              await tx.user.update({
+                where: { id: verified.user.id },
+                data: { lastLoginAt: loggedInAt },
               });
               userId = verified.user.id;
               if (verifyInvitation) await finishInvitation(tx, body.token, verified.user.id);
@@ -505,8 +601,9 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                   data: { operationsVersion: { increment: 1 } },
                 });
                 if (grants.count || admins.count)
-                  await tx.operatorAudit.create({
+                  await tx.auditLog.create({
                     data: {
+                      category: "operation",
                       actorKind: "user",
                       actorUserId: userId,
                       targetUserId: userId,
@@ -519,9 +616,12 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                 response.headers.delete("set-cookie");
                 response.headers.delete("set-auth-token");
               }
-              await tx.authAudit.create({
+              await tx.auditLog.create({
                 data: {
-                  userId,
+                  category: "authentication",
+                  actorKind: userId ? "user" : "anonymous",
+                  actorUserId: userId,
+                  targetUserId: userId,
                   action: path.slice(1).replaceAll("/", "."),
                   outcome: response.ok ? "success" : "rejected",
                 },

@@ -91,18 +91,6 @@ export function FreshDocument() {
     };
     window.addEventListener("keydown", cancelled);
     document.addEventListener("visibilitychange", visibility);
-    // The frame never scrolls as a document (only main and its panels do), but
-    // anchor jumps into nested scrollers can still shift it; put it back.
-    // Short viewports fall back to document scrolling and are left alone.
-    const pinFrame = () => {
-      if (
-        (window.scrollX || window.scrollY) &&
-        getComputedStyle(document.documentElement).overflowY === "hidden"
-      )
-        window.scrollTo(0, 0);
-    };
-    window.addEventListener("scroll", pinFrame, { passive: true });
-    pinFrame();
     return () => {
       clearTimeout(recovery);
       clearTimeout(pending);
@@ -112,7 +100,6 @@ export function FreshDocument() {
       window.removeEventListener("pagehide", hide);
       window.removeEventListener("pageshow", pageshow);
       document.removeEventListener("visibilitychange", visibility);
-      window.removeEventListener("scroll", pinFrame);
     };
   }, []);
   return (

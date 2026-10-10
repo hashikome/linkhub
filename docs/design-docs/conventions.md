@@ -14,7 +14,7 @@ one, because three layers meet here.
 - **Machine-token values → `lower_snake`.** Values that a client matches on
   programmatically — not prose — are lowercase snake tokens: error codes
   (`not_found`, `validation_failed`), resource kinds (`external_link`,
-  `collection_link`), share roles (`reader`, `editor`), share sources
+  `collection_link`), share roles (`viewer`, `contributor`), share sources
   (`direct`, `link`), export formats (`markdown`, `pdf`,
   `docx`). This is deliberately distinct from field keys and
   is the common convention (HTTP, OAuth, Stripe error codes).
@@ -26,12 +26,15 @@ one, because three layers meet here.
   that SQL and `psql` clean; the `@map` verbosity in `schema.prisma` is the
   one-time cost that buys it.
 
-The only real mistake is mixing key casing across endpoints. Keys are
-camelCase everywhere; hold the line.
+Application-owned keys remain camelCase. Recognized standard `utm_*` keys
+inside sharing attribution retain their conventional spelling; client-owned
+context keys are opaque JSON metadata.
 
 ## Response envelope
 
-- Success: `{ "data": ..., "meta"?: ... }`.
+- Success: `{ "data": ..., "meta"?: ..., "warnings"?: [...] }`.
+  Forgiving share-open metadata uses warnings with `code`, `field`, `message`;
+  warnings do not alter success status or imply a retry is needed.
 - Failure: `{ "error": { "code", "message", "requestId", "details" } }`.
 - Every response carries a server-generated `X-Request-Id` header.
 - Growth-prone lists paginate by opaque cursor: `meta: { limit, nextCursor }`.
@@ -68,7 +71,7 @@ Useful actionable codes include:
 | `handle_invalid`, `handle_reserved` | Correct the requested handle |
 | `duplicate_resource`, `position_conflict` | Resolve the existing resource/order |
 | `invalid_reorder`, `invalid_transfer` | Correct the operation |
-| `transfer_requires_editor` | Grant the recipient editor access first |
+| `transfer_requires_contributor` | Grant the recipient contributor access first |
 | `collection_not_published` | Saving requires publication |
 | `too_many_requests` | Respect Retry-After before another attempt |
 | `service_unavailable`, `dependencies_unavailable` | Show a retryable unavailable state |
@@ -96,6 +99,26 @@ adapter normalizes both protocols without changing raw handler/body-parser
 ordering.
 
 ## Wire-contract verification
+
+`@nslinkhub/types` owns shared wire shapes for both requests and responses.
+Web code constructing an API payload uses an imported request type (`satisfies`
+or a typed parameter), rather than a parallel local interface or an unchecked
+object. Local form state may have a different shape: strings, draft text and
+navigation context are adapted to a wire request at the HTTP boundary.
+
+Backend DTOs implement the matching request interfaces and retain all runtime
+decorators and validation. `apps/api/test/request-contracts.typecheck.ts` checks
+exact DTO field/type parity, including optional fields, during API typecheck.
+Adding an optional backend field must not silently leave the client contract
+behind. API-only features retain their contracts even before a web screen exists.
+
+These types describe messages, not authority. Only the API validates input,
+checks permissions, executes workflows and derives authoritative state. Clients
+consume returned capabilities and results. HTTP transport and untrusted native
+form adapters can accept `unknown`; do not assert that unvalidated input satisfies
+a request contract. In particular, share-open attribution/context must reach the
+API's forgiving parser so optional invalid metadata does not discard the event.
+Do not import Nest DTO classes or backend domain services into the web.
 
 Profile, collection, resource, share, shared/saved, hub-page, audit and status
 mappers compile against `@nslinkhub/types`. Dates become ISO strings explicitly

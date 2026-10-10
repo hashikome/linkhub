@@ -13,7 +13,7 @@ sessions; commit-pinned and freshness-enforced by `bun run verify`). Then:
 1. Read `PRODUCT.md` — the product definition (PRD): users, journeys,
    requirements, acceptance criteria, current state and open decisions.
 2. Read `ARCHITECTURE.md` — the system-architecture authority: the
-   Google-Drive individual model (one hub per user, independent collections),
+   Google-Drive individual model (at most one hub per user, independent collections),
    codemap, domain model, dependency rules and architectural invariants.
 3. For web work, read `DESIGN.md` (the visual system and tokens).
 4. Read the focused design for the area being changed
@@ -95,8 +95,8 @@ authoritative.
 
 ## Non-Negotiable Invariants
 
-- Database identities are immutable UUIDv7 values. Mutable human-facing values
-  (hub handles, display names, emails) never appear in authorization rules,
+- Database identities are immutable UUIDv7 values. Human-facing values
+  (person usernames, hub handles, display names, emails) never appear in authorization rules,
   foreign keys, or route contracts. Durable links use `hubId`, never the
   handle, so a handle rename never breaks a saved reference.
 - The backend owns authoritative business rules, validation, authorization,
@@ -110,11 +110,10 @@ authoritative.
   path (the SSO direction depends on this).
 - Every hub-owned query carries `hubId`; route IDs never prove access;
   collection access flows through the single policy service — Google-Drive
-  model: hub owner (full) → direct share (reader/editor) → active link →
-  published. One hub per user; no memberships, no roles beyond owner/reader/
-  editor in the implemented collection contract, no admin bypass. Accepted
-  direction: optional hubs and separate person usernames (ADR-0018), then
-  viewer/contributor role identifiers; see `PRODUCT.md` §11. Service-operator
+  model: hub owner (full) → direct share (viewer/contributor) → active link →
+  published. At most one hub per user; no memberships, no roles beyond owner/viewer/
+  contributor in the implemented collection contract, no admin bypass. Optional hubs
+  and person usernames are implemented (ADR-0018). See `PRODUCT.md` §11. Service-operator
   permissions are separate and never grant private-content access; see
   `docs/design-docs/service-operations.md`.
 - NestJS route order: literal routes are declared before parameter routes in

@@ -25,7 +25,17 @@ export default async function Page({
           </a>
         </div>
       ) : (
-        <ProfileEditor profile={result.data} notice={queryValue(query.notice)} />
+        <ProfileEditor
+          profile={result.data}
+          notice={queryValue(query.notice)}
+          section={
+            queryValue(query.section) === "hub"
+              ? "hub"
+              : queryValue(query.section) === "notifications"
+                ? "notifications"
+                : "profile"
+          }
+        />
       )}
     </section>
   );

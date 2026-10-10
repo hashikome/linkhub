@@ -108,9 +108,12 @@ describe("atomic private link capture", () => {
     expect(resourceIds).toHaveLength(2);
     const rows = await prisma.resource.findMany({
       where: { collectionId },
+      include: { tags: { include: { tag: true }, orderBy: { position: "asc" } } },
       orderBy: { position: "asc" },
     });
-    expect(rows.map((row) => [row.url, row.titleOverride, row.tags])).toEqual([
+    expect(
+      rows.map((row) => [row.url, row.titleOverride, row.tags.map(({ tag }) => tag.name)]),
+    ).toEqual([
       [urls[0], null, ["guide"]],
       [urls[1], null, ["video"]],
     ]);
@@ -150,12 +153,13 @@ describe("atomic private link capture", () => {
       })),
     }).expect(400);
   });
-  it("looks up link titles only for signed-in people and usable addresses", async () => {
+  it("validates usable public links before sign-in and still requires a session to save", async () => {
     const preview = (url: string) =>
       request(app.getHttpServer()).get(`/api/v1/link-preview?${new URLSearchParams({ url })}`);
-    await preview("https://fixture-links.dev/a").expect(401);
+    await preview("https://fixture-links.dev/a").expect(200);
+    await request(app.getHttpServer()).post("/api/v1/capture").send(input()).expect(401);
     for (const url of ["javascript:alert(1)", "https://user:pass@example.com", "not a url"])
-      await preview(url).auth(owner.token, { type: "bearer" }).expect(400);
+      await preview(url).expect(400);
     const ok = await preview("https://fixture-links.dev/a?utm_source=x")
       .auth(owner.token, { type: "bearer" })
       .expect(200);
@@ -171,8 +175,33 @@ describe("atomic private link capture", () => {
       "https://example.com/",
       "http://10.0.0.8/",
     ]) {
-      const refused = await preview(url).auth(owner.token, { type: "bearer" }).expect(400);
+      const refused = await preview(url).expect(400);
       expect(refused.body.error.code).toBe("link_not_public");
+    }
+  });
+  it("returns a stored title anonymously without creating an account and bounds public lookups", async () => {
+    const url = `https://fixture-links.dev/preview-${randomUUID()}`;
+    await prisma.linkMetadata.create({ data: { url, title: "A useful notebook", state: "ready" } });
+    const users = await prisma.user.count();
+    const hubs = await prisma.hub.count();
+    const titles = process.env.LINK_TITLES;
+    process.env.LINK_TITLES = "on";
+    try {
+      for (let n = 0; n < 30; n++) {
+        const path = n % 2 ? "/api/v1/link-preview" : "/API/v1/link-preview/";
+        const response = await request(app.getHttpServer()).get(path).query({ url }).expect(200);
+        expect(response.body.data).toEqual({ url, title: "A useful notebook", status: "found" });
+      }
+      const limited = await request(app.getHttpServer())
+        .get("/api/v1/link-preview/")
+        .query({ url })
+        .expect(429);
+      expect(Number(limited.headers["retry-after"])).toBeGreaterThan(0);
+      expect(await prisma.user.count()).toBe(users);
+      expect(await prisma.hub.count()).toBe(hubs);
+    } finally {
+      if (titles === undefined) delete process.env.LINK_TITLES;
+      else process.env.LINK_TITLES = titles;
     }
   });
   it("refuses links that only work locally or are examples", async () => {

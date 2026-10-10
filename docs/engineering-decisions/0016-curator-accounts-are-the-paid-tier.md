@@ -1,7 +1,11 @@
 # ADR-0016: Everyone's library is free; Curator accounts are the paid tier
 
-**Status:** accepted  
+**Status:** partially superseded by [ADR-0028](0028-free-public-curation-paid-private-sharing.md)
 **Date:** 2026-10-08
+
+ADR-0028 replaces the free-private-sharing guarantee and professional-only paid
+framing. The authorization, aggregate analytics and human-reviewed AI constraints
+below remain applicable. The original decision is preserved as history.
 
 ## Context
 

@@ -1,9 +1,13 @@
-import type { CursorMeta } from "@nslinkhub/types";
-import { isApiErrorCode } from "@nslinkhub/types";
+import type { ApiWarning, CursorMeta } from "@nslinkhub/types";
+import { isApiErrorCode, SHARE_ATTRIBUTION_KEYS } from "@nslinkhub/types";
+
+import { isUuid } from "./validation";
 
 export type ApiPath = `/api/v1/${string}`;
 export type Failure = { ok: false; code: string; status: number; retryAfter: number };
-export type Result<T> = { ok: true; data: T; meta?: CursorMeta } | Failure;
+export type Result<T> =
+  | { ok: true; data: T; meta?: CursorMeta; warnings?: ApiWarning[]; status?: number }
+  | Failure;
 
 export function failure(code = "unavailable", status = 0, retryAfter = 0): Failure {
   return { ok: false, code, status, retryAfter };
@@ -30,7 +34,11 @@ export async function submitForm<T>(
     });
     const payload = await response.json();
     if (response.ok && payload?.ok === true && "data" in payload)
-      return { ok: true, data: payload.data as T };
+      return {
+        ok: true,
+        data: payload.data as T,
+        ...(payload.warnings ? { warnings: payload.warnings } : {}),
+      };
     return failure(isApiErrorCode(payload?.code) ? payload.code : "unavailable", response.status);
   } catch {
     return failure(signal.aborted ? "request_timeout" : "unavailable");
@@ -136,7 +144,7 @@ export function sessionCookie(raw: string): string {
 export async function postJson<T>(
   url: string,
   body: unknown,
-  options: { headers: Headers; raw?: boolean; method?: "POST" | "PATCH" | "DELETE" },
+  options: { headers: Headers; raw?: boolean; method?: "POST" | "PATCH" | "DELETE" | "PUT" },
 ): Promise<Result<T> & { setCookies?: string[] }> {
   const signal = AbortSignal.timeout(8000);
   try {
@@ -161,6 +169,8 @@ export async function postJson<T>(
     return {
       ok: true,
       data: (options.raw ? payload : payload.data) as T,
+      status: response.status,
+      ...(Array.isArray(payload.warnings) ? { warnings: payload.warnings } : {}),
       setCookies: response.headers
         .getSetCookie()
         .filter((v) => /^(?:__Secure-)?better-auth\.session_token=/.test(v)),
@@ -195,13 +205,50 @@ export function safeReturn(value: unknown): string {
     const token = parsed.searchParams.get("s");
     const query = new URLSearchParams();
     if (token && /^[A-Za-z0-9_-]{1,512}$/.test(token)) query.set("s", token);
+    const shareId = parsed.searchParams.get("via");
+    if (shareId && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(shareId))
+      query.set("via", shareId);
+    const itemId = parsed.searchParams.get("item");
+    if (itemId && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(itemId))
+      query.set("item", itemId);
+    for (const key of SHARE_ATTRIBUTION_KEYS) {
+      const value = parsed.searchParams.get(key);
+      if (value && value.length <= 256) query.set(key, value);
+    }
     const composing = parsed.searchParams.get("compose") === "comment";
     if (composing) query.set("compose", "comment");
     return `${parsed.pathname}${query.size ? `?${query}` : ""}${composing ? "#comment-composer" : ""}`;
   }
+  if (/^\/c\/[a-f0-9-]{36}\/reorder$/.test(parsed.pathname)) return parsed.pathname;
+  if (/^\/c\/[a-f0-9-]{36}\/sections$/.test(parsed.pathname)) {
+    const section = parsed.searchParams.get("section");
+    return section && isUuid(section) ? `${parsed.pathname}?section=${section}` : parsed.pathname;
+  }
+  if (parsed.pathname === "/share") {
+    const params = parsed.searchParams;
+    if (["kind", "id", "s", "returnTo"].some((key) => params.getAll(key).length > 1)) return "/";
+    const kind = params.get("kind");
+    const id = params.get("id");
+    if (!kind || !["site", "profile", "hub", "collection"].includes(kind)) return "/";
+    if (kind === "site" ? id !== null : !id || !isUuid(id)) return "/";
+    const query = new URLSearchParams({ kind });
+    if (id) query.set("id", id);
+    const token = params.get("s");
+    if (kind === "collection" && token && /^[A-Za-z0-9_-]{1,512}$/.test(token))
+      query.set("s", token);
+    const back = params.get("returnTo");
+    if (back) query.set("returnTo", safeDocumentReturn(back));
+    return `/share?${query}`;
+  }
   if (/^\/capture\/[a-f0-9-]{36}$/.test(parsed.pathname)) return parsed.pathname;
+  if (parsed.pathname === "/settings") {
+    const section = parsed.searchParams.get("section");
+    return section === "hub" || section === "notifications"
+      ? `/settings?section=${section}`
+      : "/settings";
+  }
   if (
-    /^\/(?:hub|settings|notifications|discover|support|confirm|ops(?:\/(?:audit|team|collections|accounts\/[a-f0-9-]{36}|collections\/[a-f0-9-]{36}))?)$/.test(
+    /^\/(?:account|hub|settings|notifications|discover|support|confirm|manage(?:\/(?:analytics|audit|people|team|invitations|collections|accounts\/[a-f0-9-]{36}|collections\/[a-f0-9-]{36}))?)$/.test(
       parsed.pathname,
     )
   )

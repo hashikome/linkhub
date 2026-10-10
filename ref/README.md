@@ -24,3 +24,9 @@ Before completing an ExecPlan:
 3. Delete temporary references that are no longer useful.
 
 Completed ExecPlans must remain understandable without `ref/`.
+
+Keep at most one session handoff, `next-session.md`, containing only unfinished
+work and context needed to resume it. Completed work and verification evidence
+belong in the completed ExecPlan and changelog, not a growing handoff archive.
+Keep any still-needed original import input distinct from disposable scripts;
+do not delete it merely because an implementation session has ended.

@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, spyOn } from "bun:test";
+import { randomUUID } from "node:crypto";
 import http from "node:http";
 import { INestApplication } from "@nestjs/common";
 import { INTERCEPTORS_METADATA } from "@nestjs/common/constants";
@@ -44,8 +45,88 @@ describe("Imports (e2e)", () => {
     collectionId = (collection.body as { data: { id: string } }).data.id;
   });
 
+  beforeEach(async () => {
+    await app.get(PrismaService).requestBudget.deleteMany();
+  });
+
   afterAll(async () => {
     await app.close();
+  });
+
+  it("requires an existing hub for new-collection imports without creating one implicitly", async () => {
+    const db = app.get(PrismaService);
+    for (const kind of ["csv", "bookmarks-html"]) {
+      const person = await signInWithCode(app.getHttpServer(), {
+        email: `import-hubless-${randomUUID()}@example.com`,
+        name: "A reader",
+      });
+      const token = person.headers["set-auth-token"];
+      const id = person.body.user.id;
+      const slug = `import-${randomUUID()}`;
+      const url = `https://fixture-links.dev/${slug}`;
+      const text = kind === "csv" ? `url\n${url}` : `<A HREF="${url}">Link</A>`;
+      const upload = () =>
+        request(app.getHttpServer())
+          .post(`/api/v1/imports/${kind}`)
+          .auth(token, { type: "bearer" })
+          .field("createCollection", "true")
+          .field("collectionTitle", "Imported links")
+          .field("collectionSlug", slug)
+          .attach("file", Buffer.from(text), "import.txt");
+      const rejected = await upload().expect(400);
+      expect(rejected.body.error.code).toBe("hub_unavailable");
+      expect(await db.hub.count({ where: { ownerUserId: id } })).toBe(0);
+      expect(await db.collection.count({ where: { slug } })).toBe(0);
+      expect(await db.resource.count({ where: { url } })).toBe(0);
+      const hub = await request(app.getHttpServer())
+        .post("/api/v1/hubs")
+        .auth(token, { type: "bearer" })
+        .send({})
+        .expect(201);
+      expect((await upload().expect(201)).body.data.importedCount).toBe(1);
+      const collection = await db.collection.findFirstOrThrow({ where: { slug } });
+      expect(collection.hubId).toBe(hub.body.data.hubId);
+      expect(await db.hub.count({ where: { ownerUserId: id } })).toBe(1);
+    }
+  });
+
+  it("reserves existing-target imports for owners, even when contributors own a hub", async () => {
+    const db = app.get(PrismaService);
+    for (const role of ["contributor", "viewer"]) {
+      const email = `import-${role}-${randomUUID()}@example.com`;
+      const person = await signInWithCode(app.getHttpServer(), { email, name: "A collaborator" });
+      const token = person.headers["set-auth-token"];
+      const id = person.body.user.id;
+      await request(app.getHttpServer())
+        .post(`/api/v1/collections/${collectionId}/shares`)
+        .auth(bearer, { type: "bearer" })
+        .send({ email, role })
+        .expect(201);
+      for (const hasHub of [false, true]) {
+        if (hasHub)
+          await request(app.getHttpServer())
+            .post("/api/v1/hubs")
+            .auth(token, { type: "bearer" })
+            .send({})
+            .expect(201);
+        for (const kind of ["csv", "bookmarks-html"]) {
+          const url = `https://fixture-links.dev/denied-${randomUUID()}`;
+          const text = kind === "csv" ? `url\n${url}` : `<A HREF="${url}">Link</A>`;
+          await request(app.getHttpServer())
+            .post(`/api/v1/imports/${kind}`)
+            .auth(token, { type: "bearer" })
+            .field("targetCollectionId", collectionId)
+            .attach("file", Buffer.from(text), "import.txt")
+            .expect(403);
+          expect(await db.resource.count({ where: { url } })).toBe(0);
+        }
+        expect(await db.hub.count({ where: { ownerUserId: id } })).toBe(hasHub ? 1 : 0);
+      }
+      expect(
+        await db.auditLog.count({ where: { actorUserId: id, action: "items.imported" } }),
+      ).toBe(0);
+      await db.requestBudget.deleteMany();
+    }
   });
 
   it("imports a CSV and reports camelCase counts", async () => {

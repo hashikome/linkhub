@@ -1,21 +1,19 @@
 import { lookup } from "node:dns/promises";
-import { Controller, Get, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Query } from "@nestjs/common";
 import type { LinkPreview } from "@nslinkhub/types";
 import { appError } from "../../common/errors/app-exception";
-import { AuthGuard } from "../../common/guards/auth.guard";
 import { apiOk } from "../../common/utils/response.util";
 import { canonicalizeUrl, publicLinkUrl } from "../../common/utils/url.util";
 import { PrismaService } from "../../database/prisma.service";
 import { fetchPageMetadata, linkTitlesEnabled } from "./page-metadata";
 
 // Looks up a link's title before it is saved, so the save form can show it.
-// Signed-in only, never under the write lock, with its own small request
+// Available before sign-in, never under the write lock, with its own small request
 // budget ("lookup"). Stored metadata answers first; otherwise the page is
 // fetched (same SSRF guards as background lookups) and the result kept in the
 // shared metadata, so saving the link needs no second fetch. Disabled under
 // test unless LINK_TITLES=on.
 @Controller("api/v1/link-preview")
-@UseGuards(AuthGuard)
 export class LinkPreviewController {
   constructor(private readonly prisma: PrismaService) {}
 

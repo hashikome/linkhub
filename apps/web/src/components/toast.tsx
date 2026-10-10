@@ -33,35 +33,3 @@ export function Toast({ message, tone = "success" }: { message: string; tone?: T
     </div>
   );
 }
-
-export function showToast(message: string, tone: Tone = "success") {
-  window.dispatchEvent(new CustomEvent("app:toast", { detail: { message, tone } }));
-}
-
-// Client-side confirmations (for example "Link copied") use the same region.
-export function Toaster() {
-  const [toast, setToast] = useState<{ id: number; message: string; tone: Tone }>();
-  useEffect(() => {
-    let timer: number | undefined;
-    const show = (event: Event) => {
-      const { message, tone } = (event as CustomEvent<{ message: string; tone: Tone }>).detail;
-      window.clearTimeout(timer);
-      setToast({ id: Date.now(), message, tone });
-      timer = window.setTimeout(() => setToast(undefined), lifetime);
-    };
-    window.addEventListener("app:toast", show);
-    return () => {
-      window.removeEventListener("app:toast", show);
-      window.clearTimeout(timer);
-    };
-  }, []);
-  return (
-    <div className="toast-region" aria-live="polite">
-      {toast && (
-        <output key={toast.id} className={`toast ${toast.tone}`}>
-          {toast.message}
-        </output>
-      )}
-    </div>
-  );
-}

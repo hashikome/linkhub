@@ -1,3 +1,4 @@
+import type { UpdateResourceRequest } from "@nslinkhub/types";
 import {
   ArrayMaxSize,
   IsArray,
@@ -6,12 +7,18 @@ import {
   IsString,
   MaxLength,
   Min,
+  ValidateIf,
 } from "class-validator";
 
-// Only what people add to an item is editable (tags, position). What belongs
+// Only what people add to an item is editable (tags, position, section context). What belongs
 // to it — a link's address and resolved title, a reference's target, a
 // heading's text — is fixed: to change it, remove the item and add it again.
-export class UpdateResourceDto {
+export class UpdateResourceDto implements UpdateResourceRequest {
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+
   @IsOptional()
   @IsArray()
   @ArrayMaxSize(30)

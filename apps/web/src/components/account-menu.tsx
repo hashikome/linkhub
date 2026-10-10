@@ -3,23 +3,30 @@ import { useEffect, useRef, useState } from "react";
 import { Avatar } from "./avatar";
 export function AccountMenu({
   userId,
+  hubId,
+  username,
   name,
   email,
-  operator,
+  canManage,
   unreadNotifications,
 }: {
   userId: string;
+  hubId: string | null;
+  username: string;
   name: string;
   email: string;
-  operator: boolean;
+  canManage: boolean;
   unreadNotifications: number;
 }) {
   const menu = useRef<HTMLDetailsElement>(null);
   const [displayName, setDisplayName] = useState(name);
+  const [profileUsername, setProfileUsername] = useState(username);
   const [unread, setUnread] = useState(unreadNotifications);
   useEffect(() => {
     const updated = (event: Event) => {
-      const name = (event as CustomEvent<{ name?: string }>).detail?.name;
+      const { name, username } =
+        (event as CustomEvent<{ name?: string; username?: string }>).detail ?? {};
+      if (typeof username === "string") setProfileUsername(username);
       if (typeof name === "string") setDisplayName(name);
     };
     window.addEventListener("profile:updated", updated);
@@ -55,6 +62,8 @@ export function AccountMenu({
           <span>{email}</span>
         </div>
         <nav aria-label="Account navigation">
+          <a href={`/${encodeURIComponent(profileUsername)}`}>Profile</a>
+          <a href={hubId ? `/h/${hubId}` : "/hub"}>Hub</a>
           <a
             href="/notifications"
             className="notifications-link"
@@ -64,7 +73,7 @@ export function AccountMenu({
             {unread > 0 && <span className="notification-count">{unread}</span>}
           </a>
           <a href="/settings">Settings</a>
-          {operator && <a href="/ops">Service operations</a>}
+          {canManage && <a href="/manage">Manage</a>}
         </nav>
         <form action="/forms/sign-out" method="post">
           <button type="submit">Sign out</button>

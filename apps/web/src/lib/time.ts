@@ -46,3 +46,19 @@ export function shortTime(at: string, timeZone?: string, now = Date.now()) {
     timeZone,
   });
 }
+// Numeric ISO calendar date and 24-hour clock in the viewer's time zone.
+export function internationalTime(at: string, timeZone?: string) {
+  const parts = new Intl.DateTimeFormat("en-GB-u-ca-iso8601-nu-latn", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+    timeZone,
+  }).formatToParts(new Date(at));
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? "";
+  return `${value("year")}-${value("month")}-${value("day")} ${value("hour")}:${value("minute")}:${value("second")}`;
+}

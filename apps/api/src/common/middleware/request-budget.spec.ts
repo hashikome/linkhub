@@ -4,7 +4,12 @@ import type { Request, Response } from "express";
 import type { PrismaService } from "../../database/prisma.service";
 import { requestBudget, requestBudgetKey } from "./request-budget";
 
-it("attributes DELETE forms per signed visitor and rejects invalid or read-domain proofs", async () => {
+it.each([
+  "POST",
+  "PATCH",
+  "DELETE",
+  "PUT",
+])("attributes %s forms per signed visitor and rejects invalid or read-domain proofs", async (method) => {
   const secret = "test-budget",
     sourceSecret = "test-source",
     keys: string[] = [];
@@ -30,7 +35,7 @@ it("attributes DELETE forms per signed visitor and rejects invalid or read-domai
   for (const proof of proofs)
     await middleware(
       {
-        method: "DELETE",
+        method,
         path: "/api/v1/comments/example",
         ip: "127.0.0.1",
         get: (header: string) => (header === "x-web-form-source" ? proof : undefined),

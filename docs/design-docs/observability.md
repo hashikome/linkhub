@@ -1,5 +1,17 @@
 # Observability
 
+## Delivery status
+
+The API telemetry foundation below is implemented. A comprehensive wide event
+logging strategy is a separate deferred milestone, after most system operations
+are built ([PRODUCT.md §11](../../PRODUCT.md#11-delivery),
+[ADR-0020](../engineering-decisions/0020-logging-after-core-operations.md)).
+Future domain context, pseudonymous references and audit correlation described
+here are direction, not instructions to implement them during current feature
+work. Keep the existing privacy boundary and release verification requirements.
+Audit strategy/redesign has its own milestone after fundamental operations;
+external operational telemetry does not replace internal audit evidence.
+
 ## Direction
 
 Use one application telemetry pipeline:

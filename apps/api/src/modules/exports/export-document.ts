@@ -15,6 +15,7 @@ export interface ExportSection {
 export interface ExportHeading {
   kind: "heading";
   title: string;
+  description?: string;
 }
 export interface ExportNotice {
   kind: "notice";
@@ -57,9 +58,16 @@ export function exportLines(
     if (item.kind === "section") {
       lines.push({ kind: "heading", title: item.title, level: 2 });
       if (item.description) lines.push({ kind: "text", title: item.description });
-      for (const child of item.links)
+      for (const child of item.links) {
         lines.push(child.kind === "heading" ? { ...child, level: 3 } : child);
-    } else lines.push(item.kind === "heading" ? { ...item, level: 2 } : item);
+        if (child.kind === "heading" && child.description)
+          lines.push({ kind: "text", title: child.description });
+      }
+    } else {
+      lines.push(item.kind === "heading" ? { ...item, level: 2 } : item);
+      if (item.kind === "heading" && item.description)
+        lines.push({ kind: "text", title: item.description });
+    }
   }
   return lines;
 }

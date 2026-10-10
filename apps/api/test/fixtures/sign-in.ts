@@ -6,6 +6,7 @@ import { readSecret } from "../../src/config/secret";
 import { emailConfig } from "../../src/email/config";
 import { emailKey, unseal } from "../../src/email/outbox";
 import { PrismaClient } from "../../src/generated/prisma/client";
+import { ensurePersonalHub } from "../../src/modules/hubs/hub-onboarding";
 
 // Test-only capture inspection. Every fixture traverses the production HTTP
 // issuance and consumption paths; no minted or replaced proof/session records.
@@ -37,4 +38,12 @@ export async function signInWithCode(server: App, input: { email: string; name?:
     .post("/api/v1/auth/code/verify")
     .send({ ...input, code })
     .expect(200);
+}
+
+// Explicit fixture for scenarios that start with an existing publishing hub.
+// Ordinary sign-in stays hubless; identity/first-save suites use it directly.
+export async function signInHubOwner(server: App, input: { email: string; name?: string }) {
+  const response = await signInWithCode(server, input);
+  await prisma.$transaction((tx) => ensurePersonalHub(tx, response.body.user.id));
+  return response;
 }

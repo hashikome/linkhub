@@ -9,7 +9,6 @@ export interface SeedCollection {
   slug: string;
   title: string;
   description: string;
-  tags: string[];
   published: boolean;
   items: SeedItem[];
 }
@@ -28,7 +27,6 @@ export const seedCollections: SeedCollection[] = [
     title: "Thinking like an engineer",
     description:
       "Short reads on asking well, learning deliberately and deciding what matters. Start here before the technical guides.",
-    tags: ["career", "learning"],
     published: true,
     items: [
       ["h", "Asking well"],
@@ -78,7 +76,6 @@ export const seedCollections: SeedCollection[] = [
     title: "Developer reference shelf",
     description:
       "Free references and learning paths worth keeping a tab open for. No account needed for any of them.",
-    tags: ["reference", "free"],
     published: true,
     items: [
       ["h", "Learning paths"],
@@ -101,7 +98,6 @@ export const seedCollections: SeedCollection[] = [
     title: "Code style and conventions",
     description:
       "Linters, formatters and conventions by language, plus the repository habits that keep a codebase easy to work in.",
-    tags: ["style", "tooling"],
     published: true,
     items: [
       ["h", "Shell"],
@@ -140,7 +136,6 @@ export const seedCollections: SeedCollection[] = [
     title: "How the web reaches you",
     description:
       "From typing an address to a page arriving: DNS, servers, load balancing and HTTPS, in the order a request meets them.",
-    tags: ["infrastructure", "networking", "guide"],
     published: true,
     items: [
       [
@@ -202,7 +197,6 @@ export const seedCollections: SeedCollection[] = [
     title: "Backend building blocks",
     description:
       "Data stores, API design, caching and authentication: the pieces most backend work is assembled from.",
-    tags: ["backend", "guide"],
     published: true,
     items: [
       ["h", "Storing data"],
@@ -269,7 +263,6 @@ export const seedCollections: SeedCollection[] = [
     title: "Accessibility from the start",
     description:
       "Why accessibility is part of the work rather than a feature, how to check it, and who to keep reading.",
-    tags: ["accessibility", "frontend"],
     published: true,
     items: [
       ["h", "Why it matters"],

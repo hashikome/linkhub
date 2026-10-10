@@ -1,5 +1,6 @@
 import "server-only";
 import { webServerConfig } from "@nslinkhub/config/web-server";
+import { type AccountAction, accountActions } from "@nslinkhub/types";
 import { cookies } from "next/headers";
 import { serverCookie } from "./cookies";
 import { type ApiPath, postJson, safePath, sessionCookie } from "./http";
@@ -40,7 +41,7 @@ export function formPost<T>(
   path: ApiPath,
   body: unknown,
   raw = false,
-  method: "POST" | "PATCH" | "DELETE" = "POST",
+  method: "POST" | "PATCH" | "DELETE" | "PUT" = "POST",
 ) {
   const config = webServerConfig();
   const headers = new Headers({
@@ -79,4 +80,25 @@ export async function readInvitationFlow(): Promise<InvitationFlow | null> {
 }
 export function invitationCookie(value: string, maxAge = 600) {
   return serverCookie("invitation_flow", value, maxAge);
+}
+
+export function accountFlowCookie(action: AccountAction, email: string) {
+  const flow = {
+    email,
+    returnTo: "/account",
+    issued: Date.now(),
+    purpose: action,
+    accountFlowId: crypto.randomUUID(),
+  };
+  return serverCookie("account_flow", sealFlow(flow), 600);
+}
+export async function readAccountFlow() {
+  const flow = await readFlow("account_flow");
+  const id = (flow as (SignInFlow & { accountFlowId?: unknown }) | null)?.accountFlowId;
+  return flow &&
+    typeof id === "string" &&
+    /^[a-f0-9-]{36}$/.test(id) &&
+    accountActions.includes(flow.purpose as AccountAction)
+    ? { email: flow.email, action: flow.purpose as AccountAction, id }
+    : null;
 }

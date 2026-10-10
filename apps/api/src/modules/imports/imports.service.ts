@@ -178,8 +178,8 @@ export class ImportsService {
       if (!collection) {
         throw new NotFoundException("Target collection not found");
       }
-      // Importing is content write: hub members and direct-share editors.
-      await this.policy.requireWriteContent(collection, user);
+      // Bulk imports are owner management, not ordinary contribution.
+      await this.policy.requireManage(collection, user);
       return collection;
     }
 

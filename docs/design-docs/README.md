@@ -14,8 +14,7 @@ Each document distinguishes implemented contracts from planned behavior.
 - [tenancy-and-access.md](tenancy-and-access.md): the access model (owner →
   direct share → active link → published), service-operation restrictions,
   ownership transfer, publication and discovery.
-- [identity-and-handles.md](identity-and-handles.md): hub handles and names,
-  the account's name, code-first sign-in, email change and the web
+- [identity-and-handles.md](identity-and-handles.md): person usernames and profiles, hub handles and names, code-first sign-in, email change and the web
   URL scheme.
 - [collections-and-resources.md](collections-and-resources.md): item kinds and
   their API, link titles and public addresses, tags, and the Save a link
@@ -25,12 +24,12 @@ Each document distinguishes implemented contracts from planned behavior.
 - [email-verification.md](email-verification.md): the one verification flow and
   interrupted actions.
 - [attribution-and-activity.md](attribution-and-activity.md): activity
-  entries, creator, contributors, "added by" and the hub audit (API and History built; Manage planned).
-- [manage-workspace.md](manage-workspace.md): Manage — the hub owner’s workspace and blocking
-  (designed); the platform console is separate.
+  entries, creator, contributors, "added by" and the hub audit (API, History and Manage audit built).
+- [manage-workspace.md](manage-workspace.md): Manage — shared owner/operator/admin workspace; scoped sections and planned blocking
+  and invitation extensions.
 - [people-and-hubs.md](people-and-hubs.md): people (username) and their
   optional hub (name, @handle) as separate identities; `/username` and `/@handle`,
-  subscriptions, hub created on first save (designed; next to build).
+  hub created on first ownership (implemented); subscriptions remain planned.
 - [notifications.md](notifications.md): one inbox for every kind, scoped by
   role, with per-kind and per-hub settings (designed).
 - [hub-home-and-following.md](hub-home-and-following.md): the public hub page,
@@ -47,6 +46,8 @@ Each document distinguishes implemented contracts from planned behavior.
   envelope.
 
 ## Web
+
+- [sharing.md](sharing.md): one contextual Share page for profiles, hubs, collections and the site.
 
 - [web-product-experience.md](web-product-experience.md): journeys, copy
   direction, unavailable and dormant states.
@@ -72,3 +73,7 @@ Each document distinguishes implemented contracts from planned behavior.
 Foundation comparison and delivery history live in the
 [completed adoption record](../exec-plans/completed/foundation-adoption-decisions.md).
 Current release requirements live in the [release runbook](../runbooks/release.md).
+
+- [ai-curation.md](ai-curation.md): proposed document extraction and assisted organization through reviewed import drafts.
+
+- [link-health.md](link-health.md): planned paid monitoring, owner updates and approved redirect repairs.

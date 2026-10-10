@@ -304,7 +304,7 @@ try {
     "-d",
     "restored",
     "-Atc",
-    "SELECT count(*) FROM audit_records WHERE action = 'collection.published'",
+    "SELECT count(*) FROM audit_logs WHERE action = 'collection.published'",
   ]);
   if (restored.trim() !== "1") throw new Error("Restored audit fixture missing");
   console.log("Disposable backup and restore preserved the publication audit.");

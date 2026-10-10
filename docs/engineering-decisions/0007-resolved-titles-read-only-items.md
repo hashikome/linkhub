@@ -1,7 +1,13 @@
 # ADR-0007: Link titles are resolved, never typed; what belongs to an item is read-only
 
-**Status:** accepted  
+**Status:** accepted; editable context amended by [ADR-0027](0027-section-context-and-inline-details.md)
+
 **Date:** 2026-10-07
+
+[ADR-0029](0029-link-health-and-approved-redirects.md) also amends the immutable
+address rule for owner-approved redirect suggestions only (implementation pending).
+General PUT/PATCH address editing remains unavailable; the dedicated redirect
+approval requires a recorded explanatory note.
 
 ## Context
 
@@ -29,7 +35,7 @@ removed and added again. How titles are found:
 
 ## Constraints to preserve
 
-- Add/edit DTOs have no title field for links or references; edits accept tags and position only.
+- Add/edit DTOs have no title field for links or references; edits accept tags, position and heading-only descriptions (ADR-0027).
 - Resolved titles never block a save; lookups run after commit.
 - Imports resolve titles like every other save (ADR-0012).
 

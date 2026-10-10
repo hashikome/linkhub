@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export default async function Page() {
   const [session, pending] = await Promise.all([readSession(), readPendingAction()]);
   if (!session) redirect("/sign-in?notice=signin");
-  if (!pending) redirect("/ops");
+  if (!pending) redirect("/manage");
   return (
     <VerifyStart
       copy={verificationCopy("confirm", { action: pending.label })}

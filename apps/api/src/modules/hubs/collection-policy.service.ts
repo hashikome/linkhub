@@ -8,8 +8,8 @@ import { availableCollections } from "./availability";
 
 export interface CollectionAccess {
   canRead: boolean;
-  canWriteContent: boolean; // resources, tags, imports (owner or direct editor)
-  canManage: boolean; // publish, share, delete, settings (owner only)
+  canWriteContent: boolean; // resources, tags (owner or direct contributor)
+  canManage: boolean; // imports, publish, share, delete, settings (owner only)
   viaLinkToken: boolean; // access came from a presented share token
   isOwner: boolean; // the viewer owns the hub holding this collection
 }
@@ -75,7 +75,7 @@ export class CollectionPolicyService {
       });
       if (share?.source === "direct") {
         canRead = true;
-        canWriteContent = share.role === "editor";
+        canWriteContent = share.role === "contributor";
       } else if (share?.source === "link" && collection.linkSharingEnabled) {
         canRead = true;
       }
@@ -159,7 +159,7 @@ export class CollectionPolicyService {
       return;
     }
     await this.prisma.collectionShare.create({
-      data: { collectionId, userId, role: "reader", source: "link" },
+      data: { collectionId, userId, role: "viewer", source: "link" },
     });
   }
 }

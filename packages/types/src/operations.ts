@@ -10,12 +10,19 @@ export const operationReasons = [
 export type OperationReason = (typeof operationReasons)[number];
 export const operationActions = [
   "account.suspend",
+  "account.deactivate",
+  "account.delete",
+  "account.cancel_deletion",
   "account.reactivate",
   "sessions.revoke",
   "collection.hold",
   "collection.release",
 ] as const;
 export type OperationAction = (typeof operationActions)[number];
+export type AccountOperationAction = Exclude<
+  OperationAction,
+  "collection.hold" | "collection.release"
+>;
 export interface OperationCommand {
   action: OperationAction;
   targetId: string;
@@ -30,6 +37,8 @@ export interface OperationResult {
   version: number;
 }
 export interface SessionView {
+  hubId: string | null;
+  username: string;
   email: string;
   // Notifications newer than the last time the account opened Notifications.
   unreadNotifications: number;
@@ -41,15 +50,37 @@ export interface SessionView {
 export interface OperatorAccount {
   id: string;
   name: string;
+  username: string;
   email: string;
   emailVerified: boolean;
-  hub: { id: string; handle: string } | null;
+  /** Last completed sign-in; null for accounts without a recorded login. */
+  lastLoginAt: string | null;
+  hub: { id: string; handle: string; name: string } | null;
   createdAt: string;
-  state: "active" | "suspended";
+  state: "active" | "inactive" | "suspended";
+  deletionScheduledFor: string | null;
+  availableActions: AccountOperationAction[];
   version: number;
   sessions: number;
   operator: boolean;
   admin: boolean;
+}
+export interface OperatorAccountSession {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+  verifiedAt: string | null;
+  current: boolean;
+}
+export interface OperatorAccountDetail extends OperatorAccount {
+  bio: string | null;
+  image: string | null;
+  updatedAt: string;
+  suspensionReason: string | null;
+  suspendedAt: string | null;
+  /** Newest 100 unexpired sessions at sessionsAsOf; `sessions` is the total. */
+  activeSessions: OperatorAccountSession[];
+  sessionsAsOf: string;
 }
 export interface OperatorCollection {
   id: string;
@@ -60,26 +91,6 @@ export interface OperatorCollection {
   reason: OperationReason | null;
   updatedAt: string | null;
 }
-export interface OperatorAuditEntry {
-  id: string;
-  createdAt: string;
-  actorKind: "user" | "deployment" | "invitee";
-  actorUserId: string | null;
-  /** The actor's hub handle, when they have a hub. */
-  actorHandle: string | null;
-  authority: string | null;
-  targetUserId: string | null;
-  /** The target account's hub handle, when it has a hub. */
-  targetHandle: string | null;
-  collectionId: string | null;
-  invitationId: string | null;
-  action: string;
-  reason: OperationReason | null;
-  outcome: string;
-  beforeState: string | null;
-  afterState: string | null;
-}
-
 export interface ServiceInvitationView {
   id: string;
   role: "admin" | "operator";
@@ -124,7 +135,13 @@ export interface InvitationAcceptance {
 
 // Every action the operator audit records, grouped for the audit filter.
 export const operatorAuditActions = [
+  "admin.bootstrap_invited",
+  "admin.recovery_invited",
   "account.suspend",
+  "account.deactivate",
+  "account.delete",
+  "account.cancel_deletion",
+  "account.deleted",
   "account.reactivate",
   "sessions.revoke",
   "collection.hold",
@@ -144,6 +161,9 @@ export const operatorAuditActions = [
   "collection.inspect",
   "operators.list",
   "invitations.list",
+  "sharing.list",
+  "sharing.read",
+  "sharing.analytics",
   "audit.read",
   "access.denied",
   "action.denied",

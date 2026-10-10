@@ -63,7 +63,7 @@ describe("collection comments", () => {
   it("lets signed-in readers discuss a published collection; anyone can reply; contributors are labelled and mark answers", async () => {
     const id = await collection(true);
     await auth(request(server()).post(`/api/v1/collections/${id}/shares`), owner)
-      .send({ email: editor.email, role: "editor" })
+      .send({ email: editor.email, role: "contributor" })
       .expect(201);
 
     const anonymous = await threads(id);
@@ -91,7 +91,7 @@ describe("collection comments", () => {
     const editorReply = (
       await post(id, editor, { body: "Agreed.", parentId: question.id }).expect(201)
     ).body.data as CommentView;
-    expect(editorReply.author?.role).toBe("editor");
+    expect(editorReply.author?.role).toBe("contributor");
 
     // Replies are one level deep.
     await post(id, reader, { body: "nested", parentId: helper.id }).expect(400);
@@ -112,7 +112,7 @@ describe("collection comments", () => {
     await threads(id, stranger, undefined, 404);
     await post(id, stranger, { body: "hello" }).expect(404);
     await auth(request(server()).post(`/api/v1/collections/${id}/shares`), owner)
-      .send({ email: reader.email, role: "reader" })
+      .send({ email: reader.email, role: "viewer" })
       .expect(201);
     await post(id, reader, { body: "From a direct share" }).expect(201);
     const link = await auth(request(server()).put(`/api/v1/collections/${id}/link-sharing`), owner)

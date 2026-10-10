@@ -31,6 +31,28 @@ export const auditActions = [
 ] as const;
 export type AuditAction = (typeof auditActions)[number];
 
+/** Routine reads remain recorded, but may be excluded from the reading view. */
+export const auditReadActions = [
+  "audit.read",
+  "accounts.list",
+  "accounts.lookup",
+  "account.read",
+  "collections.list",
+  "collection.inspect",
+  "operators.list",
+  "invitations.list",
+  "sharing.list",
+  "sharing.read",
+  "sharing.analytics",
+] as const;
+
+/** Bounded state evidence, not arbitrary content snapshots. Null on older rows. */
+export interface AuditEffect {
+  beforeState: string;
+  afterState: string;
+  outcome: "success" | "no_change";
+}
+
 /** Actions that shape a collection's content: their actors are its contributors. */
 export const contentActions = [
   "collection.created",
@@ -44,18 +66,6 @@ export const contentActions = [
   "items.imported",
 ] as const satisfies readonly AuditAction[];
 
-export interface AuditEntry {
-  id: string;
-  hubId: string;
-  actorUserId: string;
-  collectionId: string | null;
-  targetUserId: string | null;
-  resourceId: string | null;
-  action: AuditAction;
-  role: "reader" | "editor" | null;
-  createdAt: IsoTimestamp;
-}
-
 // One change in a collection's history, as its contributors see it. `item` is
 // the item as it is now (null once removed); people appear as everywhere else.
 export interface ActivityEntry {
@@ -67,3 +77,36 @@ export interface ActivityEntry {
   item: { id: string; kind: import("./common.js").ResourceKind; title: string | null } | null;
   createdAt: IsoTimestamp;
 }
+
+/** The single management timeline; internal replay hashes are never exposed. */
+export interface AuditLogEntry {
+  id: string;
+  createdAt: IsoTimestamp;
+  actorKind: string;
+  actorUserId: string | null;
+  actorUsername: string | null;
+  authority: string | null;
+  hubId: string | null;
+  targetUserId: string | null;
+  targetUsername: string | null;
+  collectionId: string | null;
+  resourceId: string | null;
+  invitationId: string | null;
+  action: string;
+  role: string | null;
+  reason: string | null;
+  outcome: string | null;
+  beforeState: string | null;
+  afterState: string | null;
+}
+export const authenticationAuditActions = [
+  "account.deactivate.confirm",
+  "account.delete.confirm",
+  "account.reactivate.confirm",
+  "account.cancel_deletion.confirm",
+  "code.send",
+  "code.verify",
+  "email-change.start",
+  "email-change.confirm-current",
+  "email-change.confirm-new",
+] as const;

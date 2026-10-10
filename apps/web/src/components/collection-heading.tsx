@@ -11,7 +11,7 @@ export function CollectionHeading({ children }: { children: ReactNode }) {
     const body = sheet?.querySelector<HTMLElement>(".sheet-body");
     const overview = heading?.querySelector<HTMLElement>(".collection-overview");
     if (!heading || !sheet || !body || !overview) return;
-    const panel = window.matchMedia("(min-width: 640px) and (min-height: 600px)");
+    const panel = window.matchMedia("(min-width: 1024px) and (min-height: 600px)");
     let folded = false;
     let lastTop = body.scrollTop;
     let touchY: number | undefined;
@@ -76,7 +76,8 @@ export function CollectionHeading({ children }: { children: ReactNode }) {
     };
     const key = (event: KeyboardEvent) => {
       if (!(event.target instanceof HTMLElement) || !body.contains(event.target)) return;
-      if (event.target.closest("input, textarea, select, button, [contenteditable]")) return;
+      if (event.target.closest("input, textarea, select, button, summary, [contenteditable]"))
+        return;
       if (!panel.matches) return;
       if (event.key === "Home" && folded) {
         fold(false);
@@ -108,8 +109,12 @@ export function CollectionHeading({ children }: { children: ReactNode }) {
     const scroll = () => {
       if (!panel.matches || moving) return;
       const top = body.scrollTop;
-      if (!folded && top > 0) fold(true);
-      else if (folded && lastTop > 1 && top <= 1) fold(false);
+      if (!folded && top > 0) {
+        fold(true);
+        // Anchor/item reveals and scrollbar moves already chose a destination.
+        // Folding the introduction must not reset that destination to the top.
+        pendingScroll = top;
+      } else if (folded && lastTop > 1 && top <= 1) fold(false);
       else lastTop = top;
     };
     const resize = () => {

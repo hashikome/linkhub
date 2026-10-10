@@ -36,8 +36,8 @@ export function requestBudget(
   sourceSecret = readSecret("WEB_SOURCE_SECRET"),
 ): RequestHandler {
   return async (request, response, next) => {
-    // Express matches literal routes without case sensitivity by default.
-    const path = request.path.toLowerCase();
+    // Match Express route casing and optional trailing slashes when assigning budgets.
+    const path = request.path.toLowerCase().replace(/\/+$/, "");
     // Infrastructure probes must remain reachable during dependency outages.
     if (request.method === "GET" && ["/api/v1/health", "/api/v1/status"].includes(path))
       return next();
@@ -58,7 +58,7 @@ export function requestBudget(
       scope,
       (scope === "read" || scope === "lookup"
         ? verifiedWebReadSource(request.get("x-web-read-source"), sourceSecret)
-        : ["POST", "PATCH", "DELETE"].includes(request.method)
+        : ["POST", "PATCH", "DELETE", "PUT"].includes(request.method)
           ? verifiedWebReadSource(
               request.get("x-web-form-source"),
               sourceSecret,

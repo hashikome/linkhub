@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { relativeTime, shortTime } from "../lib/time";
+import { internationalTime, relativeTime, shortTime } from "../lib/time";
 
 type Variant = "datetime" | "date";
 const formats: Record<Variant, Intl.DateTimeFormatOptions> = {
@@ -18,17 +18,33 @@ const formats: Record<Variant, Intl.DateTimeFormatOptions> = {
 // Times in the viewer's own time zone. The server doesn't know it, so the
 // first paint (and no-JavaScript reading) shows UTC, labelled as such; the
 // browser then switches to local time.
-export function LocalTime({ at, variant = "datetime" }: { at: string; variant?: Variant }) {
+export function LocalTime({
+  at,
+  variant = "datetime",
+}: {
+  at: string;
+  variant?: Variant | "international";
+}) {
   const date = new Date(at);
   const [text, setText] = useState(() =>
-    date.toLocaleString("en-GB", { ...formats[variant], timeZone: "UTC" }),
+    variant === "international"
+      ? internationalTime(at, "UTC")
+      : date.toLocaleString("en-GB", { ...formats[variant], timeZone: "UTC" }),
   );
   // biome-ignore lint/correctness/useExhaustiveDependencies: Formatting depends only on `at`.
   useEffect(() => {
-    setText(date.toLocaleString(undefined, formats[variant]));
+    setText(
+      variant === "international"
+        ? internationalTime(at)
+        : date.toLocaleString(undefined, formats[variant]),
+    );
   }, [at, variant]);
   return (
-    <time dateTime={at} suppressHydrationWarning>
+    <time
+      dateTime={at}
+      title={variant === "international" ? at : undefined}
+      suppressHydrationWarning
+    >
       {text}
     </time>
   );

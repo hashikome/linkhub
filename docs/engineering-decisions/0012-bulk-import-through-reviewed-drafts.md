@@ -3,6 +3,10 @@
 **Status:** accepted  
 **Date:** 2026-10-08
 
+New destination visibility is amended by [ADR-0028](0028-free-public-curation-paid-private-sharing.md):
+public by default with a private choice before commit. Drafts remain private;
+bookmarks/CSV import remains free. This default is not yet implemented.
+
 ## Context
 
 Imports wrote every parsed row straight into one collection and reported
@@ -46,3 +50,14 @@ mapping and limits: [bulk-import.md](../design-docs/bulk-import.md).
 
 - [bulk-import.md](../design-docs/bulk-import.md)
 - [ADR-0007](0007-resolved-titles-read-only-items.md)
+
+
+## Owner-only import amendment — 2026-10-09
+
+Imports are owner management under the clarified
+[optional-hub boundary](0018-people-and-hubs-are-separate.md#import-and-bookmark-boundary-amendment--2026-10-09).
+This replaces contributor import access: the destination policy must require
+management authority, including when committing reviewed drafts. Imports require
+an existing personal hub and never create one implicitly; the future import
+page guides explicit creation. Ordinary contributions and account-owned
+collection bookmarks remain available without a hub.

@@ -7,8 +7,7 @@ import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
 import { signInWithCode } from "./fixtures/sign-in";
 
-// The Google-Drive identity model: one hub per user, a derived unique handle
-// (the mutable public identity) and a free-form display name; no username.
+// Account identity exists independently of an optional publishing hub.
 describe("Identity & profile (e2e)", () => {
   let app: INestApplication<App>;
   const sfx = Date.now().toString(36);
@@ -25,7 +24,7 @@ describe("Identity & profile (e2e)", () => {
         .set("Authorization", `Bearer ${bearer}`)
         .expect(200)
     ).body as {
-      data: { displayName: string; handle: string; hubId: string };
+      data: { displayName: string; username: string; handle: string | null; hubId: string | null };
     };
 
   beforeAll(async () => {
@@ -39,40 +38,42 @@ describe("Identity & profile (e2e)", () => {
     await app.close();
   });
 
-  it("gives each user one hub with a derived handle and a display name", async () => {
+  it("gives each user a derived username and no hub", async () => {
     const name = `Ada ${sfx}`;
     const bearer = await signUp(name, `ada_${sfx}@example.com`);
     const { data } = await profile(bearer);
 
     expect(data.displayName).toBe(name);
-    expect(data.hubId).toBeTruthy();
-    expect(data.handle).toMatch(/^ada-/);
+    expect(data.hubId).toBeNull();
+    expect(data.username).toMatch(/^ada-/);
+    expect(data.handle).toBeNull();
   });
 
-  it("derives distinct handles when two users share a name", async () => {
+  it("derives distinct usernames when two users share a name", async () => {
     const name = `Grace ${sfx}`;
     const a = await profile(await signUp(name, `grace1_${sfx}@example.com`));
     const b = await profile(await signUp(name, `grace2_${sfx}@example.com`));
-    expect(a.data.handle).not.toBe(b.data.handle);
+    expect(a.data.username).not.toBe(b.data.username);
   });
 
-  it("renames the handle and rejects reserved handles", async () => {
+  it("renames the username without creating a hub and rejects reserved usernames", async () => {
     const bearer = await signUp(`Linus ${sfx}`, `linus_${sfx}@example.com`);
     const newHandle = `renamed-${sfx}`;
 
     await request(app.getHttpServer())
       .patch("/api/v1/profile")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ handle: newHandle })
+      .send({ username: newHandle })
       .expect(200);
 
     const { data } = await profile(bearer);
-    expect(data.handle).toBe(newHandle);
+    expect(data.username).toBe(newHandle);
+    expect(data.hubId).toBeNull();
 
     await request(app.getHttpServer())
       .patch("/api/v1/profile")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ handle: "api" })
+      .send({ username: "api" })
       .expect(400);
   });
 

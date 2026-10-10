@@ -18,7 +18,7 @@ export async function invitationContext(
   const user = await tx.user.findUnique({ where: { email: invitation.email } });
   if (
     (invitation.inviteeUserId && invitation.inviteeUserId !== user?.id) ||
-    user?.accountState === "suspended"
+    (user && user.accountState !== "active")
   )
     throw appError("not_found");
   const sessionMatch = !!session && user?.id === session.user.id && user.emailVerified;
@@ -81,7 +81,7 @@ export async function acceptInvitation(
   // The token digest is stable for this issuance. Audit authority scopes retry
   // keys without exposing the raw token or requiring a not-yet-created user.
   const authority = `invitation:${row.id}`;
-  const replay = await tx.operatorAudit.findUnique({
+  const replay = await tx.auditLog.findUnique({
     where: { authority_operationId: { authority, operationId: body.operationId } },
   });
   if (replay) {
@@ -92,8 +92,9 @@ export async function acceptInvitation(
   if (body.action === "decline") {
     await cancelInvitations(tx, { id: row.id });
     await tx.serviceInvitation.update({ where: { id: row.id }, data: { state: "declined" } });
-    await tx.operatorAudit.create({
+    await tx.auditLog.create({
       data: {
+        category: "operation",
         actorKind: "invitee",
         actorUserId: user?.id,
         authority,
@@ -116,8 +117,9 @@ export async function acceptInvitation(
     where: { id: row.id },
     data: { state: "verifying", inviteeUserId: userId },
   });
-  await tx.operatorAudit.create({
+  await tx.auditLog.create({
     data: {
+      category: "operation",
       actorKind: "invitee",
       actorUserId: userId,
       authority,
@@ -194,8 +196,9 @@ export async function finishInvitation(
     where: { id: row.id },
     data: { state: "accepted", acceptedById: userId },
   });
-  await tx.operatorAudit.create({
+  await tx.auditLog.create({
     data: {
+      category: "operation",
       actorKind: "user",
       actorUserId: userId,
       invitationId: row.id,

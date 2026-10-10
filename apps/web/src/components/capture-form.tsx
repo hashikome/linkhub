@@ -62,7 +62,7 @@ export async function CaptureForm({
       <FormNotice code={queryValue(query.notice)} />
       <NativeForm action="/forms/capture-save">
         <input type="hidden" name="draftId" value={id} />
-        <CaptureLinks initial={draft?.links ?? []} lookup={profile.ok}>
+        <CaptureLinks initial={draft?.links ?? []}>
           {!profile.ok && (
             <p className="meta">
               Next, verify your email to save. No name or collection title needed.
@@ -119,8 +119,20 @@ export async function CaptureForm({
         </a>
       )}
       <p>
-        <a href={profile.ok ? `/h/${profile.data.hubId}` : "/discover"}>
-          {profile.ok ? "Back to your hub" : "Discover collections"}
+        <a
+          href={
+            profile.ok
+              ? profile.data.hubId
+                ? `/h/${profile.data.hubId}`
+                : `/${profile.data.username}`
+              : "/discover"
+          }
+        >
+          {profile.ok
+            ? profile.data.hubId
+              ? "Back to your hub"
+              : "Back to your profile"
+            : "Discover collections"}
         </a>
       </p>
     </section>

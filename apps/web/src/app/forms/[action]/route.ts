@@ -2,23 +2,35 @@ import { randomUUID } from "node:crypto";
 import { webServerConfig } from "@nslinkhub/config/web-server";
 import type {
   CaptureLink,
+  CreateCommentRequest,
+  CreatedShareEntry,
   InvitationAcceptance,
   OperationCommand,
   Profile,
+  SendSignInCodeRequest,
+  UpdateCommentRequest,
+  UpdateProfileRequest,
+  VerifySignInCodeRequest,
 } from "@nslinkhub/types";
 import {
+  accountActions,
   isPublicLinkHost,
   maxCaptureLinks,
   operationActions,
   operationReasons,
+  signInCodePurposes,
 } from "@nslinkhub/types";
+import { auditContinuation, auditQuery } from "../../../lib/audit-query";
 import type { CaptureDraft } from "../../../lib/capture-draft";
 import { draftCookie, draftRoom, readDraft, saveDraft } from "../../../lib/capture-server";
+import { serverCookie } from "../../../lib/cookies";
 import {
+  accountFlowCookie,
   flowCookie,
   formData,
   formPost,
   invitationCookie,
+  readAccountFlow,
   readFlow,
   readInvitationFlow,
   redirectResponse,
@@ -26,7 +38,7 @@ import {
   sealInvitationFlow,
 } from "../../../lib/form-server";
 import { type ApiPath, safeDocumentReturn, safeReturn, sessionCookie } from "../../../lib/http";
-import { sealSearch } from "../../../lib/ops-search";
+import { sealSearch } from "../../../lib/manage-search";
 import {
   accountFingerprint,
   lastAccountCookie,
@@ -35,6 +47,7 @@ import {
   readLastAccount,
   readPendingAction,
 } from "../../../lib/pending-action";
+import { serverRead } from "../../../lib/server-api";
 import { readSession } from "../../../lib/session";
 import { resendTiming } from "../../../lib/sign-in-flow";
 import { appearanceCookie } from "../../../lib/theme";
@@ -50,6 +63,90 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     return new Response("Unable to submit this form. Return to the page and try again.", {
       status: 403,
     });
+  }
+  if (action === "account-send" || action === "account-confirm") {
+    const flow = action === "account-confirm" ? await readAccountFlow() : null;
+    if (
+      action === "account-confirm" &&
+      (!flow || form.get("accountFlowId") !== flow.id || form.get("accountAction") !== flow.action)
+    )
+      return redirectResponse("/account?notice=expired");
+    const selected =
+      flow?.action ?? accountActions.find((value) => value === form.get("accountAction"));
+    if (!selected || (action === "account-confirm" && !flow))
+      return redirectResponse("/account?notice=expired");
+    const email = flow?.email ?? form.get("email")?.trim().toLowerCase() ?? "";
+    const result = await formPost(
+      request,
+      action === "account-send" ? "/api/v1/auth/account/send" : "/api/v1/auth/account/confirm",
+      {
+        action: selected,
+        email,
+        ...(action === "account-confirm"
+          ? { code: (form.get("code") ?? "").replace(/[\s-]/g, "") }
+          : {}),
+      },
+      true,
+    );
+    if (!result.ok)
+      return redirectResponse(
+        `/account?action=${selected}${flow ? "&step=verify" : ""}&notice=${result.status === 429 ? "limited" : result.status === 401 ? "signin-required" : result.status === 400 ? "invalid" : "unavailable"}`,
+      );
+    if (action === "account-send")
+      return redirectResponse(`/account?action=${selected}&step=verify`, [
+        accountFlowCookie(selected, email),
+      ]);
+    const expiredSessions = sessionCookie(request.headers.get("cookie") ?? "")
+      .split(";")
+      .filter(Boolean)
+      .map((cookie) => serverCookie(cookie.trim().split("=")[0], "", 0));
+    return redirectResponse(`/account?done=${selected}`, [
+      serverCookie("account_flow", "", 0),
+      lastAccountCookie(null),
+      pendingActionCookie(null),
+      ...expiredSessions,
+    ]);
+  }
+  if (action === "share-create" || action === "share-open") {
+    // This is untrusted form input, not a validated ShareRequest/ShareOpenRequest.
+    // Preserve optional metadata for the API's forgiving parser and warnings.
+    const shareId = form.get("shareId") ?? "";
+    if (action === "share-open" && !isUuid(shareId))
+      return Response.json({ ok: false, code: "validation_failed" }, { status: 400 });
+    const token = form.get("token");
+    const query = token ? `?${new URLSearchParams({ s: token })}` : "";
+    const target = { kind: form.get("kind"), ...(form.get("id") ? { id: form.get("id") } : {}) };
+    const result =
+      action === "share-create"
+        ? await formPost<CreatedShareEntry>(request, `/api/v1/share${query}`, {
+            ...target,
+            context: { destination: "copy_link" },
+            operationId: form.get("operationId"),
+          })
+        : await formPost(request, `/api/v1/share/${shareId}/opens${query}`, {
+            ...target,
+            eventId: form.get("eventId"),
+            occurredAt: form.get("occurredAt"),
+            attribution: optionalJson(form.get("attribution")),
+            context: optionalJson(form.get("context")),
+          });
+    return Response.json(result, {
+      status: result.ok ? (result.status ?? 200) : result.status || 503,
+      headers: { "Cache-Control": "private, no-store" },
+    });
+  }
+  if (action === "create-hub") {
+    const result = await formPost<{ hubId: string }>(request, "/api/v1/hubs", {});
+    if (result.ok) return redirectResponse(`/h/${result.data.hubId}`);
+    if (result.status === 401)
+      return resumeAfterSignIn({
+        path: "/api/v1/hubs",
+        body: {},
+        target: "/hub",
+        label: "create your hub",
+        issued: Date.now(),
+      });
+    return redirectResponse(`/hub?notice=${result.status === 429 ? "limited" : "unavailable"}`);
   }
   if (action === "capture-save") {
     const id = form.get("draftId") ?? "";
@@ -123,13 +220,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
       "comment-post": [
         `/api/v1/collections/${id}/comments${scoped}`,
         "POST",
-        { body, ...(isUuid(parentId) ? { parentId } : {}) },
+        { body, ...(isUuid(parentId) ? { parentId } : {}) } satisfies CreateCommentRequest,
         "comment-posted",
       ],
       "comment-edit": [
         `/api/v1/comments/${id}`,
         "PATCH",
-        { body, version: Number(form.get("version")) },
+        { body, version: Number(form.get("version")) } satisfies UpdateCommentRequest,
         "comment-saved",
       ],
       "comment-delete": [`/api/v1/comments/${id}`, "DELETE", {}, "comment-deleted"],
@@ -201,31 +298,39 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
   }
   if (action === "profile-save") {
     const json = request.headers.get("accept")?.includes("application/json");
+    const section = form.get("section") === "hub" ? "hub" : "profile";
+    const settingsPath = `/settings?section=${section}`;
     const displayName = form.get("displayName")?.trim() ?? "",
-      hubName = form.get("hubName")?.trim(),
-      handle = form.get("handle")?.trim().toLowerCase(),
-      hubDescription = form.get("hubDescription") ?? "",
-      showNameOnHub = form.get("showNameOnHub") === "on";
+      username = form.get("username")?.trim().toLowerCase() ?? "";
+    const hubFields = form.has("handle")
+      ? {
+          showOwner: form.get("showOwner") === "on",
+          hubName: form.get("hubName")?.trim() ?? "",
+          handle: form.get("handle")?.trim().toLowerCase() ?? "",
+          hubDescription: form.get("hubDescription") ?? "",
+        }
+      : {};
+    if (form.get("claimHandle") === "true" && form.get("confirmHandle") !== "on")
+      return redirectResponse("/settings?section=hub&notice=handle-confirmation-required");
+    const bio = form.get("bio") ?? "";
+    const body = {
+      displayName,
+      username,
+      bio,
+      ...hubFields,
+      ...(form.get("confirmHandle") === "on" ? { confirmHandle: true } : {}),
+    } satisfies UpdateProfileRequest;
     if (
-      !hubName ||
-      hubName.length > 255 ||
       displayName.length > 255 ||
-      !handle ||
-      !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(handle) ||
-      handle.length < 3 ||
-      handle.length > 60 ||
-      hubDescription.length > 5000
+      bio.length > 500 ||
+      !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(username) ||
+      username.length < 3 ||
+      username.length > 20
     )
       return json
         ? Response.json({ ok: false, code: "validation_failed", status: 400 }, { status: 400 })
-        : redirectResponse("/settings?notice=profile-invalid");
-    const result = await formPost<Profile>(
-      request,
-      "/api/v1/profile",
-      { displayName, hubName, handle, hubDescription, showNameOnHub },
-      false,
-      "PATCH",
-    );
+        : redirectResponse(`${settingsPath}&notice=profile-invalid`);
+    const result = await formPost<Profile>(request, "/api/v1/profile", body, false, "PATCH");
     if (json)
       return Response.json(result, {
         status: result.ok ? 200 : result.status || 503,
@@ -235,14 +340,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
       return resumeAfterSignIn({
         path: "/api/v1/profile",
         method: "PATCH",
-        body: { displayName, hubName, handle, hubDescription, showNameOnHub },
-        target: "/settings",
+        body,
+        target: settingsPath,
         success: "profile-saved",
         label: "save your profile",
         issued: Date.now(),
       });
     return redirectResponse(
-      `/settings?notice=${result.ok ? "profile-saved" : result.code === "handle_unavailable" ? "handle-unavailable" : result.code === "handle_reserved" || result.code === "handle_invalid" ? "handle-invalid" : result.status === 429 ? "limited" : "unavailable"}`,
+      `${settingsPath}&notice=${result.ok ? "profile-saved" : result.code === "username_unavailable" ? "username-unavailable" : result.code === "username_reserved" || result.code === "username_invalid" ? "username-invalid" : result.code === "handle_claimed" ? "handle-claimed" : result.code === "handle_confirmation_required" ? "handle-confirmation-required" : result.code === "handle_unavailable" ? "handle-unavailable" : result.code === "handle_reserved" || result.code === "handle_invalid" ? "handle-invalid" : result.status === 429 ? "limited" : "unavailable"}`,
     );
   }
   if (action === "invitation-open") {
@@ -284,7 +389,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
       flowCookie(
         sealFlow({
           email: result.data.email,
-          returnTo: "/ops",
+          returnTo: "/manage",
           invitationToken: flow.token,
           issued: Date.now(),
         }),
@@ -318,7 +423,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
       flowCookie(
         sealFlow({
           email: result.data.email,
-          returnTo: "/ops",
+          returnTo: "/manage",
           invitationToken: flow.token,
           issued: Date.now(),
         }),
@@ -328,7 +433,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
   if (action === "confirm-cancel") {
     // Drop the waiting action and go back to where it was started.
     const pending = await readPendingAction();
-    return redirectResponse(pending?.target ?? "/ops", [
+    return redirectResponse(pending?.target ?? "/manage", [
       pendingActionCookie(null),
       flowCookie("", 0),
     ]);
@@ -337,11 +442,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     // A signed-in person confirms it's them: the code goes to their own email.
     const [session, pending] = await Promise.all([readSession(), readPendingAction()]);
     if (!session) return redirectResponse("/sign-in?notice=signin");
-    if (!pending) return redirectResponse("/ops?notice=expired");
+    if (!pending) return redirectResponse("/manage?notice=expired");
     const result = await formPost(
       request,
       "/api/v1/auth/code/send",
-      { email: session.email },
+      { email: session.email, purpose: "confirm" } satisfies SendSignInCodeRequest,
       true,
     );
     const flow = {
@@ -361,12 +466,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     const returnTo = previous?.returnTo ?? safeReturn(form.get("returnTo"));
     if (!email || email.length > 254 || !/^\S+@\S+\.\S+$/.test(email))
       return redirectResponse("/sign-in?notice=invalid");
-    const result = await formPost(
-      request,
-      previous?.invitationToken ? "/api/v1/auth/invitations/resend" : "/api/v1/auth/code/send",
-      previous?.invitationToken ? { token: previous.invitationToken } : { email },
-      true,
-    );
     // The purpose comes from the situation, not the form: a waiting first link,
     // an interrupted action, or plain sign-in (worded by where it leads).
     const purpose: VerificationPurpose =
@@ -380,6 +479,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
             : form.get("purpose") === "continue"
               ? "continue"
               : "sign-in");
+    const result = await formPost(
+      request,
+      previous?.invitationToken ? "/api/v1/auth/invitations/resend" : "/api/v1/auth/code/send",
+      previous?.invitationToken
+        ? { token: previous.invitationToken }
+        : ({
+            email,
+            purpose: signInCodePurposes.find((value) => value === purpose),
+          } satisfies SendSignInCodeRequest),
+      true,
+    );
     // Cooldowns do not change the flow's actual issuance or extend its lifetime.
     const flow = {
       email,
@@ -402,7 +512,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     const result = await formPost(
       request,
       flow.invitationToken ? "/api/v1/auth/invitations/verify" : "/api/v1/auth/code/verify",
-      flow.invitationToken ? { token: flow.invitationToken, code } : { email: flow.email, code },
+      flow.invitationToken
+        ? { token: flow.invitationToken, code }
+        : ({ email: flow.email, code } satisfies VerifySignInCodeRequest),
       true,
     );
     if (!result.ok)
@@ -428,13 +540,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
         return redirectResponse(flow.returnTo, done);
       const headers = new Headers(request.headers);
       headers.set("cookie", verified);
-      const replay = await formPost(
+      const replay = await formPost<{ token?: string }>(
         new Request(request.url, { headers }),
         pending.path,
         pending.body,
         false,
         pending.method ?? "POST",
       );
+      if (replay.ok && pending.result === "collection-link" && replay.data?.token) {
+        const destination = new URL(pending.target, "http://local.invalid");
+        destination.searchParams.set("s", replay.data.token);
+        destination.searchParams.set("notice", "done");
+        return redirectResponse(destination.pathname + destination.search, done);
+      }
       const join = pending.target.includes("?") ? "&" : "?";
       const notice = replay.ok
         ? (pending.success ?? "done")
@@ -480,19 +598,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
         ])
       : redirectResponse("/sign-in?notice=signout-failed");
   }
-  if (action === "ops-search") {
-    // Accounts and audit searches: the free text is sealed, other filters stay
-    // readable. An empty search clears it.
-    const page = form.get("page") === "audit" ? "/ops/audit" : "/ops";
+  if (action === "manage-search") {
+    if (form.get("page") === "audit") {
+      const { filters } = auditQuery(Object.fromEntries(form));
+      filters.delete("cursor");
+      const result = await serverRead<unknown[]>(`/api/v1/manage/audit?${filters}`);
+      if (!result.ok) {
+        if (result.status === 401) return redirectResponse("/sign-in?returnTo=%2Fmanage%2Faudit");
+        return redirectResponse("/manage/audit?notice=filters-unavailable");
+      }
+      return redirectResponse(`/manage/audit?${auditContinuation(result.meta)}`);
+    }
+    // Account searches may include email; keep them sealed in the page URL.
     const query = new URLSearchParams();
     const text = (form.get("q") ?? "").trim().slice(0, 254);
     if (text) query.set("s", sealSearch(text));
-    if (page === "/ops/audit")
-      for (const key of ["action", "from", "to"]) {
-        const value = (form.get(key) ?? "").slice(0, 40);
-        if (value) query.set(key, value);
-      }
-    return redirectResponse(`${page}${query.size ? `?${query}` : ""}`);
+    return redirectResponse(`/manage${query.size ? `?${query}` : ""}`);
   }
   if (action === "invitation-create" || action === "invitation-action") {
     const id = form.get("id"),
@@ -503,9 +624,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
       (action === "invitation-action" &&
         (!isUuid(id ?? "") || !["resend", "cancel", "revoke"].includes(verb ?? "")))
     )
-      return redirectResponse("/ops/team?notice=invalid");
+      return redirectResponse(
+        `/manage/${verb === "revoke" ? "team" : "invitations"}?notice=invalid`,
+      );
     // Actions return to the page they were taken from (a table row or detail).
-    const target = opsReturn(form.get("returnTo"), "/ops/team");
+    const target = opsReturn(
+      form.get("returnTo"),
+      verb === "revoke" ? "/manage/team" : "/manage/invitations",
+    );
     const path =
       action === "invitation-create"
         ? "/api/v1/operations/operator-invitations"
@@ -538,23 +664,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     );
   }
   if (action === "operation") {
+    const selectedAction = operationActions.find((value) => value === form.get("action"));
+    const reason = operationReasons.find((value) => value === form.get("reason"));
+    const targetId = form.get("targetId") ?? "";
+    const operationId = form.get("operationId") ?? "";
+    if (!selectedAction || !reason || !isUuid(targetId) || !isUuid(operationId))
+      return redirectResponse("/manage?notice=invalid");
     const command = {
-      action: form.get("action"),
-      targetId: form.get("targetId"),
-      reason: form.get("reason"),
+      action: selectedAction,
+      targetId,
+      reason,
       version: Number(form.get("version")),
-      operationId: form.get("operationId"),
-    };
-    if (
-      !operationActions.includes(command.action as OperationCommand["action"]) ||
-      !operationReasons.includes(command.reason as OperationCommand["reason"]) ||
-      !isUuid(command.targetId ?? "") ||
-      !isUuid(command.operationId ?? "")
-    )
-      return redirectResponse("/ops?notice=invalid");
+      operationId,
+    } satisfies OperationCommand;
     const target = opsReturn(
       form.get("returnTo"),
-      `/ops/${command.action?.startsWith("collection.") ? "collections" : "accounts"}/${command.targetId}`,
+      `/manage/${command.action.startsWith("collection.") ? "collections" : "accounts"}/${command.targetId}`,
     );
     const result = await formPost(request, "/api/v1/operations/commands", command);
     if (!result.ok && result.code === "recent_auth_required")
@@ -562,7 +687,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
         path: "/api/v1/operations/commands",
         body: command,
         target,
-        label: operationLabels[command.action as OperationCommand["action"]],
+        label: operationLabels[command.action],
         issued: Date.now(),
       });
     if (!result.ok && result.status === 401)
@@ -570,7 +695,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
         path: "/api/v1/operations/commands",
         body: command,
         target,
-        label: operationLabels[command.action as OperationCommand["action"]],
+        label: operationLabels[command.action],
         issued: Date.now(),
       });
     return redirectResponse(
@@ -585,7 +710,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
 function opsReturn(value: string | null, fallback: string) {
   const path = safeReturn(value);
   const parsed = new URL(value ?? "", "http://local.invalid");
-  if (!path.startsWith("/ops") || parsed.pathname !== path) return fallback;
+  if (!path.startsWith("/manage") || parsed.pathname !== path) return fallback;
   const query = new URLSearchParams();
   for (const key of ["s", "cursor", "action", "from", "to"]) {
     const v = parsed.searchParams.get(key);
@@ -618,8 +743,21 @@ const commentLabels: Record<string, string> = {
 };
 const operationLabels: Record<OperationCommand["action"], string> = {
   "account.suspend": "suspend this account",
+  "account.deactivate": "deactivate this account",
+  "account.delete": "schedule deletion of this account",
+  "account.cancel_deletion": "cancel deletion of this account",
   "account.reactivate": "reactivate this account",
   "sessions.revoke": "sign this account out everywhere",
   "collection.hold": "hold this collection",
   "collection.release": "release this collection",
 };
+
+// Malformed optional metadata still reaches the API sanitizer and warning response.
+function optionalJson(value: string | null): unknown {
+  if (value === null) return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}

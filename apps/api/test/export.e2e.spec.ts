@@ -137,11 +137,16 @@ describe("Export (e2e)", () => {
   it("preserves ordered headings and bounds cyclic guide expansion in every format", async () => {
     const a = await createCollection(`guide-order-${sfx}`);
     const b = await createCollection(`topic-order-${sfx}`);
-    const heading = (id: string, title: string, position: number) =>
+    const heading = (id: string, title: string, first: { id: string; version: number }) =>
       request(app.getHttpServer())
         .post(`/api/v1/collections/${id}/resources/heading`)
         .auth(bearer, { type: "bearer" })
-        .send({ title, position })
+        .send({
+          title,
+          description: "Context for this section.",
+          firstItemId: first.id,
+          firstItemVersion: first.version,
+        })
         .expect(201);
     const reference = (source: string, target: string, position: number) =>
       request(app.getHttpServer())
@@ -149,17 +154,18 @@ describe("Export (e2e)", () => {
         .auth(bearer, { type: "bearer" })
         .send({ linkedCollectionId: target, position })
         .expect(201);
-    await heading(a, "Start here", 0);
-    await addLink(a, "https://fixture-links.dev/start", 1).expect(201);
+    const firstA = await addLink(a, "https://fixture-links.dev/start", 0).expect(201);
+    await heading(a, "Start here", firstA.body.data);
     await reference(a, b, 2);
-    await heading(b, "Practice", 0);
-    await addLink(b, "https://fixture-links.dev/practice", 1).expect(201);
+    const firstB = await addLink(b, "https://fixture-links.dev/practice", 0).expect(201);
+    await heading(b, "Practice", firstB.body.data);
     await reference(b, a, 2);
     await reference(a, a, 3);
     const md = (
       await exportAs({ format: "markdown", collectionIds: [a], expand: true }).expect(201)
     ).body.toString();
     expect(md).toContain("## Start here");
+    expect(md).toContain("Context for this section.");
     expect(md).toContain("### Practice");
     expect(md.indexOf("## Start here")).toBeLessThan(md.indexOf(`## topic-order-${sfx}`));
     expect(md.match(/\]\(<https:\/\/fixture-links.dev\/practice>\)/g)).toHaveLength(1);

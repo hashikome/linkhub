@@ -45,11 +45,9 @@ function sameKey(value: string) {
 // Without JavaScript this is a single plain row with comma-separated tags.
 export function CaptureLinks({
   initial,
-  lookup,
   children,
 }: {
   initial: CaptureLink[];
-  lookup: boolean;
   children?: React.ReactNode;
 }) {
   const next = useRef(initial.length || 1);
@@ -135,7 +133,6 @@ export function CaptureLinks({
 
   // Look up the title of each usable address once.
   useEffect(() => {
-    if (!lookup) return;
     const timer = setTimeout(() => {
       for (const row of rows) {
         const url = row.url.trim();
@@ -147,9 +144,12 @@ export function CaptureLinks({
         const signal = controller.signal;
         setLooking((current) => new Set(current).add(row.key));
         browserRead<LinkPreview>(`/api/v1/link-preview?${new URLSearchParams({ url })}`, signal)
+          .catch(() => null)
           .then((result) => {
-            if (!result.ok) return;
-            const { title, status } = result.data;
+            if (signal.aborted) return;
+            const { title, status } = result?.ok
+              ? result.data
+              : { title: null, status: "untitled" as const };
             setRows((current) =>
               current.map((r) =>
                 r.key === row.key && r.url.trim() === url
@@ -158,18 +158,19 @@ export function CaptureLinks({
               ),
             );
           })
-          .catch(() => undefined)
-          .finally(() =>
+          .finally(() => {
+            if (lookups.current.get(row.key) !== controller) return;
+            lookups.current.delete(row.key);
             setLooking((current) => {
               const copy = new Set(current);
               copy.delete(row.key);
               return copy;
-            }),
-          );
+            });
+          });
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [rows, lookup]);
+  }, [rows]);
 
   useEffect(() => {
     if (focusKey.current === null) return;

@@ -1,14 +1,12 @@
 "use client";
 import type { Collection } from "@nslinkhub/types";
 import { useActionState } from "react";
-import { TagInput } from "./tag-input";
 
 export type CollectionEditState = {
   error?: string;
   latest?: Collection;
   title: string;
   description: string;
-  tags: string;
   comments: boolean;
 };
 
@@ -27,7 +25,6 @@ export function CollectionEditForm({
     {
       title: collection.title,
       description: collection.description ?? "",
-      tags: collection.tags.join(", "),
       comments: collection.commentsEnabled,
     },
     `/c/${collection.id}/edit`,
@@ -69,7 +66,6 @@ export function CollectionEditForm({
       <p id="collection-description-help" className="field-help">
         Help people understand what's in this collection at a glance.
       </p>
-      <TagInput key={state.tags} id="collection-tags" initial={state.tags} />
       <label className="edit-toggle">
         <input type="checkbox" name="comments" defaultChecked={state.comments} />
         <span>

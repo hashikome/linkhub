@@ -7,6 +7,34 @@ Bulk import is Save a link at scale: the same rules for every link, a preview
 step to fix things before they land, and destinations that can span many
 collections.
 
+## Personal-library migration follow-up
+
+The user supplied a Markdown resource-library export for a future personal
+import. It combines heading levels, explanatory prose and ordered links. Keep
+the original input private and unchanged; use synthetic equivalents for tracked
+parser fixtures. A personal Markdown-to-CSV preparation step is separate from
+shipping a Markdown importer or the paid DOCX/AI workflow.
+
+Before importing, review the collection/section mapping, prose treatment,
+resource order, destinations and visibility. Sections are flat and their
+optional descriptions are bounded, so nested headings and long prose need an
+explicit mapping rather than silent truncation. Any reset/reseed or two-account
+test setup needs current confirmation of the intended accounts and ownership;
+old session notes are not permission to wipe development data.
+
+## Ownership prerequisite
+
+Imports are owner-only management actions. The person must already own a hub;
+imports never create one implicitly. The future import page prompts a hubless
+person to Create hub before uploading. Only collections owned by that hub may
+be destinations, including an existing target shared with other people.
+Contributors can edit items but cannot import, even if they own another hub.
+The API enforces ownership and target existence independently of client guidance.
+
+The current one-shot API accepts `targetCollectionId`, or `createCollection`
+with title and slug. It resolves the caller's hub; no `hubId` input is needed.
+Creating an import destination without a hub returns `hub_unavailable`.
+
 ## Journey
 
 1. **Start** (Manage › Import & export, `/manage/import-export`, also reached from Save a
@@ -54,13 +82,19 @@ tree. The structure choice:
   "Design › Typography".
 - **Split into collections**: each folder gets a destination —
   - a new collection named after the folder (default for top-level folders);
-  - an existing collection the person can edit;
+  - an existing collection the person owns;
   - a section in its parent folder's destination (default for subfolders);
   - skip (for leftovers such as "Other bookmarks").
 
 Links outside any folder, and pasted lists, go to one chosen collection. New
-collections are private. Changing a destination re-marks "Already saved" and
+collections default to public with an explicit private choice before commit
+(ADR-0028, rollout pending). Drafts stay private and existing destinations retain
+their visibility. The current one-shot API still creates private collections. Changing a destination re-marks "Already saved" and
 "Duplicate" rows for the new target.
+
+Create section headings only alongside at least one accepted item in the same
+commit. Skipped, duplicate or failed-only folders must not leave empty sections
+(ADR-0027). Preserve source locations in the draft for review.
 
 ## Limits
 
@@ -96,6 +130,14 @@ state, tag pills, destination picker.
 
 ## Paid or free
 
-Everyday import is free. Higher limits or professional bulk tools are candidates
-for Curator accounts; features and pricing remain open
-([monetization.md](monetization.md)).
+Bookmarks and CSV import are free (ADR-0028). File/job and abuse budgets remain
+operational limits, not a payment requirement for ordinary imports. AI curation
+and DOCX import are paid convenience features with separately enforced entitlements.
+
+## Document and AI follow-up
+
+[Document imports and assisted curation](ai-curation.md) extend this draft model
+with paid DOCX extraction, including exported Google Docs, and paid AI organization.
+They reuse ownership, validation and reviewed commit; they cannot commit publication
+without the owner's submission. Direct Google access and other document formats
+remain separate scope choices.

@@ -1,3 +1,4 @@
+import type { CaptureLink, CaptureRequest } from "@nslinkhub/types";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
@@ -14,7 +15,7 @@ import {
   ValidateNested,
 } from "class-validator";
 
-export class CaptureLinkDto {
+export class CaptureLinkDto implements CaptureLink {
   @IsUrl({
     require_protocol: true,
     protocols: ["http", "https"],
@@ -34,7 +35,7 @@ export class CaptureLinkDto {
   tags?: string[];
 }
 
-export class CaptureDto {
+export class CaptureDto implements CaptureRequest {
   @IsInt()
   @Min(1)
   startedAt: number;

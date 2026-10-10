@@ -13,7 +13,7 @@ import { hasValidHandleFormat, isReservedHandle } from "./handle";
 
 // Hub authority for the individual (Google-Drive) model: each user owns exactly
 // one hub — their personal space. Ownership is the only hub authority;
-// collection-level reader/editor sharing lives in CollectionPolicyService.
+// collection-level viewer/contributor sharing lives in CollectionPolicyService.
 @Injectable()
 export class HubsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -54,9 +54,10 @@ export class HubsService {
       where: { handle },
       select: { ownerUserId: true },
     });
+    const reserved = await this.prisma.hubHandleReservation.findUnique({ where: { handle } });
     return {
       handle,
-      status: !hub ? "available" : hub.ownerUserId === userId ? "current" : "taken",
+      status: hub?.ownerUserId === userId ? "current" : reserved ? "taken" : "available",
     };
   }
 
@@ -72,6 +73,16 @@ export class HubsService {
     });
   }
 
+  async updateShowOwner(userId: string, showOwner: boolean) {
+    const hub = await this.prisma.hub.findUnique({ where: { ownerUserId: userId } });
+    if (!hub) throw new NotFoundException("Hub not found");
+    if (hub.showOwner === showOwner) return;
+    await this.prisma.hub.update({
+      where: { id: hub.id, ownerUserId: userId },
+      data: { showOwner },
+    });
+  }
+
   async updateDescription(userId: string, rawDescription: string) {
     if (rawDescription.length > 5000) throw new BadRequestException("Invalid hub description");
     const description = rawDescription.trim() || null;
@@ -84,10 +95,9 @@ export class HubsService {
     });
   }
 
-  // Rename the caller's hub handle. The handle is the mutable public identity;
-  // durable links use the immutable hub id, so a rename never breaks a saved
-  // link or a published-content reference.
-  async updateHandle(userId: string, rawHandle: string) {
+  // Claim the caller's permanent hub handle. Generated handles are provisional;
+  // every issued spelling remains reserved even after deletion.
+  async updateHandle(userId: string, rawHandle: string, confirm = false) {
     const handle = rawHandle.trim().toLowerCase();
     if (!hasValidHandleFormat(handle)) {
       throw appError("handle_invalid");
@@ -98,23 +108,28 @@ export class HubsService {
 
     const hub = await this.prisma.hub.findUnique({
       where: { ownerUserId: userId },
-      select: { id: true, handle: true },
+      select: { id: true, handle: true, handleClaimedAt: true },
     });
     if (!hub) {
       throw new NotFoundException("Hub not found");
     }
 
-    if (hub.handle !== handle) {
-      const taken = await this.prisma.hub.findUnique({
+    if (hub.handle !== handle && hub.handleClaimedAt) throw appError("handle_claimed");
+    if (hub.handle !== handle && !confirm) throw appError("handle_confirmation_required");
+    if (hub.handle !== handle || (confirm && !hub.handleClaimedAt)) {
+      const taken = await this.prisma.hubHandleReservation.findUnique({
         where: { handle },
-        select: { id: true },
+        select: { hubId: true },
       });
-      if (taken) {
+      if (taken && taken.hubId !== hub.id) {
         throw appError("handle_unavailable");
       }
       try {
         await this.prisma.$transaction(async (tx) => {
-          await tx.hub.update({ where: { id: hub.id, ownerUserId: userId }, data: { handle } });
+          await tx.hub.update({
+            where: { id: hub.id, ownerUserId: userId },
+            data: { handle, handleClaimedAt: new Date() },
+          });
           await recordAudit(tx, {
             hubId: hub.id,
             actorUserId: userId,

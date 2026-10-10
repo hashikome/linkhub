@@ -24,7 +24,7 @@ contribute, are invited by email.
 
 A **person** (the account) has an **@username** and a name; a **hub** is their
 optional publishing space, with its own **name** and **@handle**. A person has
-at most one hub, created when they first save or curate, owned by them and
+at most one hub, created explicitly or when they first save a link or create a collection, owned by them and
 never transferred; the hub owns their collections and its subscribers.
 People act as themselves: they comment, contribute and are invited by email to
 view or contribute, with or without a hub. Others **subscribe to hubs**; people
@@ -56,3 +56,59 @@ data: [people-and-hubs.md](../design-docs/people-and-hubs.md).
 - [people-and-hubs.md](../design-docs/people-and-hubs.md)
 - [ADR-0001](0001-drive-tenancy-model.md), [ADR-0002](0002-immutable-identities.md),
   [ADR-0017](0017-hubs-are-entities-with-members.md)
+
+## Explicit creation amendment — 2026-10-08
+
+The product owner requested a quick Create hub button on a hubless person's
+own profile. A hub can therefore also be created explicitly before saving a
+collection. This amends the first-ownership-only creation timing; optionality,
+at-most-one ownership and no creation on profile/settings reads stay intact.
+
+## Public relationship amendment — 2026-10-08
+
+The visibility preference controls the public relationship, not profile-name
+visibility: `Hub.showOwner` defaults true. The hub owns this setting; no
+visibility preference is stored on User. This supersedes the user-level name
+visibility preference because disclosure describes the hub’s public relationship. Opt-out suppresses the profile's
+hub and the hub's owner reference/name in public responses. Self-service access
+and authorization remain unchanged. Profiles always show the person's name
+when set and username. Contributors remain ordinary contributors; deciding
+whether to expose a collection's contributor list is deferred.
+
+
+## Personal bio addition — 2026-10-08
+
+People may describe themselves with an optional public 500-character plain-text
+bio stored on User. It is edited in Profile settings, available without a hub,
+and independent of hub description and ownership visibility. This gives people
+their own introduction while preserving the separate identities above.
+
+
+## Import and bookmark boundary amendment — 2026-10-09
+
+The product owner clarified that saving (bookmarking) a collection belongs to
+the person, not their hub. Reading, bookmarks, viewer/contributor invitations,
+comments and contributions never create or require a personal hub.
+
+Imports are owner management. A new-collection import requires an existing
+personal hub and fails with `hub_unavailable` otherwise; it never creates one.
+Existing targets require collection ownership, not merely contribution access,
+even when the contributor owns another hub. This supersedes imports being
+classified as contributor content writes. Explicit Create hub and existing
+first-link, collection-creation and incoming-transfer workflows remain valid.
+
+Hub is always present in the account menu. For hubless people `/hub` offers an
+explicit Create hub action; GET never creates one. The future import page must
+prompt for explicit hub creation before accepting an import. Client guidance
+never replaces backend target and ownership checks. Settings adopts a newly
+created hub from returned profile data while preserving newer profile edits.
+
+
+## Amendment (2026-10-10)
+
+[ADR-0033](0033-permanent-hub-handles-and-self-service-accounts.md) makes explicitly
+claimed hub handles permanent and retains every issued handle after deletion.
+Person usernames remain freely editable. It also adds distinct self-service
+deactivation, recovery, deletion and cancellation alongside operator lifecycle
+controls. Its rules supersede conflicting handle-renaming/release and
+operator-only initiation statements above; UUID identity and authorization remain.

@@ -87,7 +87,7 @@ export class AdministrationService implements OnModuleInit {
   }
   private async replay(req: OperatorRequest, operationId: string, payload: unknown) {
     const hash = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
-    const previous = await this.prisma.operatorAudit.findUnique({
+    const previous = await this.prisma.auditLog.findUnique({
       where: { actorUserId_operationId: { actorUserId: req.user.userId, operationId } },
     });
     if (

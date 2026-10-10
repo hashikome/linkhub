@@ -48,7 +48,10 @@ await withTestDatabase(
   async ({ url }) => {
     Object.assign(env, { DATABASE_URL: url });
     await run(["bunx", "prisma", "migrate", "deploy"], resolve(root, "apps/api"));
-    await run(["bun", "test", "./test/browser/reading.browser.ts"], resolve(root, "apps/api"));
+    await run(
+      ["bun", "test", "./test/browser/reading.browser.ts", ...process.argv.slice(2)],
+      resolve(root, "apps/api"),
+    );
   },
   async () => {
     if (!child) return;

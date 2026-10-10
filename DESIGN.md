@@ -34,6 +34,7 @@ rounded:
 spacing:
   unit: "0.25rem"
   control-height: "2.375rem (2.75rem on coarse pointers)"
+  button-height: "2rem (2.75rem on coarse pointers)"
   shell-max: "70rem"
   reader-max: "48rem"
 ---
@@ -216,7 +217,7 @@ Body/muted/feedback pairs exceed 4.5:1; control boundaries exceed 3:1.
 | Page gutters | `1.25rem` below 640 px; `2rem` above |
 | Shell maximum | `70rem` |
 | Reader maximum | `48rem`; descriptions max `70ch` |
-| Control height | `--control`: `2.375rem` (38 px) for fine pointers, `2.75rem` (44 px) under `pointer: coarse`; every button, field and header control uses it. Buttons are `0.9375rem`, weight 550 |
+| Control height | Fields and header utility controls use `--control`: `2.375rem` (38 px). Primary, secondary and text buttons use `--button-control`: `2rem` (32 px), `0.875rem` text, weight 500, and `0.25rem 0.625rem` padding. Both tokens become `2.75rem` (44 px) under `pointer: coarse`. Filled/outlined contrast and focus states are retained |
 | Control radius | `0.5rem` |
 | Panel radius | `0.75rem`; list rows do not need enclosing panels |
 | Tags | `0.375rem` radius, 1px divider outline, muted `0.8125rem` text; not interactive. Resource tags sit inline after the hostname |
@@ -235,11 +236,15 @@ menu popup and the landing example sheet.
 
 ## Components
 
-The header separates the left wordmark from Explore and the avatar-only account menu on the right. The menu groups Profile,
-Notifications (with an unread count), Settings and role-gated Service operations above
+The header separates the left wordmark from Explore and the avatar-only account menu on the right. The menu groups Profile, Hub (when owned),
+Notifications (with an unread count), Settings and role-gated Manage above
 Sign out. The footer stacks “© <current year> nslinkhub” above the smaller, muted
-“an ns series product” line on the left, with a muted Discover · Support link row
-on the right (wrapping below on phones); no status link or appearance controls. Generated geometric SVGs
+"an ns series product" line on the left, with a muted, vertically centered Support
+link on the right at the same font size as header navigation (wrapping below on
+phones). The footer sits at the viewport bottom on short pages and follows
+content at the end of long pages; it never stays pinned during document scrolling.
+Sharing UI is deferred; there is no footer Discover
+link, status link or appearance control. Generated geometric SVGs
 come from the API, seeded by immutable user UUID. The approved avatar palette
 and grid geometry stay fixed in both themes; no external provider is involved.
 

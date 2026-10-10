@@ -10,6 +10,7 @@ walk the [onboarding guide](guides/developer-onboarding-walkthrough.md) first.
 
 | Space | Use it for |
 | --- | --- |
+| [backlog/curation-and-paid-services.md](backlog/curation-and-paid-services.md) | Accepted curation and paid-service direction awaiting implementation |
 | [design-docs/](design-docs/README.md) | Focused current designs: domain, web, platform and delivery |
 | [engineering-decisions/](engineering-decisions/README.md) | Settled foundations and their rationale; binding until superseded |
 | [exec-plans/](exec-plans/README.md) | Active ExecPlans, completed plans and the tech-debt tracker |

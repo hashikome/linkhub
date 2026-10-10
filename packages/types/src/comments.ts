@@ -1,10 +1,8 @@
 import type { IsoTimestamp, PersonRef } from "./envelope.js";
 
-// Who wrote a comment: the universal person reference (name only when the
-// author shows it) plus a role marking the collection's owner or an editor.
+// Who wrote a comment: the person reference plus their collection role.
 export interface CommentAuthor extends PersonRef {
-  id: string;
-  role: "owner" | "editor" | null;
+  role: "owner" | "contributor" | null;
 }
 
 export interface CommentView {
@@ -13,7 +11,7 @@ export interface CommentView {
   // Null for hidden (to non-moderators) or deleted comments kept for their replies.
   body: string | null;
   state: "visible" | "hidden" | "deleted";
-  // A reply the owner or an editor marked as the answer to its question.
+  // A reply the owner or a contributor marked as the answer to its question.
   accepted: boolean;
   author: CommentAuthor | null;
   version: number;
@@ -32,4 +30,14 @@ export interface CommentThreads {
   enabled: boolean;
   // The viewer may post (signed in, has access, comments on, not on hold).
   canComment: boolean;
+}
+
+export interface CreateCommentRequest {
+  body: string;
+  parentId?: string;
+}
+
+export interface UpdateCommentRequest {
+  body: string;
+  version: number;
 }

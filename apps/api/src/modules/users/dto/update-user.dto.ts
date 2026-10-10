@@ -1,3 +1,5 @@
+import type { UpdateProfileRequest } from "@nslinkhub/types";
+import { Transform } from "class-transformer";
 import {
   IsBoolean,
   IsOptional,
@@ -7,11 +9,29 @@ import {
   MinLength,
   ValidateIf,
 } from "class-validator";
+import { normalizeUsername, USERNAME_MAX, USERNAME_MIN } from "../username";
 
-export class UpdateUserDto {
+export class UpdateUserDto implements UpdateProfileRequest {
+  @Transform(({ value }) => (typeof value === "string" ? normalizeUsername(value) : value))
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @Matches(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+  @MinLength(USERNAME_MIN)
+  @MaxLength(USERNAME_MAX)
+  username?: string;
+
   @ValidateIf((_object, value) => value !== undefined)
   @IsBoolean()
-  showNameOnHub?: boolean;
+  confirmHandle?: boolean;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
+  showOwner?: boolean;
+
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsString()
+  @MaxLength(500)
+  bio?: string;
 
   // Account holder full name; separate from the hub public display name.
   @IsOptional()

@@ -5,6 +5,7 @@ import { CollectionFeedback } from "../../../components/collection-feedback";
 import { CollectionReader } from "../../../components/collection-reader";
 import { failure, prettyPath, queryValue, routeHandle, routeSegment } from "../../../lib/http";
 import { serverRead } from "../../../lib/server-api";
+import { sourcePath } from "../../../lib/sharing";
 
 export const metadata: Metadata = { title: "Collection" };
 export const dynamic = "force-dynamic";
@@ -29,12 +30,13 @@ export default async function Page({
   const hub = await serverRead<HubPage>(
     `/api/v1/hubs/by-handle/${encodeURIComponent(handle)}?limit=1`,
   );
-  if (!hub.ok) return <CollectionFeedback error={hub} returnTo={resetPath} />;
+  if (!hub.ok) return <CollectionFeedback error={hub} returnTo={sourcePath(resetPath, query)} />;
   const result = await serverRead<Collection>(
     `/api/v1/hubs/${encodeURIComponent(hub.data.hub.id)}/collections/${encodeURIComponent(slug)}`,
     token,
   );
-  if (!result.ok) return <CollectionFeedback error={result} returnTo={resetPath} />;
+  if (!result.ok)
+    return <CollectionFeedback error={result} returnTo={sourcePath(resetPath, query)} />;
   return (
     <CollectionReader
       collection={result.data}

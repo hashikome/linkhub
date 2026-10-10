@@ -2,7 +2,7 @@
 
 **Status:** accepted; the collection-role rename to `viewer` / `contributor`
 is recorded in [ADR-0017](0017-hubs-are-entities-with-members.md) and
-[PRODUCT.md](../../PRODUCT.md#11-delivery), pending implementation.
+[PRODUCT.md](../../PRODUCT.md#11-delivery), implemented on 2026-10-09.
 **Date:** 2026-10-08
 
 ## Context
@@ -21,7 +21,7 @@ is what a person reads in one place, and the best word differs by place.
 ## Decision
 
 Permission roles are stable identifiers that describe capability, in two
-separate scopes: per collection (`owner`, `reader`, `editor`) and site-wide
+separate scopes: per collection (`owner`, `viewer`, `contributor`) and site-wide
 service management (`operator`, `admin`). They are not renamed for wording;
 each surface chooses the label that serves its reader. Role scopes and current
 labels: [tenancy-and-access.md](../design-docs/tenancy-and-access.md#roles-and-labels).
@@ -49,3 +49,11 @@ labels: [tenancy-and-access.md](../design-docs/tenancy-and-access.md#roles-and-l
 
 - [tenancy-and-access.md](../design-docs/tenancy-and-access.md)
 - [ADR-0001](0001-drive-tenancy-model.md), [ADR-0002](0002-immutable-identities.md)
+
+## Implementation amendment — 2026-10-09
+
+The explicitly accepted collection-role rename now uses `viewer` / `contributor`
+throughout grants, comments and bounded audit states. An additive migration
+preserves existing grants and evidence; old API identifiers are rejected under
+ADR-0006. This applies the accepted product vocabulary without changing any
+capability or the rule that future display-only wording changes do not rename roles.

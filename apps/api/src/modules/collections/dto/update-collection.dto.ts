@@ -1,6 +1,5 @@
+import type { UpdateCollectionRequest } from "@nslinkhub/types";
 import {
-  ArrayMaxSize,
-  IsArray,
   IsBoolean,
   IsInt,
   IsOptional,
@@ -11,7 +10,7 @@ import {
   MinLength,
 } from "class-validator";
 
-export class UpdateCollectionDto {
+export class UpdateCollectionDto implements UpdateCollectionRequest {
   @IsOptional()
   @IsString()
   @Matches(/^[a-z0-9-]+$/)
@@ -29,13 +28,6 @@ export class UpdateCollectionDto {
   @IsString()
   @MaxLength(5000)
   description?: string;
-
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(30)
-  @IsString({ each: true })
-  @MaxLength(80, { each: true })
-  tags?: string[];
 
   @IsOptional()
   @IsBoolean()

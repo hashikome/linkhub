@@ -1,6 +1,6 @@
 import "server-only";
 import { webServerConfig } from "@nslinkhub/config/web-server";
-import type { CaptureResult } from "@nslinkhub/types";
+import type { CaptureRequest, CaptureResult } from "@nslinkhub/types";
 import { cookies } from "next/headers";
 import { type CaptureDraft, draftTtl, fitDraft, openDraft } from "./capture-draft";
 import { serverCookie } from "./cookies";
@@ -33,13 +33,14 @@ export async function saveDraft(
   draft: CaptureDraft,
   extraCookies: string[] = [],
 ) {
-  const result = await formPost<CaptureResult>(request, "/api/v1/capture", {
+  const body = {
     operationId: draft.operationId,
     startedAt: draft.issued,
     links: draft.links,
     destination: draft.destination,
     ...(draft.collectionTitle ? { collectionTitle: draft.collectionTitle } : {}),
-  });
+  } satisfies CaptureRequest;
+  const result = await formPost<CaptureResult>(request, "/api/v1/capture", body);
   if (result.ok)
     return redirectResponse(
       `/c/${result.data.collectionId}?notice=${result.data.resourceIds.length > 1 ? "links-saved" : "link-saved"}`,

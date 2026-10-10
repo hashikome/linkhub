@@ -7,8 +7,7 @@ import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
 import { signInWithCode } from "./fixtures/sign-in";
 
-// Locks the de-normalized shape: a resource stores its own url, and tags are a
-// normalized string array on the resource/collection (no shared tables).
+// Resources keep their own URLs and expose normalized names from tag relations.
 describe("Resource + tag fields (e2e)", () => {
   let app: INestApplication<App>;
   let bearer: string;
@@ -30,18 +29,15 @@ describe("Resource + tag fields (e2e)", () => {
     await app.close();
   });
 
-  it("stores a url on the resource and normalizes tags (arrays, no shared table)", async () => {
-    // Collection tags are normalized (lowercase, dedup).
+  it("stores a url on the resource and normalizes tags (relational storage)", async () => {
+    // Empty collections start without tags.
     const collection = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ slug: `rf-col-${sfx}`, title: "RF", tags: ["React", "react", "  Tooling  "] })
+      .send({ slug: `rf-col-${sfx}`, title: "RF" })
       .expect(201);
     const cid = (collection.body as { data: { id: string; tags: string[] } }).data.id;
-    expect((collection.body as { data: { tags: string[] } }).data.tags).toEqual([
-      "react",
-      "tooling",
-    ]);
+    expect((collection.body as { data: { tags: string[] } }).data.tags).toEqual([]);
 
     // A resource carries its own url and its own normalized tags.
     const resource = await request(app.getHttpServer())

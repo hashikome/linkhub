@@ -8,6 +8,7 @@ export interface HubSummary {
   handle: string;
   name: string;
   ownerName: string | null;
+  owner: import("./envelope.js").PersonRef | null;
   description: string | null;
   publishedCollectionCount: number;
   createdAt: IsoTimestamp;

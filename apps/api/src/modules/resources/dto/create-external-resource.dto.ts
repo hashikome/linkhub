@@ -1,3 +1,4 @@
+import type { CreateExternalResourceRequest } from "@nslinkhub/types";
 import {
   ArrayMaxSize,
   IsArray,
@@ -10,7 +11,7 @@ import {
 } from "class-validator";
 
 // A link's title is resolved from its page by the server, never an input.
-export class CreateExternalResourceDto {
+export class CreateExternalResourceDto implements CreateExternalResourceRequest {
   // Whether the host is public is decided by publicLinkUrl (link_not_public).
   @IsUrl({
     require_protocol: true,

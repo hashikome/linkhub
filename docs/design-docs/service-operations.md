@@ -1,10 +1,35 @@
 # Service operations
 
 Status: admin/operator invitations, account restrictions, distribution holds,
-audit and the `/ops` web console are implemented and locally verified. The
-accepted route is `/platform` (not implemented yet); the hub owner's
-[Manage workspace](manage-workspace.md) is separate. See the
+audit and the `/manage` web console are implemented and locally verified. The
+console is part of the shared
+[Manage workspace](manage-workspace.md), with separate owner/service authority. See the
 [operator runbook](../runbooks/service-operations.md) for procedures.
+
+The current audit implementation is provisional. Its redesign and a complete
+audit strategy are deferred until fundamental operations are complete
+([ADR-0020](../engineering-decisions/0020-logging-after-core-operations.md)).
+Existing recording, transaction guarantees and access boundaries below remain
+the interim contract; current feature work does not include further audit UI
+iteration or general change-payload capture.
+
+The later [ADR-0021](../engineering-decisions/0021-bounded-audit-effects.md)
+authorizes a bounded interim capture/presentation slice. Manage shows recorded
+states, outcomes and reasons, with current actor usernames alongside stable IDs.
+Invitation targets use invitation IDs, not recipient IDs. Session revocations do
+not present account state as the session change; counts were not recorded.
+`view=actions` excludes successful routine reads before pagination but retains
+denials; `view=all` includes reads. The API default remains all. An explicit read
+action normalizes the view to all, and effective filters bind the cursor.
+Dates use the viewer's local `YYYY-MM-DD HH:mm:ss`, with a labelled UTC fallback
+without JavaScript. No existing recording/retention or authority boundary changes.
+
+Unified web search uses `q` to match displayed actor usernames/IDs, action labels,
+target IDs, outcomes and recorded changes within the authorized feed. It accepts
+partial IDs and requires all search words to match, case-insensitively. Search
+runs before pagination; the query binds the cursor. Explicit API actor/target/hub
+filters remain supported. Date filters use local day boundaries with JavaScript
+and labelled UTC without it.
 
 This is the product-owned service-operator contract. It adds account operations
 and public-content moderation to the individual hub model; it does not add hub
@@ -26,11 +51,11 @@ admins manage operator accounts. Admin account suspension is unavailable.
 
 | Operation | Information and authority | Boundary |
 | --- | --- | --- |
-| Find accounts | Paginated account table searchable by email or hub handle fragment (`GET /operations/accounts?q=`); name, email/verification, immutable user/hub IDs, handle, creation date, account status and session count; row quick actions (suspend/reactivate, sign out everywhere) | Email is operational personal data; no bulk export, secrets, private collection titles or browsing history; the search text is not written to the audit |
-| Suspend/reactivate | Change account availability with a required reason; suspension revokes all sessions and operator access | No deletion, ownership reassignment or credential editing |
+| Find accounts | Paginated account table searchable by exact user ID or username, email and hub handle fragments (`GET /operations/accounts?q=`); name, email/verification, immutable user/hub IDs, handle, creation date, account status and session count; row quick actions (suspend/reactivate, sign out everywhere) | Email is operational personal data; no bulk export, secrets, private collection titles or browsing history; the search text is not written to the audit |
+| Suspend/reactivate | Change account availability with a required reason; suspension revokes all sessions and operator access | No ownership reassignment or credential editing; admin deletion follows ADR-0023 |
 | Revoke sessions | End all cookie and bearer sessions for the target account | Does not suspend it; a fresh sign-in is allowed |
-| Hold/release publication | Find a collection from its pasted link (`/c/<id>` or `/@handle/slug`, `GET /operations/collections/resolve?link=`); restrict distribution of a currently public collection; list active holds (`GET /operations/collections`: id, hub handle, reason, since — no titles) and release from the row | Does not confer permission to read or edit its content |
-| Review operator audit | Cursor-paginated table filtered by one search (email, hub handle or id; matches actor or target), an action from `operatorAuditActions`, and dates; rows show hub handles where known | No generic database browser or access to other users' hub audit feeds |
+| Hold/release publication | Find a collection by ID or pasted link through `GET /manage/collections?q=`; restrict distribution of a currently public collection; inspect/release held rows without exposing private titles | Does not confer permission to read or edit its content |
+| Review operator audit | Cursor-paginated table with one Search field for displayed row content, Action and From/To dates; rows show current usernames alongside IDs and recorded effects/results | No generic database browser or access to other users' hub audit feeds |
 
 Use ordinary public collection reads to inspect reported public material.
 Once the owner unpublishes it or a hold hides it, operators retain only the
@@ -45,6 +70,17 @@ identity-provider migration and hosting/email-provider consoles are separate
 work. The initial scope does not require Clerk, nsauth or Pigfarm's authority
 model. Suspension is per existing user ID; it is not a promise to prevent a
 person from registering a different account.
+
+## Sharing analytics
+
+Operators and admins can read service-wide aggregate counts through
+`/api/v1/share/analytics?scope=service`. Manage's Analytics tab precedes Audit Log
+and shows all-time totals plus resource/destination breakdowns with manual Refresh.
+Admins can additionally read individual service-wide share metadata through
+`/api/v1/share` with `scope=service`, under the same audited cookie authority.
+Authored messages, arbitrary creator context and resource content are excluded; IDs,
+creation dates and reported-open counts support operational analysis.
+See [sharing](sharing.md) for creator and resource-owner API scopes.
 
 ## Admin bootstrap and accepted invitations
 
@@ -67,13 +103,13 @@ Both roles use the same email-entry journey, adapted from Pigfarm ADR-0012:
 
 - A new recipient enters their name and explicitly accepts. In one transaction,
   better-auth's adapter creates the unverified account, the app-owned onboarding
-  hook creates its hub, and consent plus email-code delivery are recorded.
+  hook assigns its username without creating a hub, and consent plus email-code delivery are recorded.
 - Existing recipients accept without entering a name. Existing names are never
   overwritten. A different signed-in account must sign out first.
 - Every recipient, including a matching signed-in account, verifies a fresh email
   OTP. Consent puts the invitation in `verifying`; no role exists yet. Successful
   verification atomically creates the role, session and audit, completes the
-  invitation, and redirects to `/ops`. Email OTP is the only current method;
+  invitation, and redirects to `/manage`. Email OTP is the only current method;
   TOTP is deferred to a later phase.
 
 Issuance, preview, expiry, cancellation, decline and abandonment before consent
@@ -94,7 +130,7 @@ anonymous requests, and reject bearer headers. Source/identity budgets apply.
 Consent and final verification recheck token, state, expiry, UUID/email binding and active
 inviter authority under the shared lock. Bootstrap also requires the current
 unclaimed singleton and zero active admins. Consent checks the form version.
-Account/hub/consent/mail/audit commit together; proof/session/grant/audit commit
+Account/username/consent/mail/audit commit together; proof/session/grant/audit commit
 together on verification. A failed enqueue or audit rolls back its transaction. Idempotent retries neither
 send another code nor restore a revoked role. Token consent is audited with an
 `invitee` actor kind, distinct from authenticated operator actions.
@@ -195,7 +231,7 @@ Persistence follows camelCase/snake_case conventions:
   grant/revoke history lives in the operator audit.
 - `CollectionHold` keyed by collection ID with active state, bounded reason,
   actor/time and version; no copy of the collection's authored text.
-- Append-only `OperatorAudit` with UUIDv7 ID, database timestamp, actor kind
+- Operation-category records in the shared `AuditLog` with UUIDv7 ID, database timestamp, actor kind
   and optional actor user ID, target IDs, action, reason code, before/after
   state, request ID and operation ID. Audit IDs must survive target deletion.
 
@@ -239,6 +275,8 @@ safe explanations; raw reasons are never exposed to public readers.
 
 Audit successful state changes, no-op commands, account lookup/detail access,
 operator-audit reads and denied operator actions from authenticated callers.
+When authority transactions are nested, denial outcomes propagate as data until
+the outer transaction commits; only then does the HTTP error propagate.
 Record targets as immutable IDs; a lookup with no match records only the
 operation and outcome, not the searched email/handle. Never record tokens,
 codes, email addresses, content, raw request bodies or session identifiers.
@@ -261,14 +299,28 @@ acceptance and session verification → admin-owned operator invitations → exp
 operating journey is **operator sign-in → account search →
 account/session action or public-content hold → audit → recovery**. It includes
 the reusable email-code sign-in/session journey; do not ship a separate admin
-login protocol or a dashboard of inactive controls. The web uses `/ops` and
+login protocol or a dashboard of inactive controls. The web uses `/manage` and
 `/api/v1/operations/*` for the API, with immutable target IDs. The web area is
-four tabs — Accounts (`/ops`), Collections, Team (admin only, `/ops/team`) and
-Audit — with listings as minimal tables and row actions that return to the same
-listing. A required reason plus a clearly labelled button is the deliberate
+service tabs — Accounts (`/manage`), Collections, Team (admin only, `/manage/team`),
+Invitations (admin only, `/manage/invitations`) and Audit — with listings as minimal tables and row actions that return to the same
+listing. Accounts, Collections, Team, Invitations and Audit keep their headings, tabs,
+filters and column headings visible on wide, tall screens while table rows
+scroll in bounded regions. Team lists current admins and operators; Invitations owns sending and tracking
+service invitations. The owner Manage workspace uses the same Invitations/Access
+presentation pattern for collection access under its own authorization rules.
+Every paginated Manage table uses Load more to append rows, preserve active
+filters and disappear at the end. Collections use a caller/filter-bound cursor ordered by creation time and ID,
+with a cutoff; the unified list includes active holds.
+Failed reads retain loaded rows and offer retry; without JavaScript the link
+continues with native cursor navigation. Smaller screens use document flow.
+The other tables use a read-only server action returning rendered rows and
+rechecking current API authorization. The web-only `/manage/audit/more` adapter preserves search and resolved explicit identity filters and
+forwards session-bound reads to the same authoritative operations API.
+A required reason plus a clearly labelled button is the deliberate
 step (no confirmation checkbox). All operator responses are private and
-no-store; search text stays out of page URLs and logs: the web posts it and
-carries it only as a short-lived encrypted `s` value. Route existence must not leak
+no-store; Accounts search text stays out of page URLs: the web posts it and
+carries it only as a short-lived encrypted `s` value. Audit lookup inputs are
+posted and preserved as normalized row-content queries; explicit identity filters resolve to full IDs. Route existence must not leak
 user metadata to ordinary users. Add these literal routes ahead
 of the dynamic handle route. Detailed screen contracts and Impeccable work
 belong to implementation, under the existing web design documents.
@@ -296,3 +348,94 @@ Invitation status routes remain readable but do not send people through another
 link-entry page. The manual emailed-link field is shown only without JavaScript,
 as an accessible fallback for fragment handling; normal email links open review
 automatically. Invite codes are deferred.
+
+
+## Audit identity and filtering
+
+The single AuditLog store retains immutable actor and entity UUIDs, with no cascading
+entity foreign keys. Current usernames are joined in batches at read time, not
+stored snapshots. A rename changes the API label, never the recorded ID;
+a missing person retains their ID. Content audit is always restricted to the
+caller's hub; service authority cannot read a foreign private hub trail.
+
+The unified `/api/v1/manage/audit` feed accepts `q` (displayed row content, including partial IDs), `view`
+(actions/all), and explicit `actor` (exact username or full UUID), `targetId` (full affected
+user, collection, invitation or item UUID, as applicable), `hub` (exact handle or
+full UUID), `action`, `from`, `to`, `cursor` and `limit`. Target also matches the
+recorded hub ID. Filters combine with AND; actor is never conflated with target.
+Email belongs in Accounts lookup, not audit filtering. A missing explicit identity lookup resolves
+to the nil UUID (no matches), never to an absent filter. Responses include
+`meta.auditFilters` with normalized q text and actor/hub resolved to IDs; the web posts lookup inputs,
+then redirects using these canonical filters. Pagination carries the search text and explicit identity IDs. Cursors bind the caller, scope, filters and snapshot
+cutoff. Invalid date ranges and short target IDs are rejected.
+
+Service collection events now capture nullable `hubId` at event time. Transfers,
+renames and deletion never change that context. Older events retain null: current
+ownership is not evidence of historical ownership. A hub filter only matches
+recorded hub context; account actions are not implicitly attributed to the
+account's hub. The hub filter does not grant private-content access.
+
+UUID abbreviations show the final twelve-digit segment without an ellipsis or
+collision extension; hover reveals the full UUID. They are display hints, never
+unique keys or accepted shortened references for mutations. Search accepts partial ID text. Actor and Target both display the
+final ID segment directly, with no type prefix or expansion. The actor's display
+therefore remains stable across username changes; explicit actor search still resolves
+to the full ID; free-text search matches current displayed usernames. Hover reveals the full UUID and clicking copies the full UUID
+with “Copied” feedback that clears after two seconds. Target shows only the entity
+acted on (for example, the item for an item-link addition or the collection for a
+collection update), without parent or related IDs. See
+[RFC 9562 §5.7](https://www.rfc-editor.org/rfc/rfc9562.html#section-5.7) and
+[OWASP logging guidance](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html).
+
+Accounts search accepts a full user UUID as an exact match, including IDs copied
+from Audit Log. Other terms match username, email or hub handle fragments. Account
+responses include the current username and unexpired session count; the table
+shows Account (name with username beneath), Email and Last login columns; Sessions is the final count column; IDs and individual session details remain on account detail.
+Last login is persisted at successful sign-in, never inferred from retained sessions.
+
+
+### Account profile evidence
+
+`GET /operations/accounts/:id` returns `OperatorAccountDetail`: the summary plus
+bio, image, account updated time, suspension reason/date, `sessionsAsOf` and
+`activeSessions`. Each session contains only id, createdAt, expiresAt, verifiedAt
+and current (whether it is the requesting operator's session). The newest 100
+unexpired sessions are returned; `sessions` remains the total at sessionsAsOf.
+No tokens, IP addresses or user agents are selected or returned. Missing values
+stay null, and none of these dates is called last login. See
+[ADR-0022](../engineering-decisions/0022-operator-account-profile-evidence.md).
+
+The Accounts table shows Account (name and username), Email, Role,
+Status, Member since, Last login and Sessions. Clicking a row opens detail; permitted action buttons
+appear at the bottom of that page. Hub, bio, suspension details and individual
+session dates are on the detail page. All reads retain operator/cookie authority,
+no-store responses and account.read audit recording.
+
+
+## Account lifecycle and action controls
+
+[ADR-0023](../engineering-decisions/0023-account-lifecycle-and-unified-collection-actions.md)
+defines operator deactivation and admin-scheduled deletion.
+[ADR-0033](../engineering-decisions/0033-permanent-hub-handles-and-self-service-accounts.md)
+adds separate email-confirmed owner deactivation/recovery and deletion/cancellation.
+Operator lifecycle commands clear the self-recovery marker and invalidate pending
+recovery proofs through the operations version. Owners cannot use self-service to
+lift operator restrictions or cancel operator-scheduled deletion. Issued hub-handle
+reservations survive final cleanup.
+`OperatorAccount` includes `deletionScheduledFor` and `availableActions`. The list
+omits verification; session count includes only unexpired sessions.
+The Action dialog continues to a reasoned, recently verified command. Restrictions
+and deletion cannot target self/admin accounts. Pending deletion blocks activation
+until cancelled. Cancellation leaves inactive. Maintenance removes due accounts
+in batches of 25 under the authority lock and records `account.deleted` atomically.
+
+`GET /api/v1/manage/collections` supplies one paginated, viewer-scoped projection
+for owners/contributors and operators. Search accepts a full UUID or collection
+URL; URL query tokens do not grant access. Foreign private held content remains
+hidden. Moderation detail uses `/operations/collections/:id`; the superseded held-only list and link-resolver routes are removed.
+
+Account summaries and details also expose nullable `lastLoginAt`, persisted by
+successful ordinary/invitation sign-in in the session transaction. Account detail
+shows Last login in the viewer's local timezone, including seconds; pre-tracking
+accounts show “Not recorded” until they next sign in. Session refresh/expiry,
+failed sign-in and rolled-back transactions never manufacture a login timestamp.

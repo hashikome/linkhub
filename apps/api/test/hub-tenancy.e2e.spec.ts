@@ -7,8 +7,7 @@ import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
 import { signInWithCode } from "./fixtures/sign-in";
 
-// Phase B: hubs own collections; sign-up creates a personal hub; publication
-// (published boolean) + link sharing replace the visibility triad.
+// First collection creation establishes hub ownership atomically.
 describe("Hub tenancy (e2e)", () => {
   let app: INestApplication<App>;
   let ownerBearer: string;
@@ -36,7 +35,7 @@ describe("Hub tenancy (e2e)", () => {
     await app.close();
   });
 
-  it("creates a collection in the personal hub auto-created at sign-up", async () => {
+  it("creates the personal hub with the first collection", async () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${ownerBearer}`)

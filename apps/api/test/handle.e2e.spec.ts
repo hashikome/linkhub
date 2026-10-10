@@ -6,7 +6,7 @@ import { App } from "supertest/types";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
 import { PrismaService } from "../src/database/prisma.service";
-import { signInWithCode } from "./fixtures/sign-in";
+import { signInHubOwner } from "./fixtures/sign-in";
 
 // Locks hub-handle rules: a reserved word is never issued at sign-up (the
 // auto-generated handle) and never accepted on rename.
@@ -25,11 +25,53 @@ describe("Hub handles (e2e)", () => {
     await app.close();
   });
 
+  it("claims a handle once, retains reservations after deletion, and leaves usernames mutable", async () => {
+    const login = await signInHubOwner(app.getHttpServer(), {
+      email: `claim-${crypto.randomUUID()}@example.com`,
+    });
+    const token = login.headers["set-auth-token"];
+    const patch = (body: object) =>
+      request(app.getHttpServer())
+        .patch("/api/v1/profile")
+        .auth(token, { type: "bearer" })
+        .send(body);
+    const handle = `claimed-${crypto.randomUUID().slice(0, 8)}`;
+    await patch({ handle }).expect(400);
+    const claimed = await patch({ handle, confirmHandle: true }).expect(200);
+    expect(claimed.body.data.handleClaimedAt).toBeString();
+    await patch({ handle: `${handle}-new`, confirmHandle: true }).expect(409);
+    await patch({ username: `free-${crypto.randomUUID().slice(0, 8)}` }).expect(200);
+    await patch({
+      username: `again-${crypto.randomUUID().slice(0, 8)}`,
+      hubName: "A new display name",
+    }).expect(200);
+    const prisma = app.get(PrismaService);
+    await prisma.user.delete({ where: { id: login.body.user.id } });
+    const other = await signInHubOwner(app.getHttpServer(), {
+      email: `claim-other-${crypto.randomUUID()}@example.com`,
+    });
+    const check = await request(app.getHttpServer())
+      .get(`/api/v1/profile/handle-availability?handle=${handle}`)
+      .auth(other.headers["set-auth-token"], { type: "bearer" })
+      .expect(200);
+    expect(check.body.data.status).toBe("taken");
+    await request(app.getHttpServer())
+      .patch("/api/v1/profile")
+      .auth(other.headers["set-auth-token"], { type: "bearer" })
+      .send({ handle, confirmHandle: true })
+      .expect(400);
+    await expect(
+      Promise.resolve(
+        prisma.hub.update({ where: { ownerUserId: other.body.user.id }, data: { handle } }),
+      ),
+    ).rejects.toThrow();
+  });
+
   it("gives email-only accounts readable unique handles without exposing the email", async () => {
     const handles: string[] = [];
     for (const name of [undefined, "李", "ab"]) {
       const email = `private-mailbox-${crypto.randomUUID()}@example.com`;
-      const signUp = await signInWithCode(app.getHttpServer(), { email, name });
+      const signUp = await signInHubOwner(app.getHttpServer(), { email, name });
       const profile = await request(app.getHttpServer())
         .get("/api/v1/profile")
         .auth(signUp.headers["set-auth-token"], { type: "bearer" })
@@ -44,7 +86,7 @@ describe("Hub handles (e2e)", () => {
 
   it("never auto-issues a reserved handle at sign-up", async () => {
     // "Explore" slugifies to the reserved handle "explore".
-    const signUp = await signInWithCode(app.getHttpServer(), {
+    const signUp = await signInHubOwner(app.getHttpServer(), {
       email: `explore_${sfx}@example.com`,
       name: "Explore",
     });
@@ -61,7 +103,7 @@ describe("Hub handles (e2e)", () => {
   });
 
   it("rejects renaming to a reserved handle", async () => {
-    const signUp = await signInWithCode(app.getHttpServer(), {
+    const signUp = await signInHubOwner(app.getHttpServer(), {
       email: `hname_${sfx}@example.com`,
       name: `hname ${sfx}`,
     });
@@ -75,7 +117,7 @@ describe("Hub handles (e2e)", () => {
   });
 
   it("checks availability for the authenticated account without exposing account details", async () => {
-    const signUp = await signInWithCode(app.getHttpServer(), {
+    const signUp = await signInHubOwner(app.getHttpServer(), {
       email: `availability_${sfx}@example.com`,
       name: `availability ${sfx}`,
     });
@@ -113,7 +155,7 @@ describe("Hub handles (e2e)", () => {
   it("treats availability as advisory and allows only one concurrent handle claim", async () => {
     const tokens: string[] = [];
     for (const n of [1, 2]) {
-      const response = await signInWithCode(app.getHttpServer(), {
+      const response = await signInHubOwner(app.getHttpServer(), {
         email: `claim-${n}-${sfx}@example.com`,
         name: `Claim ${n} ${sfx}`,
       });
@@ -133,7 +175,7 @@ describe("Hub handles (e2e)", () => {
         request(app.getHttpServer())
           .patch("/api/v1/profile")
           .auth(token, { type: "bearer" })
-          .send({ handle }),
+          .send({ handle, confirmHandle: true }),
       ),
     );
     expect(claims.map((r) => r.status).sort()).toEqual([200, 400]);
@@ -147,7 +189,7 @@ describe("Hub handles (e2e)", () => {
     expect(response.body).toEqual({ data: { handle, status: "taken" } });
   });
   it("reports public totals across pages without counting private or held collections", async () => {
-    const signed = await signInWithCode(app.getHttpServer(), {
+    const signed = await signInHubOwner(app.getHttpServer(), {
       email: `hub-metadata-${crypto.randomUUID()}@example.com`,
     });
     const prisma = app.get(PrismaService);
@@ -180,7 +222,7 @@ describe("Hub handles (e2e)", () => {
 
   it("keeps hub names independent of owner identity and resolves the same hub by ID and handle", async () => {
     const email = `hub-identity-${crypto.randomUUID()}@example.com`;
-    const signed = await signInWithCode(app.getHttpServer(), { email, name: "First Owner" });
+    const signed = await signInHubOwner(app.getHttpServer(), { email, name: "First Owner" });
     const token = signed.headers["set-auth-token"];
     const initial = await request(app.getHttpServer())
       .get("/api/v1/profile")
@@ -192,6 +234,7 @@ describe("Hub handles (e2e)", () => {
       .patch("/api/v1/profile")
       .auth(token, { type: "bearer" })
       .send({
+        confirmHandle: true,
         hubName: "Field Notes",
         hubDescription: " A home for curious readers. ",
         handle,
@@ -205,9 +248,13 @@ describe("Hub handles (e2e)", () => {
         slug: "links",
         title: "Useful references",
         description: "A focused reading list",
-        tags: ["reading"],
         published: true,
       })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post(`/api/v1/collections/${collection.body.data.id}/resources/external`)
+      .auth(token, { type: "bearer" })
+      .send({ url: "https://fixture-links.dev/hub-tags", position: 0, tags: ["reading"] })
       .expect(201);
     for (const path of [`/api/v1/hubs/${id}`, `/api/v1/hubs/by-handle/${handle}`]) {
       const result = await request(app.getHttpServer()).get(path).expect(200);
@@ -248,7 +295,7 @@ describe("Hub handles (e2e)", () => {
       data: { email: `changed-${crypto.randomUUID()}@example.com` },
     });
     expect((await prisma.hub.findUniqueOrThrow({ where: { id } })).name).toBe("Field Notes");
-    const second = await signInWithCode(app.getHttpServer(), {
+    const second = await signInHubOwner(app.getHttpServer(), {
       email: `new-owner-${crypto.randomUUID()}@example.com`,
       name: "Next Owner",
     });
@@ -281,8 +328,8 @@ describe("Hub handles (e2e)", () => {
     expect(cleared.body.data.hubDescription).toBeNull();
     expect((await prisma.hub.findUniqueOrThrow({ where: { id } })).description).toBeNull();
   });
-  it("lets owners hide attribution without clearing their account or hub names", async () => {
-    const signed = await signInWithCode(app.getHttpServer(), {
+  it("controls the public hub connection in both directions without hiding profile names", async () => {
+    const signed = await signInHubOwner(app.getHttpServer(), {
       email: `attribution-${crypto.randomUUID()}@example.com`,
       name: "Owner Attribution",
     });
@@ -296,29 +343,42 @@ describe("Hub handles (e2e)", () => {
       .get("/api/v1/profile")
       .auth(token, { type: "bearer" })
       .expect(200);
-    expect(initial.body.data.showNameOnHub).toBe(true);
-    const { hubId, handle } = initial.body.data;
+    expect(initial.body.data.showOwner).toBe(true);
+    const { hubId, handle, username, id: userId } = initial.body.data;
     const created = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(token, { type: "bearer" })
       .send({ title: "Attribution references", slug: "references", published: true })
       .expect(201);
-    for (const invalid of [null, "false", 0]) await patch({ showNameOnHub: invalid }).expect(400);
+    for (const invalid of [null, "false", 0]) await patch({ showOwner: invalid }).expect(400);
     for (const enabled of [false, true]) {
-      const saved = await patch({ showNameOnHub: enabled }).expect(200);
-      expect(saved.body.data.showNameOnHub).toBe(enabled);
+      const saved = await patch({ showOwner: enabled }).expect(200);
+      expect(saved.body.data.showOwner).toBe(enabled);
       expect(saved.body.data.displayName).toBe("Owner Attribution");
       const unchanged = await patch({ hubName: "Independent Hub" }).expect(200);
-      expect(unchanged.body.data.showNameOnHub).toBe(enabled);
+      expect(unchanged.body.data.showOwner).toBe(enabled);
       for (const path of [`/api/v1/hubs/${hubId}`, `/api/v1/hubs/by-handle/${handle}`]) {
         const result = await request(app.getHttpServer()).get(path).expect(200);
         expect(result.body.data.hub).toMatchObject({
           name: "Independent Hub",
           handle,
           ownerName: enabled ? "Owner Attribution" : null,
+          owner: enabled ? { userId, username } : null,
         });
         expect(result.body.data.collections[0].hub.ownerName).toBeUndefined();
       }
+      const person = await request(app.getHttpServer())
+        .get(`/api/v1/people/by-username/${username}`)
+        .expect(200);
+      expect(person.body.data.person.name).toBe("Owner Attribution");
+      expect(person.body.data.hub).toEqual(
+        enabled ? { id: hubId, handle, name: "Independent Hub" } : null,
+      );
+      expect(
+        person.body.data.collections.some(
+          (item: { id: string }) => item.id === created.body.data.id,
+        ),
+      ).toBe(true);
       const discover = await request(app.getHttpServer())
         .get("/api/v1/discover?limit=100")
         .expect(200);

@@ -8,7 +8,7 @@ TOTP/recovery codes and targeted collection invitations are planned.
 ## Ownership and transaction boundary
 
 `create-auth.ts` composes better-auth; `delivery-auth.ts` supplies its Prisma
-adapter and personal-hub hook with the request's transaction client. The library
+adapter and account-username hook with the request's transaction client. The library
 mints, hashes and consumes OTPs, writes credentials, creates sessions and
 revokes them. No parallel proof store or custom OTP comparison exists.
 
@@ -73,7 +73,7 @@ spoofed forwarding headers.
 
 | Path | Body | Success |
 | --- | --- | --- |
-| `/code/send` | `{ email }` | `{ success: true }`; same shape for new/existing/suppressed addresses |
+| `/code/send` | `{ email, purpose? }` | `{ success: true }`; same shape for new/existing/suppressed addresses |
 | `/code/verify` | `{ email, code, name? }` | better-auth token/user response and session cookie/bearer header |
 | `/email-change/start` | `{ newEmail }` | current-address confirmation queued; names the target address |
 | `/email-change/confirm-current` | `{ code }` | new-address verification queued after current proof |
@@ -96,10 +96,37 @@ Mailbox verification and the library's unproven-account protection stay enabled.
 The optional `name` on code verification is a trimmed, nonempty display name
 (up to 255 characters), used only at first account creation. Existing users'
 profiles are unchanged by sign-in. `PATCH /profile` accepts the account's full
-name (`displayName`), plus its owned hub's name (`hubName`), handle and description
-(`hubDescription`). It does not edit credentials.
-Account deletion is disabled until verified deletion and ownership/retention
-rules are implemented. Email change preserves the immutable user and hub identity.
+name (`displayName`), `username` and optional public `bio` (plain text,
+at most 500 characters; blank clears it, omission preserves it). When a hub exists, it also accepts
+its name (`hubName`), handle, description (`hubDescription`) and `showOwner`.
+`showOwner` belongs only to the Hub model; the settings response returns null
+for this field when no hub exists. Profile edits
+never create a hub or edit credentials.
+A handle change requires explicit `confirmHandle`; `handleClaimedAt` records
+the permanent claim. Later handle changes fail in both the service and database.
+Usernames remain editable. Email change preserves immutable user and hub identity.
+
+## Self-service account actions
+
+`POST /api/v1/auth/account/send` and `/account/confirm` accept the explicit
+actions `deactivate`, `delete`, `reactivate` and `cancel_deletion`. Deactivation
+and deletion require the initiating session and use its account email; recovery
+requires a signed-out caller and an eligible self-deactivated account. Ineligible
+recovery issuance returns the same generic response without sending a code.
+
+Codes use better-auth primitives with a separate action/account/version-bound
+namespace, also bound to the initiating session for active-account actions.
+Ordinary sign-in and invitation codes cannot authorize these commands. Wrong
+attempts commit; successful proof consumption, revocation, state update and audit
+commit atomically. Temporary verification sessions are revoked and never returned.
+The web binds confirmation forms to their sealed flow ID and action to reject
+forms superseded in another tab. Generic vendor deletion remains unavailable.
+
+Deactivation is reversible without a cleanup deadline. Deletion has a 14-day
+grace period; cancellation before expiry leaves the account inactive. Recovery
+never lifts operator restrictions or restores revoked privileges. Administrators
+must relinquish their service role before using these actions. See
+[ADR-0033](../engineering-decisions/0033-permanent-hub-handles-and-self-service-accounts.md).
 
 ## Delivery and privacy
 
@@ -154,3 +181,12 @@ release evidence.
 See [transactional email](transactional-email.md) for policy,
 [local development](../runbooks/local-development.md) for setup, and the
 [release runbook](../runbooks/release.md) for outstanding live proof.
+
+
+Code-send purpose is optional presentation context: sign-in (default), first-link,
+continue, resume or confirm. Only fixed copy is selected; purpose changes no code
+namespace, authorization, session or freshness rule. Unknown values are rejected.
+Invitation emails derive their purpose from the validated invitation workflow,
+never from an ordinary code-send request. Web forms derive purpose before
+sending and retain it in sealed resend state. No free-form action, collection
+title, URL or role details are accepted as email copy.

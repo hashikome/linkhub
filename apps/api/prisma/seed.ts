@@ -6,6 +6,7 @@
 //   SEED_OFFLINE=1 bun run db:seed        # skip page lookups (the worker fetches later)
 import { publicLinkUrl } from "../src/common/utils/url.util";
 import { PrismaService } from "../src/database/prisma.service";
+import { itemTags } from "../src/modules/resources/item-tags";
 import { fetchPageMetadata, type PageMetadata } from "../src/modules/resources/page-metadata";
 import { type SeedItem, seedCollections, seedHub } from "./seed/toolkit";
 
@@ -30,7 +31,9 @@ async function resolveMetadata(urls: string[]) {
 async function main() {
   const user =
     (await prisma.user.findUnique({ where: { email } })) ??
-    (await prisma.user.create({ data: { email, name: seedHub.userName, emailVerified: true } }));
+    (await prisma.user.create({
+      data: { email, username: seedHub.handle, name: seedHub.userName, emailVerified: true },
+    }));
   const hub =
     (await prisma.hub.findUnique({ where: { ownerUserId: user.id } })) ??
     (await prisma.hub.create({
@@ -41,7 +44,7 @@ async function main() {
     data: { name: seedHub.hubName, description: seedHub.description },
   });
   await prisma.collection.deleteMany({ where: { hubId: hub.id } });
-  await prisma.auditRecord.deleteMany({ where: { hubId: hub.id } });
+  await prisma.auditLog.deleteMany({ where: { hubId: hub.id } });
 
   const links = seedCollections.flatMap((c) =>
     c.items.filter((item): item is Extract<SeedItem, ["l", ...unknown[]]> => item[0] === "l"),
@@ -56,14 +59,13 @@ async function main() {
         slug: c.slug,
         title: c.title,
         description: c.description,
-        tags: c.tags,
         published: c.published,
         creatorUserId: user.id,
       },
     });
     ids.set(c.slug, created.id);
     // Attribution comes from activity entries, as for anything saved in the app.
-    await prisma.auditRecord.create({
+    await prisma.auditLog.create({
       data: {
         hubId: hub.id,
         actorUserId: user.id,
@@ -95,7 +97,7 @@ async function main() {
             position,
             kind: "collection_link",
             linkedCollectionId: target,
-            tags: item[2] ?? [],
+            tags: await itemTags(prisma, item[2]),
             addedByUserId: user.id,
           },
         });
@@ -109,7 +111,7 @@ async function main() {
             position,
             kind: "external_link",
             url,
-            tags: item[3] ?? [],
+            tags: await itemTags(prisma, item[3]),
             addedByUserId: user.id,
           },
         });

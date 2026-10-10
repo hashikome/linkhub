@@ -34,3 +34,23 @@ pretty URLs (`/@handle/slug`) are allowed to break on rename.
 
 - [identity-and-handles.md](../design-docs/identity-and-handles.md)
 - [conventions.md](../design-docs/conventions.md)
+
+## Audit presentation clarification (2026-10-09)
+
+Audit identities remain full immutable UUIDs without cascading entity references.
+Current usernames are read-time labels, not historical snapshots. Lookup inputs
+resolve to IDs before continuation; a hub filter identifies the recorded hub,
+never its owner. Event-time hub context is retained where known; legacy unknown
+context stays unknown. Suffix abbreviations expand to full references and are
+never accepted as identity keys. This applies the existing decision rather than
+replacing it; details live in [service operations](../design-docs/service-operations.md#audit-identity-and-filtering).
+
+
+## Amendment (2026-10-10)
+
+[ADR-0033](0033-permanent-hub-handles-and-self-service-accounts.md) makes explicitly
+claimed hub handles permanent and retains every issued handle after deletion.
+Person usernames remain freely editable. It also adds distinct self-service
+deactivation, recovery, deletion and cancellation alongside operator lifecycle
+controls. Its rules supersede conflicting handle-renaming/release and
+operator-only initiation statements above; UUID identity and authorization remain.

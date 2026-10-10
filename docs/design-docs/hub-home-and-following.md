@@ -7,9 +7,18 @@ subscriber counts and the home tabs below are planned. Identity follows
 ## Public hub page
 
 At `/@handle` and `/h/<id>`, the planned public page shows the hub name, handle,
-owner attribution, description, **Subscribe** (signed-in visitors), the share row, and
-the hub’s published collections. Show a subscriber count only from real data
-once subscriptions are implemented.
+owner attribution, description, **Subscribe** (signed-in visitors), and
+the hub’s published collections. Planned hub counts prioritize **subscribers** and **total collection saves**.
+Collection saves measure readers keeping curated collections to return to;
+individual resource copies through Add to my collection are separate and must
+not be combined with this count. Show counts only from authoritative data once
+the relevant slice implements them. Define aggregation and visibility rules in
+that slice; public counts must not reveal private or unavailable collections.
+
+Sharing controls on hubs, collections and the footer are deferred. Redesign
+them alongside sharing and hub engagement; no placement or social-network
+list is settled. The [backlog](../exec-plans/tech-debt-tracker.md#sharing-and-hub-engagement)
+records the scope.
 
 ## Your home
 

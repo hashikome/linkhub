@@ -26,6 +26,7 @@ import {
   CreateHeadingResourceDto,
 } from "./dto/create-collection-resource.dto";
 import { CreateExternalResourceDto } from "./dto/create-external-resource.dto";
+import { MoveResourceDto } from "./dto/move-resource.dto";
 import { ReorderResourcesDto } from "./dto/reorder-resources.dto";
 import { UpdateResourceDto } from "./dto/update-resource.dto";
 import { ResourcesService } from "./resources.service";
@@ -100,6 +101,37 @@ export class ResourcesController {
   ) {
     const data = await this.resourcesService.reorder(collectionId, user, dto);
     return apiOk(data);
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
+  @Patch(":resourceId/move")
+  async move(
+    @Param("id", new ParseUUIDPipe()) collectionId: string,
+    @Param("resourceId", new ParseUUIDPipe()) resourceId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: MoveResourceDto,
+  ) {
+    return apiOk(await this.resourcesService.move(collectionId, resourceId, user, dto));
+  }
+
+  @Get(":resourceId")
+  @UseGuards(OptionalAuthGuard)
+  async getOne(
+    @Param("id", new ParseUUIDPipe()) collectionId: string,
+    @Param("resourceId", new ParseUUIDPipe()) resourceId: string,
+    @CurrentUser() user: AuthUser | null,
+    @Req() req: Request,
+    @Headers("x-share-token") headerToken?: string,
+  ) {
+    return apiOk(
+      await this.resourcesService.getOne(
+        collectionId,
+        resourceId,
+        user,
+        shareTokenFrom(headerToken, req),
+      ),
+    );
   }
 
   @ApiBearerAuth()

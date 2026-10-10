@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { Controller, Get, HttpException, INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import type {
-  AuditEntry,
+  AuditLogEntry,
   Collection,
   CollectionShareView,
   CursorMeta,
@@ -12,12 +12,11 @@ import type {
   SavedCollection,
   SharedCollection,
 } from "@nslinkhub/types";
-import { auditActions } from "@nslinkhub/types";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
 import { HealthService } from "../src/modules/health/health.service";
-import { signInWithCode } from "./fixtures/sign-in";
+import { signInHubOwner } from "./fixtures/sign-in";
 
 type Shape<T> = { [K in keyof Required<T>]: (value: unknown) => boolean };
 const string = (v: unknown) => typeof v === "string";
@@ -30,7 +29,7 @@ const uuid = (v: unknown) =>
 const iso = (v: unknown) =>
   typeof v === "string" && !Number.isNaN(Date.parse(v)) && new Date(v).toISOString() === v;
 const strings = (v: unknown) => Array.isArray(v) && v.every(string);
-const role = (v: unknown) => v === "reader" || v === "editor";
+const role = (v: unknown) => v === "viewer" || v === "contributor";
 const source = (v: unknown) => v === "direct" || v === "link";
 const collectionShape = {
   hub: (v: unknown) =>
@@ -49,7 +48,7 @@ const collectionShape = {
   creator: (v: unknown) =>
     v === undefined ||
     v === null ||
-    (typeof v === "object" && "hubId" in v && "handle" in v && !("name" in v)),
+    (typeof v === "object" && "userId" in v && "username" in v && !("name" in v)),
   contributors: (v: unknown) =>
     v === undefined ||
     (typeof v === "object" &&
@@ -72,9 +71,12 @@ const collectionShape = {
   updatedAt: iso,
 } satisfies Shape<Collection>;
 const profileShape = {
+  handleClaimedAt: nullableString,
   id: uuid,
+  username: string,
   displayName: string,
-  showNameOnHub: bool,
+  bio: nullableString,
+  showOwner: (v) => v === null || bool(v),
   handle: nullableString,
   hubId: (v) => v === null || uuid(v),
   hubName: nullableString,
@@ -98,7 +100,7 @@ const resourceShape = {
   description: nullableString,
   siteName: nullableString,
   addedBy: (v: unknown) =>
-    v === null || (typeof v === "object" && v !== null && "hubId" in v && "handle" in v),
+    v === null || (typeof v === "object" && v !== null && "userId" in v && "username" in v),
   tags: strings,
   position: number,
   version: number,
@@ -122,22 +124,41 @@ const shareShape = {
   role,
   source,
 } satisfies Shape<CollectionShareView>;
-const cursorShape = { limit: number, nextCursor: nullableString } satisfies Shape<CursorMeta>;
+const cursorShape = {
+  section: (v: unknown) =>
+    v === undefined ||
+    (typeof v === "object" && v !== null && "id" in v && "kind" in v && v.kind === "heading"),
+  limit: number,
+  nextCursor: nullableString,
+  auditFilters: (v: unknown) => v === undefined || (typeof v === "object" && v !== null),
+} satisfies Shape<CursorMeta>;
 const auditShape = {
   id: uuid,
-  hubId: uuid,
-  actorUserId: uuid,
-  collectionId: (v) => v === null || uuid(v),
-  targetUserId: (v) => v === null || uuid(v),
-  resourceId: (v) => v === null || uuid(v),
-  action: (v) => auditActions.some((a) => a === v),
-  role: (v) => v === null || role(v),
+  hubId: nullableString,
+  actorKind: string,
+  actorUserId: nullableString,
+  actorUsername: nullableString,
+  targetUsername: nullableString,
+  collectionId: nullableString,
+  targetUserId: nullableString,
+  resourceId: nullableString,
+  invitationId: nullableString,
+  authority: nullableString,
+  reason: nullableString,
+  beforeState: nullableString,
+  afterState: nullableString,
+  outcome: nullableString,
+  action: string,
+  role: nullableString,
   createdAt: iso,
-} satisfies Shape<AuditEntry>;
+} satisfies Shape<AuditLogEntry>;
+
 function shape(
   actual: Record<string, unknown>,
   fields: Record<string, (v: unknown) => boolean>,
   optional: string[] = [
+    "auditFilters",
+    "section",
     "restriction",
     "hub",
     "capabilities",
@@ -186,7 +207,7 @@ describe("W3 serialized contracts and safe HTTP errors", () => {
     await app.init();
     async function signup(label: string) {
       const email = `${label}-${suffix}@example.com`;
-      const res = await signInWithCode(app.getHttpServer(), { email, name: label });
+      const res = await signInHubOwner(app.getHttpServer(), { email, name: label });
       return { token: res.headers["set-auth-token"] as string, email };
     }
     owner = (await signup("contract-owner")).token;
@@ -228,6 +249,7 @@ describe("W3 serialized contracts and safe HTTP errors", () => {
         handle: ownerProfile.handle,
         name: ownerProfile.hubName,
         ownerName: ownerProfile.displayName || null,
+        owner: { userId: ownerProfile.id, username: ownerProfile.username },
         description: null,
         publishedCollectionCount: 1,
         createdAt: expect.any(String),
@@ -278,7 +300,7 @@ describe("W3 serialized contracts and safe HTTP errors", () => {
     await request(server)
       .post(`/api/v1/collections/${cid}/shares`)
       .set("Authorization", `Bearer ${owner}`)
-      .send({ email: readerEmail, role: "reader" })
+      .send({ email: readerEmail, role: "viewer" })
       .expect(201);
     const link = await request(server)
       .put(`/api/v1/collections/${cid}/link-sharing`)
@@ -324,7 +346,7 @@ describe("W3 serialized contracts and safe HTTP errors", () => {
     shape(dormant.body.data[0], savedShape);
     expect(dormant.body.data[0].available).toBe(false);
     const audit = await request(server)
-      .get("/api/v1/me/audit")
+      .get("/api/v1/manage/audit")
       .set("Authorization", `Bearer ${owner}`)
       .expect(200);
     for (const entry of audit.body.data) shape(entry, auditShape);

@@ -4,6 +4,7 @@ import {
   Headers,
   Param,
   ParseUUIDPipe,
+  Post,
   Query,
   Req,
   Res,
@@ -13,6 +14,7 @@ import { ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
 import { CurrentUser } from "src/common/decorators/current-user.decorator";
 import { CursorQueryDto } from "src/common/dto/cursor-query.dto";
+import { AuthGuard } from "src/common/guards/auth.guard";
 import { OptionalAuthGuard } from "src/common/guards/optional-auth.guard";
 import type { AuthUser } from "src/common/interfaces/auth-user.interface";
 import { conditionalGetHit } from "src/common/utils/etag.util";
@@ -24,6 +26,12 @@ import { CollectionsService } from "./collections.service";
 @Controller("api/v1/hubs")
 export class HubsController {
   constructor(private readonly collectionsService: CollectionsService) {}
+
+  @UseGuards(AuthGuard)
+  @Post()
+  async createHub(@CurrentUser() user: AuthUser) {
+    return apiOk(await this.collectionsService.createHub(user));
+  }
 
   // Handle → hub-page resolution (backs the web's /@handle URLs). Literal
   // segment, so it is declared before the :hubId parameter route.

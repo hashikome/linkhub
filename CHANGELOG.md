@@ -9,6 +9,339 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Stabilize Manage browser pagination checks across date localization during
+  hydration, while retaining row-content and timestamp-value comparisons.
+
+- Fix Manage collection pagination skipping rows created within the same
+  millisecond; deleted or inaccessible page anchors now request an explicit reload.
+- Keep normalized Unicode tags valid when lowercasing expands a value at the
+  length limit, preventing a relational-constraint failure during item saves.
+
+- Reconcile product status, security and auth documentation with permanent hub
+  handles and implemented self-service account lifecycle. Queue Gravatar profile
+  avatars immediately after review and commit; record richer profile display as
+  planned paid functionality. Specify Gravatar first with existing generated
+  icons as fallback and an optional account-creation recommendation in Settings.
+
+- Keep usernames freely editable; let hub owners explicitly claim one permanent
+  handle. Reserve issued handles after deletion to prevent identity reuse.
+- Add distinct email-confirmed self-service deactivation, reactivation, scheduled
+  deletion and cancellation. Reuse the 14-day cleanup policy; prevent self-service
+  recovery from lifting operator restrictions or restoring old sessions/grants.
+
+- Rank collection tags by tagged-item count, with alphabetical ties, so the
+  three-tag preview shows the most-used tags in that collection.
+
+- Normalize tags into a shared name catalogue, item assignments and a stored
+  collection-tag relation synchronized transactionally. Collection tags now
+  reflect all their items, with no independent tag editor; retain compact chips
+  and a remaining-tag count. Migrate existing item tags and preserve their order.
+
+- Remove global Expand/Collapse controls from collection readers. Items and
+  sections toggle directly; reloading restores open sections and the URL-selected
+  item. Viewers keep Share and Add a comment, with Edit for owners/contributors.
+
+- Consolidate temporary session notes into one unfinished-work handoff; remove
+  superseded handoffs, completed verification scripts and the installed skill
+  archive. Preserve the pending personal-import source and move remaining import,
+  performance and audit investigation context into repository docs.
+
+- Consolidate collection authoring behind Edit: owner details, adding links,
+  sections and reordering, with History as a secondary link. Contributors can
+  enter content tools without owner settings. Reading keeps Share/Edit;
+  remove the mobile overflow menu. Reduce shared primary and
+  secondary buttons to 32px on fine pointers while retaining 44px touch targets.
+
+- Show a “Show items” cue beneath collapsed section descriptions, making hidden
+  contents apparent while keeping native mouse and keyboard expansion.
+
+- Add Reorder for owners and contributors: drag before another item or use native
+  Move up/Move down controls, with immediate saves and section moves carrying their
+  items. Keep permissions, nonempty sections and optimistic versions in the API;
+  fix sparse-position collisions and stale full-order writes. Preserve expired
+  moves through account-bound sign-in. Shorten reader controls to Expand/Collapse
+  and let non-interactive item content toggle details while preserving links and
+  text selection. Keep one item expanded per collection, synchronize its ID in
+  the URL, and scroll directly linked items into view. Expand now opens sections;
+  Collapse closes sections and clears selection.
+
+- Remove plus/minus indicators and their reserved spacing from section and link
+  disclosures; retain hover feedback and native mouse/keyboard expansion.
+
+- Clarify the planned redirect-repair contract: saved URLs change only through a
+  dedicated review approval with a required explanatory note. Generic PUT/PATCH
+  updates cannot change URLs, including when supplied with a note. Preserve the
+  reason with approval evidence and validate it in the backend.
+
+- Accept paid link-health monitoring with unavailable/recovery notifications and
+  redirects reviewed by the owner before updating saved URLs. Record ADR-0029’s
+  narrow exception to immutable addresses and backend authorization, version,
+  destination-validation and retry requirements. Design and backlog only; no
+  monitoring runtime or public commercial copy added.
+
+- Adopt ADR-0028: free bookmarks/CSV import, unlimited public collections and public
+  collaboration; paid AI curator, DOCX import and owner-funded private sharing for
+  both viewers and contributors. Plan public-by-default new collections with an
+  explicit private choice and a free owner-only private allowance. Supersede the
+  conflicting ADR-0016 guarantee and earlier private-default direction; runtime
+  rollout, prices, quota counts and lifecycle details remain pending. Update the
+  backlog and plans, including prevention of contributor-based private-access bypasses.
+
+- Capture the founder's bookmarks/document/self-message workflow in the product
+  backlog, document-to-draft curation design and staged evaluation plan. Record
+  paid imports, private collaboration and private capacity as a candidate model
+  with explicit ADR-0016 conflicts; current access, pricing and publication defaults
+  remain unchanged. Extend reviewed-import acceptance to nonempty sections.
+
+- Add optional 500-character section descriptions and owner/contributor section
+  authoring. Enforce at least one link or collection reference per section in
+  backend mutations. Preserve section context across pagination and exports.
+  Replace item detail dialogs with native inline disclosures, keep section
+  descriptions visible, and add Expand all / Collapse all controls. Durable item
+  URLs still open authorized context beyond the first page.
+
+- Preserve authenticated audit-denial evidence when Manage audit composes
+  authority transactions. Exclude disabled remembered link grants from Access
+  people and counts. Track copies of newly generated and rotated collection
+  links with their issued token, resetting copy state after each rotation.
+
+- Keep collection bookmarks and participation independent of hubs. Always expose
+  Hub in the account menu, with explicit creation for hubless people. Imports
+  require an existing hub and owner authority for every destination; contributors
+  cannot import. Initialize Settings from a hub created in another tab without
+  losing newer edits. Preserve PostgreSQL microseconds in contribution cursors
+  so pagination does not skip collections within the same millisecond.
+
+- Limit person usernames to 20 characters and offer optional, backend-checked
+  shortening suggestions for longer drafts. Suggestions keep a readable prefix
+  and a four-character letters/digits hash suffix; users explicitly choose them
+  before saving. Bound onboarding defaults and migration backfills, preserve
+  case/hyphen equivalence, and keep hub handles at their separate 60-character limit.
+
+- Fix sharing review findings: signed visitor budgets include PUT, private Share
+  destinations survive sign-in, and expired collection operations resume with
+  their inputs for the same account, retaining generated link tokens. Trim hub
+  stems before collision suffixes. Enforce lowercase, hyphen-only usernames with
+  hyphen-insensitive availability in the backend and database; reserve `share`
+  and its variants in onboarding and backfill. Document external naming-policy
+  precedents in ADR-0026. Correct the uncommitted people migration without resetting
+  development data. Allow focused browser retries through the existing verification
+  runner without copying its build and database setup.
+
+- Deliver Collaborators and routes: collection roles are `viewer` and
+  `contributor` throughout API contracts, policy, transfers, discussion and web
+  access forms. A reviewed migration preserves grants and audit evidence; old
+  role inputs are rejected. Add backend-authorized single-item reads and Details
+  links at `?item=<id>` on both collection addresses, including later-page items,
+  native close links, modal keyboard behavior and independently filtered references.
+
+- Consume shared request contracts in web payloads and backend DTOs. Add exact
+  DTO/type parity checks, include the existing commentsEnabled collection input,
+  and export comment/transfer requests. Runtime validation and permissions remain
+  backend-owned; untrusted share-open metadata retains forgiving API parsing.
+
+- Consolidate preproduction management and sharing: remove scoped audit API views
+  and duplicate wire projections, the held-only collection list/link resolver,
+  redirect-only collection actions, and experimental `share_id` URL support.
+  Dialog links now navigate directly; remove unused account-action/disclosure UI,
+  global toast dispatch, social templates, redundant session reads and temporary
+  migration/test scripts. Keep native fallbacks, access checks and event retries.
+
+- Open collection actions by clicking the row or its keyboard-accessible name,
+  removing the Action column and fixing the first-click hydration race. The popup uses
+  the site's typography, colors and separators, keeps keyboard focus inside,
+  closes immediately on action selection, and returns focus on Close/Escape;
+  native links remain available without JavaScript.
+
+- Move Audit Log actions below Include read events, with a secondary Apply
+  filters button and adjacent Clear filters link shown only for applied filters.
+
+- Sharing now stores creation intent in context and recognized UTM attribution,
+  optional context and client occurrence timestamps on individual opens. Optional
+  opening metadata is forgiving and returns structured warnings; new opens return
+  201 and idempotent retries 200. Payload hashes support content comparison without
+  affecting counting. Shared client helpers and the web use `via` links, preserve
+  attribution through sign-in, and keep maintained open counters and destination
+  analytics. No referral rewards or social integrations are introduced.
+
+
+- Document why sharing uses separate entry/event tables: maintained open counters keep reads inexpensive, event details evolve independently, and transactional insert/increment preserves consistency on retries.
+
+- Add Analytics immediately before Audit Log in Manage for operators and admins, with all-time share requests, reported opens, resource/destination breakdowns and manual Refresh. Permit audited operator aggregate reads while keeping individual service share records admin-only.
+
+- Reserve web message templates per share kind for future social actions. Copy link omits message text and uses the API's generic default in its entry.
+
+- Default API share messages to “Share {kind}”; custom messages remain supported.
+
+- Add reusable sharing APIs: read-only previews, authenticated POST returning a complete share entry, optional JSON message/destination, filtered creator history, resource-owner aggregates and audited admin metadata. Tracked URLs carry `share_id`; authenticated web Copy link records one entry and loaded destinations report retry-safe opens. Messages and private tokens stay out of tracked URL metadata/storage respectively; recording never grants access. Add reviewed ShareEntry/ShareOpen persistence; counts describe requests and reported opens, not delivery or unique visitors.
+
+- Reuse one contextual Share page for profiles, hubs, collections and nslinkhub, with Share actions on their viewing pages. Profile share links use immutable user IDs and survive username changes; return links preserve the source page, and collection access rules remain enforced.
+
+- Collection action screens return to their originating page through a contextual link, retaining management filters. Share keeps Copy link visible during loading, enabled when JavaScript is ready; there is no separate Cancel control and social destinations remain deferred.
+- Consolidated content, operations and authentication evidence into one `AuditLog` model with a data-preserving migration. Audit Log now has one permission-scoped timeline and shared search/pagination without context tabs; existing retention and replay guarantees remain intact.
+- Compacted account details spacing and replaced hub handle/ID metadata with a linked hub name.
+
+
+- Improve account-detail spacing: distinct name/username heading, aligned metadata,
+  consistent session/action sections and stacked fields on mobile.
+
+- Accounts shows Account (name and username), Email, Role, Status, Member since
+  Last login and Sessions. Names have no anchor or link styling; clicking a row opens its detail page, with permitted action
+  buttons at the bottom. Profile usernames link to the public profile beneath the
+  name; detail rows start with User ID, Email and Hub. Collections uses a secondary Action button with direct
+  links in a dialog. The API supplies permitted actions; no IP or user agent is exposed.
+- Persist Last login on successful ordinary or invitation sign-in and show it in
+  account details in local time to seconds. Failed/rolled-back sign-ins and session
+  refreshes leave it unchanged; existing accounts remain unknown until they log in.
+- Add reversible account deactivation and admin-only deletion with a 14-day grace
+  period, cancellation, protected admin/self rules and audited transactional cleanup.
+- Unify Collections into one ID/link-searchable table with permission-based actions.
+  Connect owner publication, sharing, transfer and deletion to existing APIs;
+  preserve the service moderation/private-content boundary. Add reader-toolbar Share.
+- Rename Audit to Audit Log with Timestamp, Actor, Action, Target, Outcome and
+  Change columns. Accounts accepts an exact copied user ID. Keep desktop timestamps
+  on one line and use blue-underlined audit context tabs.
+
+- Capture bounded before/after state and success/no-change outcomes for publication,
+  share-link changes, direct access and transfers in the mutation transaction.
+  Audit now shows actual targets, recorded effects and service reasons/results,
+  with explicit gaps for older entries. Actions/decisions is the default web view;
+  reads remain recorded and accessible. Dates use the viewer's local
+  `YYYY-MM-DD HH:mm:ss`, including seconds and date rollover. One Search field
+  replaces Actor/Target/Hub boxes and searches displayed actors, actions, targets,
+  outcomes and changes, including partial IDs; Action and local date ranges narrow results.
+  Full audit design
+  and wide event logging remain separate deferred milestones.
+
+- Deferred audit strategy/redesign and wide event logging to separate milestones
+  after fundamental system operations. Recorded ADR-0020, qualified the current
+  activity/audit relationship, and retained existing recording and telemetry
+  contracts while the core workflows are completed.
+
+- Display immutable actor ID segments in Audit using the same full-ID hover and
+  copy interaction as Target. Username renames no longer change the visible
+  actor reference; username search still resolves to the stable user ID.
+
+- Show the final segment of target UUIDs directly in Audit, without type prefixes
+  or expansion. Hover reveals the full UUID; clicking copies the full ID and
+  displays “Copied” instead of a tick, clearing the feedback after two seconds.
+
+- Compact ID disclosures across Audit and Accounts: display the final UUID
+  segment without ellipses or collision extensions; click the expanded full ID
+  to copy it, with its label retained and the full value available on hover.
+  Expand by clicking the label without an arrow. Audit Target shows only the
+  entity acted on, without related collection IDs.
+
+- Show the stable user ID beneath each Accounts row, with an expandable suffix
+  and a full-ID copy action matching Audit. Keep account details grouped on
+  narrow screens and wrap long table values without horizontal overflow.
+
+- Normalize hub/service audit: current usernames resolve from immutable IDs;
+  separate Actor, Target and Hub filters keep full IDs through pagination.
+  UUID suffixes expand to selectable/copyable full IDs and extend on visible
+  collisions. New service collection events retain their event-time hub ID;
+  historical events without that context remain unknown. Email search stays in Accounts.
+
+
+- Unified Manage table continuation: Load more appends rows, preserves existing
+  results on retry, and disappears at the end. Added cursor pagination to held
+  collections instead of truncating at 100. Renamed the People tab/page to Access.
+
+- Framed the active Settings section in a rounded panel, with unboxed navigation
+  beside it, replacing the dividing line while retaining spacious, borderless field rows.
+
+- Matched contributor username hover styling to other person and hub links:
+  blue text without an underline.
+
+- Made discussion height follow its own content, capped by available page space
+  above the footer. Empty discussions stay compact; busy discussions can extend
+  beyond a short collection. Removed collection-height observation from the sidebar.
+
+- Matched verification-code email subjects, previews and bodies to sign-in,
+  first-link saves, continuation, session recovery, sensitive-action confirmation
+  and invitation acceptance. Resends retain the purpose; email-change messages
+  remain distinct.
+
+- Placed public-view shortcuts beneath Username and Handle in Settings. The
+  profile shortcut waits for pending edits and opens the newly saved username.
+
+- Added an optional personal bio in Profile settings and public profiles.
+  Bios support up to 500 characters, preserve line breaks, and work without a hub;
+  they are independent of hub descriptions and ownership visibility.
+- Removed Copy hub link from Settings and moved View your public hub beneath
+  the Hub ID. Removed the unused clipboard component and styles.
+
+- Moved ownership visibility to `Hub.showOwner`, edited as **Show owner** in
+  Settings → Hub. Removed the user-level visibility preference.
+  Public relationship labels use “username of Hub Name” on profiles and
+  “@handle by Owner Name” on hubs. Opting out removes owner identity from public
+  hub responses and the hub from public person responses, while the private Hub
+  menu entry remains. The migration preserves existing opt-out choices.
+
+- Kept Profile as a viewing page showing the person’s name and username,
+  with a separate Hub menu entry or an owner-only Create hub
+  action. Profile edits are reached through Settings. The public hub-connection preference hides or shows the relationship in both directions while profile names stay visible. Added Settings ›
+  Notifications for the existing always-on invitation behavior and moved all
+  planned notification preferences there; Notifications remains the inbox.
+
+- Aligned the hub Description field with Hub name and Handle in Settings;
+  narrow screens retain the stacked layout. The description has a readable
+  four-line minimum and grows with its content. Email address comes first in Profile; Hub ID
+  comes first in Hub, followed by Hub name, Handle, Show owner and Description.
+  Settings uses Profile, Hub and Notifications navigation with one section
+  visible at a time, preserving drafts on section changes and using whitespace
+  between fields.
+- Unified management at `/manage`: context-aware owner/operator/admin navigation,
+  owner collection and audit views, and a paginated People list of current
+  collection collaborators. Accounts and Team remain service-authorized; owner
+  and service data are never merged. Old `/ops` routes are removed. Owner email
+  invitations and People extensions remain planned.
+- Split service invitations into `/manage/invitations`; Team lists current admins
+  and operators. Collection-access invitations will use the same presentation
+  pattern with their own authorization.
+
+- The footer sits at the viewport bottom on short pages and follows long content
+  at the end of document scrolling. Desktop collection panels retain internal
+  scrolling; narrower layouts use document flow. Audit pagination now has the
+  standard spacing below its table. Audit Load more appends older events and
+  disappears at the end. Accounts, Collections, Team and Audit use desktop table
+  scroll regions while tabs, filters and column headings stay visible. Filters and loaded rows survive pagination retries.
+
+- Clarified the planned hub metrics: subscribers and collection saves take
+  priority; individual resource copies are a separate action.
+
+- Removed sharing widgets from hubs, collections and the footer, including their
+  unused styles and icons. The footer keeps Support, vertically centered and
+  matching the header navigation font size.
+  Redesign is recorded in the sharing/hub-engagement
+  backlog alongside subscriptions and collection bookmarks/saves.
+
+- Added a collection Contributors section above Discussion with linked avatars
+  and usernames for small groups (avatars only above three contributors)
+  and the real contributor count. The collection header shows **+N tags** beside
+  its tag chips, counting distinct tags across every resource. Discussion stays
+  below Contributors independently of the
+  collection header and starts at half the collection height, growing with comments until it
+  reaches the collection bottom, then scrolling internally.
+
+- First-link capture resolves page titles and validates public URLs before sign-in,
+  using the same lightweight lookup as the signed-in form. Rich previews belong
+  on saved collection items. Failed lookups show a saveable fallback;
+  URL validation, outbound-fetch protections and the 30/minute source budget
+  remain enforced. Saving still requires verification.
+
+- Implemented separate people and hub identities: sign-in creates a person with
+  a unique username; first save, collection creation or incoming transfer creates
+  their optional hub atomically. Public `/username` profiles show only available
+  published contributions, with hub-owned control over the public owner connection. Attribution uses person
+  usernames; hubs keep independent handles and immutable links. Settings,
+  navigation and native forms support people without hubs. The reviewed migration
+  preserves existing identity and visibility choices.
+- Settled copying policy for the planned “Add to my collection” feature
+  (ADR-0019): source owners can refuse copying, and every permitted copy must
+  show source credit in the recipient's collection. Copying implementation remains
+  in the preview/Add to my collection slice.
+
 - Removed pre-production compatibility code: ID-only invitation status routes,
   bootstrap re-mail upgrades and the duplicate collection If-Match parser.
   Collection writes use body `version`; readiness uses `redisQueue` throughout.
@@ -286,10 +619,6 @@ summary of what changed after completed work has been promoted out of `ref/`.
   references as links by default; explicit expansion includes one readable level,
   preserves headings and marks unavailable references without leaking content.
   Web reference navigation uses immutable URLs without forwarding share tokens.
-
-- Profile settings adds an autosaving “Show my name on my hub” switch. Turning it
-  off hides owner attribution on hubs and public collection metadata without
-  changing the saved full name or hub identity. Existing accounts default to on.
 
 - Your hub now shows its name, handle, optional owner name and description
   above Your collections, with Copy hub link beneath the description.

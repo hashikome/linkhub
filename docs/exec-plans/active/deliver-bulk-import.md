@@ -38,6 +38,13 @@ Design: [bulk-import.md](../../design-docs/bulk-import.md). Decision:
 
 ## Decision Log
 
+- Decision (2026-10-09, product owner): importing is owner management, not
+  contribution. Require an existing personal hub and requireManage for every
+  destination; never create a hub implicitly. The future import page prompts
+  explicit Create hub before upload. This replaces any earlier contributor
+  import permission; see ADR-0012 and ADR-0018 amendments.
+
+
 - Decision: imports resolve titles like every save; source titles are ignored.
   Rationale: one rule for every link (ADR-0007). Date/Author: 2026-10-08 / Paul
 - Decision: a server-side draft with a preview step, partial commits, and
@@ -49,6 +56,18 @@ Design: [bulk-import.md](../../design-docs/bulk-import.md). Decision:
 - Decision: limits of 1,000 links per draft, 3 open drafts, 30-day expiry.
   Rationale: bounded storage and lookup load; larger exports import by folder.
   Date/Author: 2026-10-08 / Claude, confirmed by Paul
+
+- Decision (2026-10-10): preserve source/folder provenance for future document
+  extraction and AI suggestions, but keep them outside this milestone. Reuse this
+  reviewed draft/commit contract; see [assisted curation](../../design-docs/ai-curation.md).
+  Confirmed in ADR-0028: bookmarks/CSV remain free; paid DOCX extraction and
+  AI organization are separate follow-ups.
+- Decision (2026-10-10): commit headings only with at least one accepted item;
+  failed-only/skipped folders must not create empty sections (ADR-0027).
+
+- Decision (2026-10-10): ADR-0028 sets public-by-default new collections with
+  a private choice; drafts stay private. Coordinate creation defaults with the
+  entitlement/quota rollout, while preserving existing destination visibility.
 
 ## Outcomes & Retrospective
 
@@ -93,7 +112,7 @@ write lock.
 **M3 — Destinations and commit.** Folder destination edits (one collection with
 sections, or per-folder new/existing/section/skip) with defaults as designed;
 recompute Duplicate/Already saved on change. Commit in batches under the write
-lock: create new private collections, headings for section folders in tree
+lock: create new collections with the owner’s reviewed visibility, headings for section folders in tree
 order, resources for Ready rows; mark rows Imported with their resource id so a
 retry never duplicates. Return per-destination counts.
 
@@ -121,7 +140,7 @@ apply; then `bun run verify` and `bun run test:browser`.
   non-existent addresses fail with reasons; duplicates and already-saved rows
   are marked; another account cannot read or act on a draft (404); limits
   enforced.
-- E2E: commit creates new private collections and sections in order, imports
+- E2E: commit creates new collections and sections in order with the reviewed visibility, imports
   only Ready rows, leaves failures in the draft, and is idempotent on retry.
 - Browser (with and without JavaScript): upload a bookmarks file, split two
   folders into collections, fix one failed row, import, see "N links need

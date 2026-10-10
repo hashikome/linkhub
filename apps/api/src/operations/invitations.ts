@@ -90,7 +90,7 @@ export async function prepareAdminInvitation(
       return { created: false, id: null };
     }
     const user = await prisma.user.findUnique({ where: { email } });
-    if (user?.accountState === "suspended") throw appError("forbidden");
+    if (user && user.accountState !== "active") throw appError("forbidden");
     await cancelInvitations(prisma, { OR: [{ role: "admin" }, { email }] });
     const invite = await prisma.serviceInvitation.create({
       data: {
@@ -106,8 +106,9 @@ export async function prepareAdminInvitation(
       create: { id: 1, invitationId: invite.id },
       update: { invitationId: invite.id, claimedById: null, claimedAt: null },
     });
-    await prisma.operatorAudit.create({
+    await prisma.auditLog.create({
       data: {
+        category: "operation",
         actorKind: "deployment",
         authority,
         action: recovery ? "admin.recovery_invited" : "admin.bootstrap_invited",

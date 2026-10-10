@@ -3,6 +3,11 @@
 **Status:** accepted  
 **Date:** 2026-10-08
 
+**Qualification (2026-10-09):** [ADR-0020](0020-logging-after-core-operations.md)
+defers audit strategy/redesign until fundamental operations are complete. This
+attribution contract remains in force; sharing its records with the current hub
+audit does not settle the future audit architecture.
+
 ## Context
 
 Collections are built by several people: the creator, the owner, editors. Readers
@@ -36,7 +41,9 @@ are the hub's audit trail. The creator remains a record, never a role
 
 - Entries hold ids and actions only — no names, emails, tokens or authored text
   (display identity follows [ADR-0018](0018-people-and-hubs-are-separate.md);
-  the implemented person reference still uses the hub handle).
+  person references use immutable user IDs and current usernames).
+  [ADR-0021](0021-bounded-audit-effects.md) narrowly amends this to allow bounded
+  before/after state and outcomes for core management actions.
 - Entries are written atomically with the change and never edited.
 - Attribution never grants access, and shows only what the viewer may read.
 
@@ -44,3 +51,7 @@ are the hub's audit trail. The creator remains a record, never a role
 
 - [attribution-and-activity.md](../design-docs/attribution-and-activity.md)
 - [ADR-0002](0002-immutable-identities.md), [ADR-0013](0013-permission-roles-and-display-labels.md)
+
+## Audit consolidation — 2026-10-09
+
+[ADR-0024](0024-one-audit-log.md) supersedes separate audit storage and the Audit context switch. All event categories use one AuditLog; permissions and attribution rules remain unchanged.

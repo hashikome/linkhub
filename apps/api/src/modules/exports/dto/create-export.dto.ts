@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import type { CreateExportRequest } from "@nslinkhub/types";
 import {
   ArrayMaxSize,
   ArrayMinSize,
@@ -11,7 +12,7 @@ import {
 import type { ExportFormat } from "../export-document";
 import { EXPORT_FORMATS } from "../export-document";
 
-export class CreateExportDto {
+export class CreateExportDto implements CreateExportRequest {
   @ApiProperty({ enum: EXPORT_FORMATS })
   @IsIn(EXPORT_FORMATS)
   format!: ExportFormat;

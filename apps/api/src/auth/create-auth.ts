@@ -3,7 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { bearer } from "better-auth/plugins";
 import { emitEvent } from "../common/observability/telemetry";
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
-import { createPersonalHub } from "../modules/hubs/hub-onboarding";
+import { accountUsername } from "../modules/users/account-onboarding";
 
 export interface AuthDependencies {
   prisma: PrismaClient | Prisma.TransactionClient;
@@ -43,7 +43,7 @@ export function createAuth({ prisma, secret, baseURL, plugins = [] }: AuthDepend
     ],
     user: {
       deleteUser: { enabled: false },
-      additionalFields: {},
+      additionalFields: { username: { type: "string", required: false, input: false } },
     },
     advanced: {
       database: {
@@ -54,15 +54,9 @@ export function createAuth({ prisma, secret, baseURL, plugins = [] }: AuthDepend
     databaseHooks: {
       user: {
         create: {
-          // Every new user gets their one personal hub (their space) at sign-up,
-          // with a derived unique handle. App-owned and auth-path-agnostic: SSO
-          // later reuses this hook.
-          after: async (user) => {
-            await createPersonalHub(prisma, {
-              userId: user.id,
-              name: user.name,
-            });
-          },
+          before: async (user) => ({
+            data: { ...user, username: await accountUsername(prisma, user.name) },
+          }),
         },
       },
     },

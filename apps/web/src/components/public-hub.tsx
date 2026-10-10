@@ -1,44 +1,43 @@
-import { webServerConfig } from "@nslinkhub/config/web-server";
 import type { HubPage } from "@nslinkhub/types";
-import { SharePanel } from "./copy-link";
 import { PaginatedList } from "./paginated-list";
+import { ShareAction } from "./share-action";
 
 export function PublicHub({
   data,
   nextCursor,
   preview = false,
+  returnTo,
 }: {
   data: HubPage;
   nextCursor?: string | null;
   preview?: boolean;
+  returnTo?: string;
 }) {
   const { hub, collections } = data;
   const ownerName = hub.ownerName?.trim();
   return (
     <section data-reader className="reader collection-browser public-hub">
-      <div className="page-heading hub-heading">
+      <div className="page-heading hub-heading shareable-heading">
         <div className="hub-introduction">
           <h1>{hub.name}</h1>
           {/* The handle is the hub's; "by Name" only when the owner shows it. */}
           <p className="hub-identity meta">
             <span className="person-handle">@{hub.handle}</span>
-            {ownerName && (
+            {ownerName && hub.owner && (
               <>
                 {" by "}
-                <span className="person-name">{ownerName}</span>
+                <a className="person-name" href={`/${encodeURIComponent(hub.owner.username)}`}>
+                  {ownerName}
+                </a>
               </>
             )}
           </p>
           {hub.description && <p className="description">{hub.description}</p>}
-          <div className="hub-share-actions">
-            <SharePanel
-              id={hub.id}
-              kind="hub"
-              title={hub.name}
-              origin={webServerConfig().publicOrigin}
-            />
-          </div>
         </div>
+        <ShareAction
+          target={{ kind: "hub", id: hub.id }}
+          returnTo={returnTo ?? `/h/${hub.id}${preview ? "?view=public" : ""}`}
+        />
       </div>
       <div className="hub-collections-heading">
         <h2>Published collections</h2>

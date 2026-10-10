@@ -2,14 +2,19 @@ import type { ShareRole, ShareSource } from "./common.js";
 import type { IsoTimestamp } from "./envelope.js";
 
 export interface Collection {
-  hub?: { id: string; handle: string; name: string };
+  hub?: {
+    id: string;
+    handle: string;
+    name: string;
+    owner?: import("./envelope.js").PersonRef | null;
+  };
   // Who created the collection (immutable provenance; may differ from the owner
   // after a transfer). Present on single-collection reads; null if unavailable.
   creator?: import("./envelope.js").PersonRef | null;
   // Everyone who has shaped its content, most recent first (up to five), and
   // how many there are. Present on single-collection reads.
   contributors?: { people: import("./envelope.js").PersonRef[]; total: number };
-  /** canManage: the owner; canEdit: a contributor (owner or editor). */
+  /** canManage: the owner; canEdit: a contributor (owner or contributor). */
   capabilities?: { canManage: boolean; canEdit: boolean };
   restriction?: { reason: import("./operations.js").OperationReason; supportUrl: string };
   id: string;
@@ -17,6 +22,7 @@ export interface Collection {
   slug: string;
   title: string;
   description: string | null;
+  /** Unique tags on this collection’s own items, most-used first, alphabetical ties. Stored relation, read-only. */
   tags: string[];
   published: boolean;
   linkSharingEnabled: boolean;
@@ -49,16 +55,15 @@ export interface CreateCollectionRequest {
   slug: string;
   title: string;
   description?: string;
-  tags?: string[];
   published?: boolean;
 }
 
 export interface UpdateCollectionRequest {
+  commentsEnabled?: boolean;
   version: number;
   slug?: string;
   title?: string;
   description?: string;
-  tags?: string[];
   published?: boolean;
 }
 
@@ -77,4 +82,40 @@ export interface LinkSharingResult {
 export interface CreateShareRequest {
   email: string;
   role?: ShareRole;
+}
+
+// Current collaborators in the authenticated owner's hub, not service accounts.
+export interface HubPerson {
+  userId: string;
+  username: string;
+  collectionCount: number;
+}
+
+export type ManagedCollectionAction =
+  | "open"
+  | "edit"
+  | "add_link"
+  | "history"
+  | "share"
+  | "publish"
+  | "unpublish"
+  | "delete"
+  | "transfer"
+  | "hold"
+  | "release";
+
+export interface ManagedCollection {
+  id: string;
+  hubId: string;
+  hubHandle: string;
+  /** Null when only moderation metadata is available. */
+  title: string | null;
+  visibility: "published" | "link" | "private" | null;
+  held: boolean;
+  updatedAt: IsoTimestamp | null;
+  availableActions: ManagedCollectionAction[];
+}
+
+export interface TransferCollectionRequest {
+  email: string;
 }

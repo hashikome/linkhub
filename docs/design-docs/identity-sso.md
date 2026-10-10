@@ -40,9 +40,9 @@ stay in the product.
    and foreign keys continue to use the local UUIDv7 user ID.
 2. **Require product enrollment.** SSO authenticates a person; it does not
    silently enroll them in every product. First use requires that product's
-   explicit signup and app-owned onboarding. NSLinkHub's accepted
+   explicit signup and app-owned onboarding. NSLinkHub's
    [people-and-hubs design](people-and-hubs.md) creates a hub only on first
-   save or collection creation.
+   save, collection creation or receipt of a collection transfer.
 3. **Keep product sessions local.** The IdP authenticates; the product issues
    its session. Product logout and identity-wide logout are distinct actions.
 4. **Keep authorization product-owned.** Hub ownership, collection policy and

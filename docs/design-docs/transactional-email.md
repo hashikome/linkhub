@@ -130,7 +130,10 @@ the code only, with no direct authentication link**. Built
 templates (typed inputs, validated before render, HTML + plain text, subject
 never carries the code):
 
-- **sign-in code** (`renderLoginCode`) — continue-with-email sign-in.
+- **verification code** (`renderVerificationCode`) — purpose-specific subject,
+  inbox preview and body for sign-in, saving a first link, continuing, resuming
+  after session expiry, confirming a sensitive action, and invitation acceptance.
+  Resends retain the same purpose. All variants share the code layout and warning.
 - **email-change confirmation** (`renderEmailChangeConfirmation`) — to the
   **current** address, naming the target address; step one of the
   double-verified account-email change

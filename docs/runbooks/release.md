@@ -10,8 +10,11 @@ retains milestone evidence.
 GHCR publication, Swarm/Dokploy promotion, off-host restore, live email/webhooks
 and Sentry/Alloy rollout remain unverified. Browser Origin enforcement is
 implemented and tested locally; each new browser workflow needs its own
-acceptance. Account deletion is disabled until its verified workflow and
-retention policy are implemented.
+acceptance. Self-service account lifecycle and permanent hub-handle claims are
+implemented ([ADR-0033](../engineering-decisions/0033-permanent-hub-handles-and-self-service-accounts.md));
+include email confirmation, recovery restrictions, 14-day deletion/cancellation
+and retained handle reservations in release acceptance. Generic vendor deletion
+remains disabled.
 
 ## Deployment preparation checks
 

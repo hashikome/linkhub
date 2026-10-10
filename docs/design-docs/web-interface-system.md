@@ -30,7 +30,7 @@ at the shell's left content edge (the wordmark's edge); narrower surfaces keep
 their own measure without re-centering: reader 768 px, settings 736 px, sign-in
 and capture 512 px. Prose is capped at 65–70 characters. Below 640 px use 20 px
 gutters and stack the title/action group. The shell must fit 320 px without
-horizontal scrolling. At 1024 px the collection reader places sharing and discussion beside the
+horizontal scrolling. At 1024 px the collection reader places discussion beside the
 resources; narrow screens put discussion after the reader. DOM reading order
 must remain meaningful. There is no fixed mobile bottom bar.
 
@@ -46,8 +46,8 @@ Do not make a row containing secondary controls into one enclosing link.
 | Resource row | One primary destination in ink, then one meta line: hostname (leading `www.` dropped), a small arrow-up-right external glyph, and optional tags inline. External links use normal browser behavior and a no-referrer policy. No script/data URL navigation. |
 | Collection reference | Viewer-authorized destination title, then a meta line with a stacked-squares icon and an accent “Collection” label; links to its immutable ID without source tokens. Unavailable targets show a neutral muted entry. |
 | Heading resource | Plain section heading in resource order, with spacing rather than a card or separator. |
-| Button | Filled accent for the primary action, bordered neutral with ink text for secondary, accent text for low emphasis. One shared control height: 38 px with a mouse/trackpad, 44 px touch targets on coarse pointers. Default/hover/focus/active/disabled/pending states share geometry. Signed-out navigation renders Sign in as a compact secondary button. |
-| Sharing | One unboxed section: “Share this hub” beneath hub descriptions, “Share this collection” fixed above Discussion from 1024 px. Narrow collection layouts retain a compact Share disclosure. Both use the same heading and one row of text links — LinkedIn, X, WhatsApp, Share link. Share link copies the address and says “Link copied to clipboard.” in reserved space beneath the row, without shifting content; if the clipboard is unavailable the exact address appears there to copy by hand. No email option (people share the link wherever they like). A source share token is only included through the explicit “Share access link”. Settings keeps a plain Copy hub link. |
+| Button | Filled accent for the primary action, bordered neutral with ink text for secondary, accent text for low emphasis. Shared primary/secondary button sizing: 32 px with a mouse/trackpad, 44 px touch targets on coarse pointers. Fields remain 38 px with fine pointers. Default/hover/focus/active/disabled/pending states share geometry. Signed-out navigation renders Sign in as a compact secondary button. |
+| Sharing | Hub, collection and footer sharing controls are deferred to the sharing and hub-engagement slices. Contributors occupy the top of the collection sidebar; Discussion sits directly below them and grows with its own content on wide, tall screens, capped by the available page space above the footer before scrolling internally. Empty discussions stay compact. Its position is independent of the collection header. The footer contains Support only beside the product identity. |
 | Toast | Transient confirmations (saved, resent, signed out, done, copied) appear top-center as a small card in the page's own surface, border and radius, with a tone mark (✓ success, dot info), fitted to the message; they clear after ~5 s and the `?notice=` code is removed afterwards. Errors, warnings and anything needing action stay inline: info (neutral blue), warning (amber), error (red). |
 | Email verification | One flow for every purpose (sign in, first link, continue, resume, confirm, invitation): the start screen (reason line; the known address in bold or an email field; what happens next; Send code, plus Cancel where backing out makes sense) and the code screen (where it went in bold, the code, the purpose's button, "Didn't receive the code? Send a new code"). Short paragraphs with clear space; no extra panels. |
 | Pagination | Visible continuation control with pending state and result-count announcement; prevent duplicate loads; preserve existing results on a retryable page failure. |
@@ -209,13 +209,13 @@ The code flow is held in a short-lived encrypted HttpOnly cookie; email and code
 never appear in navigation URLs. No code is consumed by GET. Form submission
 hides the previous document until fresh server rendering, including cancellation
 recovery. Signed-in navigation shows an avatar-only account menu containing
-Notifications, Settings, role-gated Service operations, and Sign out.
+Notifications, Settings, role-gated Manage, and Sign out.
 The notification badge counts items newer than the account's last visit to
 Notifications (`users.notifications_seen_at`); “Clear all” sets
 `notifications_cleared_at`. `GET /api/v1/notifications`, `POST …/seen` and
 `POST …/clear` are account-owned and separate from audited operator APIs.
 The footer stacks the current-year product copyright above a smaller, muted
-“an ns series product” line, with a footer navigation (Discover, Support) beside
+“an ns series product” line, with a Support link beside
 it. Privacy and Terms join it when those pages exist. Service status is reserved for API monitoring and
 has no client page or navigation entry.
 A single icon button beside the avatar cycles System → Light → Dark → System.
@@ -223,17 +223,51 @@ Its icon shows the current mode; its accessible label and tooltip name the curre
 and next modes. System remains the default. Only admins
 see `Operators and invitations` in the ops nav.
 
-`/ops` is an account table searchable by email or hub handle. `/ops/collections`
+Manage is one role-aware workspace. Owners see Access, Collections and Audit;
+operators also see Accounts, and admins have Team and Invitations. Owner and
+service contexts remain explicitly separate in shared sections.
+
+For service operators, `/manage` is an account table searchable by exact user ID or username, email and hub handle fragments.
+Account (name and user ID), Username, Email, Role, Status, Joined and Active sessions are separate columns.
+Email verification accompanies the address. Account detail includes hub, bio, suspension
+evidence and session start/verification/expiry dates, without IP or user agent.
+Session counts include only unexpired sessions; they are not historical last-login evidence.
+Each account shows its user ID beneath its name, with Username in its own column.
+The ID uses the Audit Log suffix display: hover reveals the full UUID and clicking
+copies it with temporary “Copied” feedback. No expansion is needed. `/manage/collections`
 resolves a pasted public collection link and lists active holds. Details use labelled identity/status rows, followed by named
 actions with consequences, a required bounded reason and confirmation. Account
 suspension, reactivation and session revocation are separate forms. Collection
 moderation uses minimal IDs/hold state; operators read any content through the
-ordinary reader. `/ops/audit` has actor/target search and action/date filters and explicit
-cursor continuation. No metrics dashboard, private-content preview or disabled
+ordinary reader. `/manage/audit` has one Search field for displayed actor, action, target, outcome and change,
+Action and From/To dates, with an Include read events checkbox. Search matches all words case-insensitively, including partial IDs; it stays
+bound to continuation. Explicit identity filters resolve to full IDs. Both audit contexts display the last UUID
+segment for Actor and Target; hover reveals the full ID, and clicking copies it
+with temporary “Copied” feedback.
+Current usernames accompany actor IDs. Actions use explicit labels; targets follow
+the action's entity rather than a generic ID precedence. Audit Log columns are
+Timestamp, Actor, Action, Target, Outcome and Change, in that order. Outcome
+shows the recorded result separately; Change shows
+bounded hub effects and existing service states/reasons; missing evidence stays
+explicitly unavailable. Actions/decisions is the default; Include read events adds
+routine reads. Audit timestamps use the viewer's local `YYYY-MM-DD HH:mm:ss` with
+seconds and date rollover, without per-row UTC offsets (labelled UTC without JS).
+Desktop timestamps stay on one line. Missing Change values read “Not recorded”.
+My hub / Service uses the same blue active underline as the Manage tabs.
+Accounts switches to labelled rows below 1024px to accommodate its identity and
+session columns; other Manage tables retain their narrower breakpoint.
+Date ranges follow the same local days, with a UTC fallback without JavaScript.
+Load more appends rows and disappears after the final page. Accounts,
+Access, both Collections contexts, Team and Invitations use the same continuation
+behavior, with sticky column headings and preserved filters. Shared ManageTable
+appends server-rendered rows from an authorized read-only server action, preserving
+native operation forms and their server-generated operation IDs. Native links
+still navigate to the next page without JavaScript. No metrics dashboard, private-content preview or disabled
 future actions. Error/reload and denied-access states work without JavaScript.
 
-`/ops/team` uses an email invite form, a service-team list and invitation
-rows with explicit delivery/expiry states. Pending or expired operator invitations
+`/manage/team` lists current admins and operators. The separate admin-only
+`/manage/invitations` tab owns the email invitation form and invitation rows with
+explicit delivery/expiry states. Pending or expired operator invitations
 have separate confirmed resend/cancel forms. Account details show a confirmed
 remove-access form only to admins. `/invitations/accept` receives the emailed fragment token; `/invitations/review`
 states responsibilities, recipient and expiry, then asks only new users for a name
@@ -259,30 +293,46 @@ no authentication or product permission. API/web both receive `BETTER_AUTH_URL`.
 
 ## Profile and appearance
 
-`/settings` renders Profile and Hub directly without tabs or a sidebar, compact
-enough to fit one desktop viewport at its reading width; Sign out lives only in
-the account menu. The hub ID uses the body font with a short permanence note.
-Appearance is controlled only in the header. Settings ignores the
-`section` query when rendering its single form. Desktop rows place labels left and
-controls right; narrow screens stack labels and fields. Profile edits Full name
-(`User.name`, retained as `displayName` in the API), and shows email and member-since. Hub edits its
-independent Hub name (`Hub.name`, `hubName` in Profile), handle and Description
-(`Hub.description`, `hubDescription` in Profile), shows the
-immutable UUID and keeps a “View your public hub” link to `/h/:hubId`. The public
-hub also resolves by `/@handle` and shows its name, handle and description.
+`/settings` has left-hand navigation for Profile, Hub and Notifications, with
+one section visible at a time. Selection uses `?section=hub` or
+`?section=notifications`; the default and unknown values select Profile. No
+additional settings subsections are introduced. Account access and deletion uses
+a separate `/account` confirmation flow, linked from Profile and sign-in. On mobile, the navigation becomes
+a compact horizontal row. The active section sits in a rounded, bordered panel
+using the canvas surface and shared panel radius, matching the collection and
+discussion containers. Navigation stays unboxed beside it, with a surface fill
+for the selected section. Fields use whitespace rather than separator lines. Necessary helper text sits
+beneath its control, including public-view links and Show owner behavior.
+Sign out lives only in the account menu; Appearance remains in the header.
+
+Profile starts with Email address, then Full name, Username, Bio and Member since. Bio is optional public plain text,
+limited to 500 characters, with help beneath the textarea.
+Hub starts with Hub ID, then Hub name, Handle, Show owner
+and Description last. The description aligns with the input column and has a
+readable multiline height. Without a hub, the Hub section shows first-save
+guidance. **Show owner** edits `Hub.showOwner`; no visibility field lives on User.
+Notifications contains invitation delivery information; future notification
+preferences also belong here.
+
+Section changes with JavaScript keep drafts mounted and autosaving. Native
+links and explicit Save changes work without JavaScript, retaining the selected
+section after saving. Desktop rows place labels left and controls right; narrow
+screens stack labels and fields. View your public hub links to `/h/:hubId`.
+The public hub also resolves by `/@handle` and shows its name, handle and description.
 The identity line reads “@handle by Owner Name” when the owner shows a nonblank
 name; otherwise only “@handle”, never an email fallback.
-The name, identity line and description form one header group,
-with the inline Share this hub section directly beneath the description.
+The name, identity line and description form one header group.
 Hub creation and update dates are not displayed. Published collections has its own heading
 and quiet count; empty feedback sits immediately beneath it, never at the foot
 of the page. No row separators or decorative container borders are added.
 The count uses public visibility rules across all pages, excluding private or held content.
 Full-name or email changes never rename a hub or change its description. Hubs
 are not transferable.
-In Settings, the outlined Copy hub link button precedes the
-View your public hub text link (Settings only, using `/h/:hubId?view=public`). It copies the absolute `/h/:hubId` address,
-with a selectable fallback when clipboard access fails.
+In Settings, View your public profile appears beneath Username, linking to
+`/username`; View your public hub appears beneath Handle, using
+`/h/:hubId?view=public`. These replace the static address hints. Ordinary clicks
+wait for pending autosave and use the saved username or immutable hub ID.
+Without JavaScript, links use the last saved values. There is no copy-link action.
 Native POST forwards PATCH with signed form-source attribution; Origin, backend
 validation and ownership remain enforced. Credential changes are excluded.
 
@@ -326,8 +376,7 @@ Escape cancellation. Reduced-motion users get a static indicator.
 
 
 The owner’s hub view leads with the same hub name, handle, optional owner
-attribution and description as the public page, with Share this hub below the
-description. Save a link lives in the top bar for every signed-in page (a labelled
+attribution and description as the public page. Save a link lives in the top bar for every signed-in page (a labelled
 “+” icon below 640 px). Your collections is a separate section below this identity;
 it includes the owner’s private collections.
 
@@ -368,10 +417,11 @@ retain the compact type scale. Layout stacks naturally on narrow screens.
 
 ### Stable page frame and compact discovery
 
-Header and footer frame a single scrollable main region, which is keyboard
-focusable. Content never scrolls behind either landmark. Very short viewports
-(480px high or less, including heavy zoom) fall back to document scrolling so
-navigation cannot consume the entire available content area. Discover and public
+The document scrolls beneath a sticky header. The footer stays at the viewport
+bottom on short pages and follows the content at the end of longer pages; it
+never overlays content or remains pinned while the document scrolls. Main is
+keyboard-focusable as the skip-link target. Very short viewports (480px high or
+less, including heavy zoom) use natural document flow. Discover and public
 hubs use compact collection rows in two columns on desktop, one on phones;
 reading content keeps its comfortable text width. Desktop uses Previous/Next
 pages sized to the frame; mobile retains More collections, with native
@@ -392,8 +442,8 @@ JavaScript. No animation library is needed.
 Desktop discovery uses the remaining main-region height to show only complete
 collection rows, with Previous/Next controls. Capacity is recalculated on resize
 and text changes; mobile and short/zoomed viewports retain scrolling. Native
-no-JavaScript rendering retains readable cursor pagination. Main scrollbar chrome
-is hidden while scrolling remains available where the surface requires it.
+no-JavaScript rendering retains readable cursor pagination. Long pages use the
+document scrollbar; main has no separate scroll container.
 
 Collection rows show title, up to two description lines, then hub attribution and
 updated date. Keep the header/footer and landing discovery divider; omit repeated
@@ -405,7 +455,7 @@ the left and a compact example collection spanning the right. The discovery
 divider marks the second intent within the left column. Mobile stacks capture,
 example, discovery. Keep the shared typeface, tinted-neutral palette and blue actions.
 
-Collection owners can edit name, description and comma-separated tags together.
+Collection owners can edit name, description and comment settings together.
 The editor preserves submitted values on errors through progressive form state,
 including without JavaScript. Backend policy and version checks remain authoritative.
 Hide collection pagination entirely when all results fit and no further cursor exists.
@@ -421,14 +471,18 @@ original creator or the last editor.
 
 ## Collection editing and hub routes
 
-Owners see one Edit button in the collection sheet's top bar. It opens
-`/c/:id/edit`, a native form with every editable field (name, description,
-comma-separated tags) and Save changes / Cancel; it works without JavaScript.
+Owners and contributors see one Edit button beside Share in the collection
+sheet's top bar at every screen width. It opens `/c/:id/edit`, with owner-only
+collection details and a paginated Items and sections area. The latter offers
+Add a link through the existing owner capture flow, Reorder, Add section and
+per-section description editing. History is a secondary link. Metadata uses a
+native form with name, description, comment settings and Save changes /
+Cancel; all editing paths work without JavaScript.
 Validation errors keep the draft. A version conflict keeps the draft, shows the
 latest saved name and lets the owner start again from the latest version or save
 the draft over it deliberately. Success returns to the reader with a toast.
-The edit page only renders for the API's `canManage` capability; the API still
-decides every write. Visitors see read-only content.
+The edit page requires the API's `canEdit` capability; owner metadata additionally
+requires `canManage`. The API still decides every write. Visitors see read-only content.
 
 Both `/h/:hubId` and `/@handle` resolve the hub and show its authenticated owner
 their own collections. Everyone else receives only the public list. `/hub` is a
@@ -456,7 +510,7 @@ collection layouts add no row separators or container borders. Exact values live
 
 ## Reader, discussion and verification interactions
 
-- Collection reader: one sheet whose header (hub link, Edit for owners, title,
+- Collection reader: one sheet whose header (hub link, Share and Edit for owners/contributors, title,
   description, tags, metadata with GitHub-style relative “Updated …” and the
   exact time in the title) stays fixed on desktop while sections and links
   scroll inside it. The description eases closed over 220ms before links scroll;
@@ -467,8 +521,16 @@ collection layouts add no row separators or container borders. Exact values live
   Only scrolling in the collection sheet triggers the fold, not the independent
   discussion column. Small/short viewports
   retain natural document scrolling; without JavaScript the full heading remains.
-  From 1024 px the Share panel stays fixed above the independently scrolling
-  discussion when the viewport is at least 600px high. Discussion keeps its
+  From 1024 px a Contributors section shows linked avatars and a total at the top
+  of the sidebar. The collection header shows up to three stored item-derived tag names,
+  then +N tags for the remaining names; omit the tag row when empty.
+  Discussion follows Contributors in normal flow, independently of the collection
+  header and its folding description. At viewport heights of at least 600px,
+  the collection and discussion each grow naturally with their own content.
+  Both are capped by the reader layout's available space above the footer;
+  the discussion's limit accounts for Contributors and the gap above it.
+  A short collection never caps a longer discussion, and an empty discussion has
+  no imposed minimum height. CSS provides the same sizing without JavaScript. Discussion keeps its
   heading visible; comments scroll below. Add a comment at the top opens a
   native disclosure containing the input (Ask a question or add a note…) and
   Post button. Closing preserves drafts. Signed-out readers see Sign in to join
@@ -477,8 +539,7 @@ collection layouts add no row separators or container borders. Exact values live
   Disclosure focus rings follow keyboard use; returning to a pointer-focused
   disclosure after switching windows does not add a ring. Text inputs retain
   their normal focus indication.
-  Short viewports use document scrolling; narrower screens use the Share menu
-  in the sheet bar.
+  Short viewports use document scrolling.
 - Sign-in codes: one code per address every 30 s (server-enforced, `429` with
   `Retry-After`; cleared by a successful sign-in) inside the existing 5 per 10
   minutes. The code page disables “Send a new code” with a live countdown from
@@ -486,22 +547,43 @@ collection layouts add no row separators or container borders. Exact values live
   `AUTH_CODE_RESEND_SECONDS` (API and web) shortens it for isolated tests only.
 - Layout reads session, profile and theme in parallel.
 
-- Discussion: on wide screens the side column holds Share and the discussion
-  and scrolls on its own beside the fixed sheet; below 1024 px the discussion
-  follows the links. Native forms post through `/forms/comment-*` and return to
+- Discussion: on wide screens the side column places Contributors above Discussion,
+  with comments scrolling independently beside the sheet. Below 1024 px both
+  sections follow the collection links in document flow. Native forms post through `/forms/comment-*` and return to
   the same collection URL (keeping an explicit share token) at the comment's
   anchor with a toast; errors show inside the discussion. Reply, Edit and Delete
   (with a confirm step) are disclosures; contributor replies carry a Contributor
-  label and the accepted answer a green Answer marker. The frame never scrolls
-  as a document: anchor jumps are pinned back so header and footer stay put.
-- People appear in one format everywhere (collection metadata, comments,
-  contributors, history, notifications, audits): their `@handle`, linking to
-  `/h/:hubId`. This is the implemented `PersonRef` contract; the planned
-  [people-and-hubs design](people-and-hubs.md) uses usernames and person profiles.
-  A name appears only on the person's own hub page, and only when
-  they chose “Show my name on my hub”; otherwise it stays a private profile
-  detail. The API carries people as `PersonRef { hubId, handle }` and never
-  sends names elsewhere.
-- Comments read TikTok-style: "@handle · Contributor" (a Contributor pill), the body, then the age leading the actions — "53m  Reply  Edit" —
+  label and the accepted answer a green Answer marker. Native anchor jumps may
+  scroll the document; the footer follows the content.
+- People appear by username, linking to `/username`. The API carries
+  `PersonRef { userId, username }`, including for contributors without a hub.
+  Names appear on person profiles when set; `Hub.showOwner` controls profile/hub links and hub owner credit;
+  access-management lists retain the invited person's name and email.
+- Comments read TikTok-style: "username · Contributor" (a Contributor pill), the body, then the age leading the actions — "53m  Reply  Edit" —
   as now, 53m, 23h, 2d, then a date ("Oct 7"); the exact time is on hover.
 - Discovery is `GET /api/v1/discover` (web `/discover`).
+
+Collection-row and account-detail Action buttons use the secondary button style. Native modal dialogs are portaled out of tables, centered, labelled, and retain keyboard Escape/focus behavior. Actions are direct links, with no intermediate selector or Run step. Without JavaScript, an expandable native list provides the same operation continuation. Collection toolbar Share leads to a copyable URL and owner-only access controls.
+
+Accounts rows open account detail directly. The account name is a plain-text form button for keyboard and JavaScript-free access, without an anchor; copy-ID controls do not navigate. No Select or Action column is shown. Account detail presents permitted action buttons at the bottom without a chooser dialog.
+
+Account detail groups name/public-profile username in a heading with a 24px gap
+before metadata. Desktop metadata uses a 10rem label column, 24px column gap and
+16px row gap; labels stack over values below 640px. Session/action sections use
+32px separation, 24px top padding and 16px between heading and content. The
+layout keeps the existing theme, field order and bottom action placement.
+
+
+### Permanent hub handle and account confirmation
+
+An unclaimed hub handle shows availability, its prospective `/@handle` address,
+a permanence checkbox and an explicit Claim handle button. Handle edits never
+autosave. After claiming, the input is read-only and hub names remain editable.
+Person usernames continue to autosave with existing validation.
+
+Account deactivation and deletion are separate choices. Each explains consequences
+before sending an action-specific email code. The native verification form names
+the action being confirmed; error, expired-code and resend paths remain available.
+Recovery requires the account email and restores neither old sessions nor service
+privileges. The account page uses the existing quiet typography and form tokens;
+only the final deletion confirmation receives destructive emphasis.

@@ -16,9 +16,9 @@ import { CollectionsService } from "./collections.service";
 export class MeController {
   constructor(private readonly collectionsService: CollectionsService) {}
 
-  @Get("audit")
-  async audit(@CurrentUser() user: AuthUser, @Query() query: CursorQueryDto) {
-    const result = await this.collectionsService.listAudit(user, query);
+  @Get("people")
+  async people(@CurrentUser() user: AuthUser, @Query() query: CursorQueryDto) {
+    const result = await this.collectionsService.listPeople(user, query);
     return apiOk(result.items, result.meta);
   }
 

@@ -117,6 +117,11 @@ fixtures live in `apps/api/test/browser/reading.browser.ts`; the web app still
 accesses every record through HTTP. Capture email and disabled external
 telemetry are forced. Never point these tests at a development or production DB.
 
+For a focused retry, pass Bun test options through the same runner, for example
+`bun run test:browser --test-name-pattern 'preserves private sharing'`. This keeps
+the production build, canary checks and disposable database lifecycle intact;
+record filtered results separately from the full suite.
+
 Install a browser with `bunx playwright install --with-deps chromium`, or use
 existing `/usr/bin/google-chrome-stable`. `BROWSER_CHROME_PATH` can select another
 local Chromium executable. CI installs Playwright Chromium explicitly. No

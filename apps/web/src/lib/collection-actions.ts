@@ -1,13 +1,13 @@
 "use server";
 import { webServerConfig } from "@nslinkhub/config/web-server";
-import type { Collection } from "@nslinkhub/types";
+import type { Collection, UpdateCollectionRequest } from "@nslinkhub/types";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { CollectionEditState } from "../components/collection-editor";
 import { formPost } from "./form-server";
 import { keepPendingAction } from "./pending-action";
 import { serverRead } from "./server-api";
-import { isUuid, splitTags } from "./validation";
+import { isUuid } from "./validation";
 
 export async function saveCollection(
   _previous: CollectionEditState,
@@ -21,23 +21,18 @@ export async function saveCollection(
   const draft = {
     title: String(data.get("title") ?? "").slice(0, 255),
     description: String(data.get("description") ?? "").slice(0, 5000),
-    tags: String(data.get("tags") ?? "").slice(0, 2430),
     comments: data.get("comments") === "on",
   };
-  const tags = splitTags(draft.tags);
   const patch = {
     title: draft.title.trim(),
     description: draft.description,
-    tags,
     commentsEnabled: draft.comments,
-  };
+    version: Number(data.get("version")),
+  } satisfies UpdateCollectionRequest;
   const result = await formPost<Collection>(
     new Request(webServerConfig().publicOrigin, { headers: incoming }),
     `/api/v1/collections/${id}`,
-    {
-      ...patch,
-      version: Number(data.get("version")),
-    },
+    patch,
     false,
     "PATCH",
   );
@@ -47,7 +42,7 @@ export async function saveCollection(
     await keepPendingAction({
       path: `/api/v1/collections/${id}`,
       method: "PATCH",
-      body: { ...patch, version: Number(data.get("version")) },
+      body: patch,
       target: `/c/${id}`,
       success: "collection-saved",
       label: "save this collection",
@@ -66,7 +61,7 @@ export async function saveCollection(
         : result.status === 409
           ? "This collection changed elsewhere since you opened it. Your draft is still here."
           : result.status === 400
-            ? "Check the collection name and tags. Use up to 30 tags, each 80 characters or fewer."
+            ? "Check the collection name and description."
             : "We couldn't save your collection. Your edits are still here; try again.",
   };
 }

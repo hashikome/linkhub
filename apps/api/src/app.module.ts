@@ -14,6 +14,7 @@ import { HubsModule } from "./modules/hubs/hubs.module";
 import { ImportsModule } from "./modules/imports/imports.module";
 import { OperationsModule } from "./modules/operations/operations.module";
 import { ResourcesModule } from "./modules/resources/resources.module";
+import { SharingModule } from "./modules/sharing/sharing.module";
 import { UsersModule } from "./modules/users/users.module";
 
 @Module({
@@ -30,6 +31,7 @@ import { UsersModule } from "./modules/users/users.module";
     OperationsModule,
     CollectionsModule,
     ResourcesModule,
+    SharingModule,
     CommentsModule,
     ImportsModule,
     ExportsModule,

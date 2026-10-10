@@ -1,6 +1,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
+import { signInCodePurposes } from "@nslinkhub/types";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { CODE_RESEND_SECONDS, createDeliveryAuth } from "../src/auth/delivery-auth";
 import { handoverIdentifiers } from "../src/auth/handover-proofs";
@@ -67,6 +68,82 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 describe("transactional codes-only auth", () => {
+  it("records only committed successful logins, independently of session reads and expiry", async () => {
+    const started = Date.now();
+    const owner = await signup();
+    const read = async () =>
+      (await prisma.user.findUniqueOrThrow({ where: { id: owner.user.id } })).lastLoginAt;
+    expect((await read())?.getTime()).toBeGreaterThanOrEqual(started);
+    const previous = new Date("2025-01-01T00:00:00Z");
+    await prisma.user.update({ where: { id: owner.user.id }, data: { lastLoginAt: previous } });
+    await auth.api.getSession({ headers: new Headers({ authorization: `Bearer ${owner.token}` }) });
+    expect(await read()).toEqual(previous);
+    await call("/code/send", { email: owner.email });
+    expect(await read()).toEqual(previous);
+    const validCode = await code(owner.email);
+    const wrongCode = validCode === "00000000" ? "11111111" : "00000000";
+    expect((await call("/code/verify", { email: owner.email, code: wrongCode })).ok).toBe(false);
+    expect(await read()).toEqual(previous);
+    const broken = createDeliveryAuth({
+      ...config,
+      beforeCommit: async () => {
+        throw new Error("commit failure");
+      },
+    });
+    expect(
+      (await call("/code/verify", { email: owner.email, code: validCode }, undefined, broken))
+        .status,
+    ).toBe(503);
+    expect(await read()).toEqual(previous);
+    expect(await prisma.session.count({ where: { userId: owner.user.id } })).toBe(1);
+    expect((await call("/code/verify", { email: owner.email, code: validCode })).status).toBe(200);
+    const recorded = await read();
+    expect(recorded?.getTime()).toBeGreaterThanOrEqual(started);
+    await prisma.session.deleteMany({ where: { userId: owner.user.id } });
+    expect(await read()).toEqual(recorded);
+  });
+
+  it("persists purpose-specific copy on issue and resend without changing proof verification", async () => {
+    const subjects = {
+      "sign-in": "Your nslinkhub sign-in code",
+      "first-link": "Verify your email to save your first link · nslinkhub",
+      continue: "Your code to continue in nslinkhub",
+      resume: "Sign back in to nslinkhub",
+      confirm: "Confirm it's you · nslinkhub",
+    };
+    for (const purpose of signInCodePurposes) {
+      const email = address();
+      for (const attempt of [0, 1]) {
+        if (attempt) await elapseResendGap(email);
+        expect((await call("/code/send", { email, purpose })).status).toBe(200);
+        const row = await prisma.emailOutbox.findFirstOrThrow({
+          where: {
+            recipientKey: emailKey(suppressionSecret, "recipient", email),
+            state: "pending",
+          },
+        });
+        const payload = unseal(row.payload ?? "", secret);
+        expect(payload.subject).toBe(subjects[purpose]);
+        expect(payload.text).toContain("Do not share this code with anyone.");
+      }
+      expect((await call("/code/verify", { email, code: await code(email) })).status).toBe(200);
+    }
+    const email = address();
+    for (const purpose of ["invitation", "unknown", null, {}, 1]) {
+      expect((await call("/code/send", { email, purpose })).status).toBe(400);
+    }
+    expect(
+      await prisma.emailOutbox.count({
+        where: { recipientKey: emailKey(suppressionSecret, "recipient", email) },
+      }),
+    ).toBe(0);
+    expect((await call("/code/send", { email })).status).toBe(200);
+    const row = await prisma.emailOutbox.findFirstOrThrow({
+      where: { recipientKey: emailKey(suppressionSecret, "recipient", email), state: "pending" },
+    });
+    expect(unseal(row.payload ?? "", secret).subject).toBe(subjects["sign-in"]);
+  });
+
   it("honors shared auth budgets in production over the configured HTTP stack", async () => {
     // A fresh non-test process ensures better-auth reads production mode before
     // imports; changing NODE_ENV inside this test process would miss the bug.
@@ -105,7 +182,7 @@ describe("transactional codes-only auth", () => {
       await child.exited;
     }
   }, 25000);
-  it("issues encrypted intent, signs in across clients exactly once and onboards one hub", async () => {
+  it("issues encrypted intent, signs in across clients exactly once and onboards one hubless account", async () => {
     const email = address();
     expect((await call("/code/send", { email })).status).toBe(200);
     const otp = await code(email);
@@ -120,7 +197,8 @@ describe("transactional codes-only auth", () => {
     ]);
     expect(res.map((r) => r.status).sort()).toEqual([200, 400]);
     const user = await prisma.user.findUniqueOrThrow({ where: { email } });
-    expect(await prisma.hub.count({ where: { ownerUserId: user.id } })).toBe(1);
+    expect(await prisma.hub.count({ where: { ownerUserId: user.id } })).toBe(0);
+    expect(user.username).toMatch(/^[a-z]+-[a-z]+-[a-f0-9]{4}$/);
     expect(user.emailVerified).toBe(true);
     expect(
       await prisma.account.count({ where: { userId: user.id, providerId: "credential" } }),

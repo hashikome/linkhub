@@ -6,11 +6,27 @@ import {
   routeHandle,
   routeSegment,
   safePath,
+  safeReturn,
   sessionCookie,
   submitForm,
 } from "../src/lib/http";
 
 describe("web HTTP boundary", () => {
+  it("preserves validated section editing destinations through sign-in", () => {
+    const id = "019a0000-0000-7000-8000-000000000001";
+    const base = `/c/${id}/sections`;
+    expect(safeReturn(base)).toBe(base);
+    expect(safeReturn(`${base}?section=${id}&unexpected=value`)).toBe(`${base}?section=${id}`);
+    expect(safeReturn(`${base}?section=bad-id`)).toBe(base);
+  });
+  it("preserves item destinations through sign-in without accepting arbitrary item values", () => {
+    const id = "019a0000-0000-7000-8000-000000000001";
+    for (const base of [`/c/${id}`, "/@someone/guide"]) {
+      const destination = `${base}?s=token&item=${id}`;
+      expect(safeReturn(destination)).toBe(destination);
+      expect(safeReturn(`${base}?item=bad-id`)).toBe(base);
+    }
+  });
   it("submits native form enhancements with bounded same-origin requests and safe errors", async () => {
     const body = new URLSearchParams({ displayName: "Draft" });
     const success = await submitForm("/forms/profile-save", body, (async (
@@ -118,7 +134,7 @@ it("restricts post-login returns to local documents without authentication loops
     "//evil.test/",
     "/\\evil.test/",
     "/%2f%2fevil.test/",
-    "/sign-in?returnTo=/ops",
+    "/sign-in?returnTo=/manage",
     "/forms/operation",
     "/\n/evil.test/",
     "/@reader//evil.test",
@@ -128,8 +144,8 @@ it("restricts post-login returns to local documents without authentication loops
   expect(safeDocumentReturn("/sign-in/code?notice=sent")).toBe("/sign-in/code?notice=sent");
   expect(safeDocumentReturn("//evil.test")).toBe("/");
   expect(safeDocumentReturn("/forms/theme")).toBe("/");
-  expect(safeReturn("/ops/accounts/019f0000-0000-7000-8000-000000000001")).toBe(
-    "/ops/accounts/019f0000-0000-7000-8000-000000000001",
+  expect(safeReturn("/manage/accounts/019f0000-0000-7000-8000-000000000001")).toBe(
+    "/manage/accounts/019f0000-0000-7000-8000-000000000001",
   );
   expect(safeReturn("/c/019f0000-0000-7000-8000-000000000001")).toBe(
     "/c/019f0000-0000-7000-8000-000000000001",
@@ -138,6 +154,11 @@ it("restricts post-login returns to local documents without authentication loops
     "/@reader/my-guide?s=abc_123",
   );
   expect(safeReturn("/@reader/my-guide?s=bad%26token")).toBe("/@reader/my-guide");
+  const tracked =
+    "/c/019f0000-0000-7000-8000-000000000001?via=019f0000-0000-7000-8000-000000000002";
+  expect(safeReturn(`${tracked}&next=https://evil.test`)).toBe(tracked);
+  expect(safeReturn(safeReturn(tracked))).toBe(tracked);
+  expect(safeReturn("/@reader/my-guide?via=invalid")).toBe("/@reader/my-guide");
   expect(safeReturn("/@reader/my-guide?s=abc_123&compose=comment&next=https://evil.test")).toBe(
     "/@reader/my-guide?s=abc_123&compose=comment#comment-composer",
   );
@@ -153,4 +174,53 @@ it("restricts post-login returns to local documents without authentication loops
     expect(() =>
       webServerConfig({ WEB_SOURCE_SECRET: "s".repeat(32), BETTER_AUTH_URL: origin }),
     ).toThrow();
+});
+
+it("drops retired Manage scopes from sign-in returns", async () => {
+  const { safeReturn } = await import("../src/lib/http");
+  expect(safeReturn("/manage/collections?scope=hub&hubId=someone-else")).toBe(
+    "/manage/collections",
+  );
+  expect(safeReturn("/manage/audit?scope=hub")).toBe("/manage/audit");
+  expect(safeReturn("/manage/team?scope=hub")).toBe("/manage/team");
+});
+
+it("keeps only recognized Settings sections in sign-in return paths", async () => {
+  const { safeReturn } = await import("../src/lib/http");
+  expect(safeReturn("/settings?section=hub&next=https://evil.test")).toBe("/settings?section=hub");
+  expect(safeReturn("/settings?section=notifications")).toBe("/settings?section=notifications");
+  expect(safeReturn("/settings?section=unknown")).toBe("/settings");
+  expect(safeReturn("/manage/analytics?scope=service")).toBe("/manage/analytics");
+});
+
+it("preserves validated sharing tasks through sign-in without external returns", async () => {
+  const { safeReturn } = await import("../src/lib/http");
+  const id = "019f0000-0000-7000-8000-000000000001";
+  for (const kind of ["site", "profile", "hub", "collection"]) {
+    const query = new URLSearchParams({ kind });
+    if (kind !== "site") query.set("id", id);
+    if (kind === "collection") query.set("s", "secret_123");
+    query.set("returnTo", `/c/${id}?item=${id}`);
+    const path = `/share?${query}`;
+    expect(safeReturn(path)).toBe(path);
+    expect(safeReturn(safeReturn(path))).toBe(path);
+    expect(safeReturn(`${path}&next=https://evil.test`)).toBe(path);
+  }
+  for (const path of [
+    "/share",
+    "/share?kind=wrong",
+    "/share?kind=collection",
+    "/share?kind=hub&id=invalid",
+    `/share?kind=site&id=${id}`,
+    `/share?kind=collection&id=${id}&id=${id}`,
+    "/share?kind=site&kind=hub",
+  ])
+    expect(safeReturn(path)).toBe("/");
+  const query = new URLSearchParams({
+    kind: "collection",
+    id,
+    s: "bad&token",
+    returnTo: "//evil.test",
+  });
+  expect(safeReturn(`/share?${query}`)).toBe(`/share?kind=collection&id=${id}&returnTo=%2F`);
 });

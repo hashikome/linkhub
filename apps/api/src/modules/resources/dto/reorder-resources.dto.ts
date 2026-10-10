@@ -1,3 +1,4 @@
+import type { ReorderResourcesRequest } from "@nslinkhub/types";
 import { Type } from "class-transformer";
 import {
   ArrayMinSize,
@@ -22,7 +23,7 @@ export class ReorderItemDto {
   version: number;
 }
 
-export class ReorderResourcesDto {
+export class ReorderResourcesDto implements ReorderResourcesRequest {
   @IsArray()
   @ArrayMinSize(1)
   @ArrayUnique((item: ReorderItemDto) => item.resourceId)

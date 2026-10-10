@@ -13,9 +13,9 @@ Apply all migrations before starting the API and email worker.
    one admin invitation and queues its email. The email worker delivers it.
    No user or role is created by startup; restarting does not repeatedly send it.
 3. The recipient uses the **Review invitation** button in the email and accepts.
-   Only new recipients enter a name; consent creates their account and hub.
+   Only new recipients enter a name; consent creates their account with a username, without a hub.
    Everyone then enters a fresh email code, including recipients already signed
-   in. The role activates only after verification, then `/ops` opens. Existing
+   in. The role activates only after verification, then `/manage` opens. Existing
    names stay unchanged. A wrong-account session must sign out first.
 4. Open **Operators and invitations** to invite others. They follow the same
    email-entry journey. Invites expire after seven days. Sending one creates only
@@ -29,12 +29,13 @@ does not create another admin.
 
 ## Invite and manage operators
 
-Only admins can open `/ops/team` to invite, resend or cancel operator
+Only admins can open `/manage/invitations` to invite, resend or cancel operator
 invitations and inspect queued/sent/failed/suppressed delivery state. Resending
 extends expiry by seven days and invalidates the old token and form version. Multiple
 operators are supported. There is no command to directly grant operator access.
 
-Open an operator's account to **Remove operator access**. Their account stays
+The `/manage/team` tab lists current admins and operators. Open an operator's
+account to **Remove operator access**. Their account stays
 active; removal takes effect on the next privileged request. Restoring access
 requires a fresh invitation and acceptance. Operators cannot administer another
 operator or admin account. Admin suspension is unavailable through these tools.
@@ -66,7 +67,7 @@ an uncertain result. Never delete bootstrap records to force a startup resend.
 
 ## Everyday operations
 
-Open `/ops` and search the account table by email or hub handle. Account detail
+Open `/manage` and search the account table by full user ID, username, email or hub handle. Account detail
 routes use immutable user IDs. Account pages
 show identity, availability, active session count and operational authority.
 They do not enumerate private collections. Each action shows its effect and
@@ -81,7 +82,7 @@ submission once; network errors never trigger automatic retries.
   and operator grants stay revoked.
 - **End all sessions:** forces fresh sign-in without changing account availability.
   Using it on yourself signs you out too.
-- **Hold distribution:** paste a public collection's permalink or pretty URL on `/ops/collections`.
+- **Hold distribution:** paste a public collection's permalink or pretty URL on `/manage/collections`.
   Inspect it with normal reader access, then hold its distribution to all
   non-owners, including shares, links and sections. The active owner can read
   and correct it. No private preview is retained for the operator.
@@ -102,10 +103,11 @@ original result; a changed payload conflicts. After a timeout the action may
 have committed: inspect current state/audit before deciding to resubmit.
 Expired recent authentication leads to “Confirm it’s you”; successful
 verification resumes the original account’s waiting action once. A different
-account cannot resume it. See [verification](../design-docs/email-verification.md). An expired/revoked session cannot use `/ops`.
+account cannot resume it. See [verification](../design-docs/email-verification.md). An expired/revoked session cannot use `/manage`.
 
-Use `/ops/audit` to search actors/targets by email, handle or ID and filter by
-action or UTC date range. Pagination keeps a snapshot cutoff while audit reads themselves
+Use `/manage/audit` Search for words or ID fragments shown in the rows, then narrow by
+Action and From/To dates in your local timezone (UTC without JavaScript). Include
+read events when investigating lookups/list visits. Pagination keeps a snapshot cutoff while audit reads themselves
 are recorded. Lookups never store their searched email/handle in this history.
 The audit records bounded reasons and immutable IDs, not free-text allegations,
 credentials or content. Service operators cannot edit/delete audit entries.

@@ -6,7 +6,7 @@ import { App } from "supertest/types";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
 import { PrismaService } from "../src/database/prisma.service";
-import { signInWithCode } from "./fixtures/sign-in";
+import { signInHubOwner } from "./fixtures/sign-in";
 
 // Drive-style collection ownership transfer: only the owner can transfer, only
 // to an existing editor; the collection moves into the recipient's hub and the
@@ -17,7 +17,7 @@ describe("Collection transfer (e2e)", () => {
 
   const signUp = async (label: string) => {
     const email = `${label}_${sfx}@example.com`;
-    const res = await signInWithCode(app.getHttpServer(), { email, name: `${label} ${sfx}` });
+    const res = await signInHubOwner(app.getHttpServer(), { email, name: `${label} ${sfx}` });
     const bearer = res.headers["set-auth-token"];
     const profile = await request(app.getHttpServer())
       .get("/api/v1/profile")
@@ -55,7 +55,7 @@ describe("Collection transfer (e2e)", () => {
     await request(app.getHttpServer())
       .post(`/api/v1/collections/${cid}/shares`)
       .set("Authorization", `Bearer ${alice.bearer}`)
-      .send({ email: bob.email, role: "editor" })
+      .send({ email: bob.email, role: "contributor" })
       .expect(201);
 
     // Transfer.
@@ -88,6 +88,10 @@ describe("Collection transfer (e2e)", () => {
       .set("Authorization", `Bearer ${alice.bearer}`)
       .expect(200);
     expect(JSON.stringify(shared.body)).toContain(cid);
+    expect(
+      shared.body.data.find((item: { id: string; shareRole: string }) => item.id === cid)
+        ?.shareRole,
+    ).toBe("contributor");
   });
 
   it("leaves other editors and viewers untouched after transfer", async () => {
@@ -100,9 +104,9 @@ describe("Collection transfer (e2e)", () => {
     // Bob is the transfer target (editor); Dave is a third-party editor; Eve a
     // third-party reader. Only Bob and the previous owner should change.
     for (const [who, role] of [
-      [bob, "editor"],
-      [dave, "editor"],
-      [eve, "reader"],
+      [bob, "contributor"],
+      [dave, "contributor"],
+      [eve, "viewer"],
     ] as const) {
       await request(app.getHttpServer())
         .post(`/api/v1/collections/${cid}/shares`)
@@ -170,7 +174,7 @@ describe("Collection transfer (e2e)", () => {
     await request(app.getHttpServer())
       .post(`/api/v1/collections/${root}/shares`)
       .set("Authorization", `Bearer ${alice.bearer}`)
-      .send({ email: bob.email, role: "editor" })
+      .send({ email: bob.email, role: "contributor" })
       .expect(201);
     await request(app.getHttpServer())
       .post(`/api/v1/collections/${root}/transfer`)

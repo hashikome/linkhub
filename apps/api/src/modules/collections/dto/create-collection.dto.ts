@@ -1,15 +1,7 @@
-import {
-  ArrayMaxSize,
-  IsArray,
-  IsBoolean,
-  IsOptional,
-  IsString,
-  Matches,
-  MaxLength,
-  MinLength,
-} from "class-validator";
+import type { CreateCollectionRequest } from "@nslinkhub/types";
+import { IsBoolean, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
 
-export class CreateCollectionDto {
+export class CreateCollectionDto implements CreateCollectionRequest {
   @IsString()
   @Matches(/^[a-z0-9-]+$/)
   @MinLength(2)
@@ -25,13 +17,6 @@ export class CreateCollectionDto {
   @IsString()
   @MaxLength(5000)
   description?: string;
-
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(30)
-  @IsString({ each: true })
-  @MaxLength(80, { each: true })
-  tags?: string[];
 
   @IsOptional()
   @IsBoolean()

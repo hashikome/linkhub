@@ -1,7 +1,8 @@
+import type { ImportTargetRequest } from "@nslinkhub/types";
 import { Transform } from "class-transformer";
 import { IsBoolean, IsOptional, IsString, IsUUID, Matches, MaxLength } from "class-validator";
 
-export class ImportTargetDto {
+export class ImportTargetDto implements ImportTargetRequest {
   @IsOptional()
   @IsUUID()
   targetCollectionId?: string;

@@ -1,4 +1,5 @@
 export * from "./audit.js";
+export * from "./audit-labels.js";
 export * from "./auth.js";
 export * from "./capture.js";
 export * from "./collections.js";
@@ -12,5 +13,6 @@ export * from "./imports.js";
 export * from "./links.js";
 export * from "./operations.js";
 export * from "./resources.js";
+export * from "./sharing.js";
 export * from "./status.js";
 export * from "./users.js";

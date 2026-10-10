@@ -1,16 +1,17 @@
-import { webServerConfig } from "@nslinkhub/config/web-server";
 import type { Collection, CommentThreads, HubPage, HubSummary, Resource } from "@nslinkhub/types";
 import { collectionPath, permalink, queryValue, withCursor } from "../lib/http";
 import { serverRead } from "../lib/server-api";
 import { readSession } from "../lib/session";
+import { sourcePath } from "../lib/sharing";
+import { CollectionContributors } from "./collection-contributors";
 import { CollectionFeedback } from "./collection-feedback";
 import { CollectionHeading } from "./collection-heading";
-import { CollectionMoreMenu } from "./collection-more-menu";
+import { CollectionSidebar } from "./collection-sidebar";
 import { Comments } from "./comments";
-import { ShareAside, ShareMenu } from "./copy-link";
 import { FormNotice } from "./form-notice";
 import { PaginatedList } from "./paginated-list";
 import { CollectionMeta, Tags } from "./primitives";
+import { ShareAction } from "./share-action";
 
 export async function CollectionReader({
   collection,
@@ -26,27 +27,33 @@ export async function CollectionReader({
   const { id } = collection;
   const path = collectionPath(id);
   const token = queryValue(query.s, 512);
+  const itemId = queryValue(query.item);
   const commentCursor = queryValue(query.cc);
   const commentPath = withCursor(`${path}/comments`, commentCursor);
   const replyTo = queryValue(query.rt),
     replyCursor = queryValue(query.rc);
   const replyQuery =
     replyTo && replyCursor ? `&${new URLSearchParams({ replyTo, replyCursor })}` : "";
-  const [resources, hubResult, comments, session] = await Promise.all([
+  const [resources, hubResult, comments, session, item] = await Promise.all([
     serverRead<Resource[]>(withCursor(`${path}/resources`, queryValue(query.cursor)), token),
     hub?.id === collection.hubId
       ? Promise.resolve({ ok: true as const, data: { hub } })
       : serverRead<HubPage>(`/api/v1/hubs/${encodeURIComponent(collection.hubId)}?limit=1`),
     serverRead<CommentThreads>(`${commentPath}${replyQuery}`, token),
     readSession(),
+    itemId
+      ? serverRead<Resource>(`${path}/resources/${encodeURIComponent(itemId)}`, token)
+      : Promise.resolve(null),
   ]);
   if (!resources.ok)
     return <CollectionFeedback error={resources} returnTo={resetPath ?? permalink(id, token)} />;
   const shown = { ...collection, ...(hubResult.ok ? { hub: hubResult.data.hub } : {}) };
-  const owner = collection.capabilities?.canManage;
   const notice = queryValue(query.notice);
   const discussionNotice = notice?.startsWith("comment") || notice === "comments-off";
   const returnTo = resetPath ?? permalink(id, token);
+  const itemContext = new URL(sourcePath(returnTo, query), "http://local.invalid");
+  itemContext.searchParams.delete("item");
+  const itemBase = itemContext.pathname + itemContext.search;
   const older = comments.ok ? comments.meta?.nextCursor : null;
   const olderHref = older
     ? `${returnTo}${returnTo.includes("?") ? "&" : "?"}${new URLSearchParams({ cc: older })}#comments`
@@ -66,36 +73,18 @@ export async function CollectionReader({
             <span />
           )}
           <div className="collection-actions">
-            {/* At the top of the page, so adding a link never needs a scroll. */}
-            {owner && (
-              <a
-                className="button add-resource"
-                href={`/capture?collection=${id}`}
-                aria-label="Add a link"
-              >
-                <span aria-hidden="true">+</span>
-                <span className="add-label">Add a link</span>
-              </a>
-            )}
-            <ShareMenu
-              id={id}
-              token={token}
-              title={collection.title}
-              origin={webServerConfig().publicOrigin}
+            <ShareAction
+              target={{
+                kind: "collection",
+                id,
+                ...(!collection.published && token ? { token } : {}),
+              }}
+              returnTo={sourcePath(returnTo, query)}
             />
             {collection.capabilities?.canEdit && (
-              <>
-                {/* Wide screens show the buttons; narrow ones fold them into More. */}
-                <a className="button wide-action" href={`/c/${id}/history`}>
-                  History
-                </a>
-                {owner && (
-                  <a className="button wide-action" href={`/c/${id}/edit`}>
-                    Edit
-                  </a>
-                )}
-                <CollectionMoreMenu id={id} canManage={Boolean(owner)} />
-              </>
+              <a className="button" href={`/c/${id}/edit`}>
+                Edit
+              </a>
             )}
           </div>
         </header>
@@ -108,7 +97,7 @@ export async function CollectionReader({
               </div>
             </div>
           )}
-          <Tags tags={collection.tags} />
+          <Tags tags={collection.tags} limit={3} />
           <CollectionMeta item={shown} />
           {collection.restriction && (
             <p className="form-notice">
@@ -120,22 +109,28 @@ export async function CollectionReader({
         </CollectionHeading>
         {/* biome-ignore lint/a11y/noNoninteractiveTabindex: The resource list scrolls under a fixed header on desktop and needs keyboard focus for scrolling. */}
         <section className="sheet-body" aria-label="Resources" tabIndex={0}>
+          {item && !item.ok && (
+            <p className="form-notice" role="status">
+              {[400, 404].includes(item.status)
+                ? "Item unavailable. It may have been removed or isn't in this collection."
+                : "Couldn't load this item. Try reloading the collection."}
+            </p>
+          )}
           <PaginatedList
             kind="resources"
             path={`${path}/resources`}
             initial={resources.data}
             nextCursor={resources.meta?.nextCursor}
             token={token}
+            itemBase={itemBase}
+            section={resources.meta?.section}
+            selectedItem={item?.ok ? item.data : undefined}
           />
         </section>
       </article>
-      <div className="reader-side">
-        <ShareAside
-          id={id}
-          token={token}
-          title={collection.title}
-          origin={webServerConfig().publicOrigin}
-        />
+      <CollectionSidebar
+        summary={<CollectionContributors contributors={collection.contributors} />}
+      >
         <Comments
           collectionId={id}
           threads={comments.ok ? comments.data : null}
@@ -146,7 +141,7 @@ export async function CollectionReader({
           commentCursor={commentCursor}
           composerOpen={queryValue(query.compose) === "comment"}
         />
-      </div>
+      </CollectionSidebar>
     </div>
   );
 }

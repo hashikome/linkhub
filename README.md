@@ -3,8 +3,6 @@
 NSLinkHub organizes and shares curated link collections. The NestJS API owns
 the product rules; the Next.js web app reads through its HTTP contracts.
 
-This repository is a greenfield NestJS v2 rewrite. The old Flask v1 is retained for historical record only.
-
 ## Working In This Repository
 
 - **New here?** Walk `docs/guides/developer-onboarding-walkthrough.md` — six
@@ -27,20 +25,21 @@ This repository is a greenfield NestJS v2 rewrite. The old Flask v1 is retained 
 
 ## Implemented So Far
 
-- **The entire backend** (tracks W1→A→B→C→D→W2 + the Drive-model reshape):
-  one hub per user, independent collections with references and headings,
+- **Collection backend:**
+  at most one hub per person, independent collections with references and headings,
   external resources with canonical URLs + tags, collection-level sharing
   (link/direct/publish per collection), collection ownership
   transfer, saves, explore, id permalinks + handle resolution
-- Auth via self-hosted [better-auth](https://better-auth.com) (email codes, DB-backed sessions, bearer tokens for API clients); one personal hub auto-created at sign-up
+- Auth via self-hosted [better-auth](https://better-auth.com) (email codes, DB-backed sessions, bearer tokens for API clients); signup creates a person with a username; first collection ownership creates their optional hub
 - Synchronous export (Markdown/PDF/Word; multi-collection, zipped) and
   imports (bookmarks-HTML + universal CSV with per-row error reports)
 - `@nslinkhub/types` (wire contracts) and `@nslinkhub/email` (code-email
   templates); liveness + per-dependency readiness endpoints; `_FILE`
   deployment-secret contract with zero-config dev
-- First W3 journey: explore → collection permalink → referenced collection/external resource,
-  with responsive reading and explicit pagination. Other web journeys and W4
-  (extension) follow as complete vertical slices. Swagger stays at `/api/docs`.
+- Web journeys include Discover, collection reading and discussion, link capture,
+  profiles, settings, notifications and service operations, with native form
+  fallbacks. See `PRODUCT.md` §11 for delivery status and the remaining slices.
+  Swagger stays at `/api/docs`.
 
 ## Generated avatars
 
@@ -57,7 +56,7 @@ versioned image URL. Uploaded photos are not implemented.
 - Bun (package manager **and** runtime)
 - NestJS API and Next.js/React/Tailwind web
 - PostgreSQL + Prisma (with `@prisma/adapter-pg`)
-- better-auth (sessions, bearer plugin; no username — identity is a hub handle)
+- better-auth (sessions, bearer plugin; credentials and sessions; product-owned usernames and hub handles)
 - BullMQ + Redis
 - class-validator/class-transformer
 
@@ -176,7 +175,7 @@ When server is running:
 
 `bun run dev` starts local PostgreSQL/Redis containers, API/worker watchers and
 Next.js. Open `http://localhost:3000` for the landing page; browse published
-collections at `/discover`, or open `/@handle`, `/@handle/<slug>` or an authorized `/c/<id>` link.
+collections at `/discover`, or open `/username`, `/@handle`, `/@handle/<slug>` or an authorized `/c/<id>` link.
 Readiness stays available at `/api/v1/status` for monitoring, without a client
 status page. No synthetic content is seeded into dev data.
 See [local development](docs/runbooks/local-development.md) for individual

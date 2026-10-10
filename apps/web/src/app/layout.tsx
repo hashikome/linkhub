@@ -4,7 +4,6 @@ import type { ReactNode } from "react";
 import { FocusMode } from "../components/focus-mode";
 import { FreshDocument } from "../components/fresh-document";
 import { SessionNav } from "../components/session-nav";
-import { Toaster } from "../components/toast";
 import { readOwnProfile, readSession } from "../lib/session";
 import { readTheme } from "../lib/theme";
 import "./globals.css";
@@ -44,7 +43,10 @@ export default async function Layout({ children }: { children: ReactNode }) {
         </a>
         <header className="topbar">
           <nav aria-label="Main navigation" className="shell">
-            <a className="wordmark" href={session && profile?.hubId ? `/h/${profile.hubId}` : "/"}>
+            <a
+              className="wordmark"
+              href={session && profile ? (profile.hubId ? `/h/${profile.hubId}` : "/hub") : "/"}
+            >
               nslinkhub
             </a>
             <div className="primary-nav">
@@ -53,11 +55,10 @@ export default async function Layout({ children }: { children: ReactNode }) {
             </div>
           </nav>
         </header>
-        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: The scrollable main region needs keyboard focus for Page Up/Down and arrow-key scrolling. */}
+        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: Main is the keyboard skip-link target. */}
         <main id="main" aria-label="Main content" tabIndex={0} className="shell">
           <FocusMode />
           <FreshDocument />
-          <Toaster />
           {children}
         </main>
         <footer className="site-footer">
@@ -67,7 +68,6 @@ export default async function Layout({ children }: { children: ReactNode }) {
               <p className="footer-series">an ns series product</p>
             </div>
             <nav aria-label="Footer" className="footer-nav">
-              <a href="/discover">Discover</a>
               <a href="/support">Support</a>
             </nav>
           </div>

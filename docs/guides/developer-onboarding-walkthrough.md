@@ -85,14 +85,14 @@ happened, in order.
 
 Read, in this order:
 
-1. [PRODUCT.md](../../PRODUCT.md) — end to end. Hold: one hub per user
+1. [PRODUCT.md](../../PRODUCT.md) — end to end. Hold: at most one hub per user
    (Drive-style sharing); collections are independent; references grant no
    access to their destinations; a resource's kind is
-   set by *how it was added*, never URL inspection; tags are plain arrays;
+   set by *how it was added*, never URL inspection; tags use normalized relations (API names remain arrays);
    sharing = link / direct / publish; export reads like a Google Doc;
    sign-in uses email codes; hubs have one owner and never transfer, while
-   collections can. The accepted next identity design gives people usernames
-   and optional hubs; distinguish that target from the implemented model.
+   collections can. People have usernames and optional hubs; the first successful ownership
+   operation creates a hub.
 2. [ARCHITECTURE.md](../../ARCHITECTURE.md) — the domain model, codemap,
    runtime and architectural invariants.
 3. [tenancy-and-access.md](../design-docs/tenancy-and-access.md) — the access
@@ -122,14 +122,14 @@ Goal: every core capability exercised by hand. API running (`bun run dev`).
 curl -si localhost:4000/api/v1/auth/code/send \
   -H 'content-type: application/json' \
   -d '{"email":"me@example.com"}'
-# Enter the received code; first verification creates the account and hub.
+# Enter the received code; first verification creates the account only.
 curl -si localhost:4000/api/v1/auth/code/verify \
   -H 'content-type: application/json' \
   -d '{"email":"me@example.com","code":"<received-code>","name":"Paul"}' \
   | grep -i set-auth-token
 export T="<token>"
 
-# Profile is the client entry point: displayName, handle, hubId
+# Profile is the client entry point: username, displayName, optional handle and hubId
 curl -s localhost:4000/api/v1/profile -H "Authorization: Bearer $T" | jq
 
 # Create two independent collections, then add a reference
@@ -278,7 +278,7 @@ Read:
 
 1. [identity-and-handles.md](../design-docs/identity-and-handles.md) for
    implemented identity, URL and email-change contracts, then
-   [people-and-hubs.md](../design-docs/people-and-hubs.md) for the accepted target.
+   [people-and-hubs.md](../design-docs/people-and-hubs.md) for person profiles and optional hubs.
 2. [transactional-email.md](../design-docs/transactional-email.md) and
    [auth-delivery-integration.md](../design-docs/auth-delivery-integration.md)
    for encrypted delivery, proof/session transactions and local/live acceptance.
@@ -305,7 +305,8 @@ browser fixtures use their own database and capture email.
       internal API origin a server-only setting?
 - [ ] Which person identity and collection roles are implemented, and which
       accepted changes are still planned?
-- [ ] Why are the owner's Manage workspace and platform console separate?
+- [ ] How does the shared Manage workspace keep collection authority separate
+      from service-operator authority?
 - [ ] What does local code/browser acceptance prove, and what remains for live
       email and deployment acceptance?
 - [ ] Which checks does your next complete journey need?

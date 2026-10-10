@@ -10,13 +10,15 @@ Items below are outstanding work, not claims of completed behavior.
 | Export typography | PDF/Word renderers use library-default styling (Helvetica, default docx heading styles); no user-visible styling options | Exports are readable but plain; no branding or theme choices | Users ask for styled exports |
 | Import parsers | CSV parsing is naive (comma split, no quoting/escaping); the bookmarks parser is a regex MVP that flattens folder structure; the universal-CSV column format is not yet documented for users | Malformed or complex files import incorrectly; bookmark structure is lost; users must guess the CSV layout | Imports get real-world usage (document the CSV format with the reviewed-import UI) |
 | Audit and retention | Account deletion is disabled; auth audit retains 90 days, delivery metadata 30 days; account deletion/ownership policy remains | Self-service deletion cannot be re-enabled safely until proof and retention are designed | Verified deletion and retention implementation before exposure |
+| Audit strategy and experience | Bounded effects cover existing-collection publication, sharing and transfers (ADR-0021); other hub actions and older rows lack change detail; generic snapshots remain absent | Full audit strategy is deferred; History and attribution still depend on activity records | Dedicated audit milestone after fundamental operations; inventory remaining writers/atomicity and define investigative needs, evidence, access, integrity and retention ([ADR-0020](../engineering-decisions/0020-logging-after-core-operations.md)) |
+| Wide event logging | Sanitized request telemetry exists; a strategy across domain operations and jobs is deferred | Operational questions, context and sampling are not yet designed across the system | Separate milestone once most operations are built; define query acceptance, privacy, outcomes, correlation and cost limits ([ADR-0020](../engineering-decisions/0020-logging-after-core-operations.md)) |
 | Email rollout | Code delivery is locally implemented; live Resend domain/webhook validation and web email-change screens remain. Share notifications remain sharing work | Local evidence does not prove live delivery | Deployment preparation and web account/sharing journeys |
 | Observability rollout | API LogTape/Sentry boundary and local capture are implemented; browser/worker instrumentation and live Sentry/Alloy shipping are unverified | No claim of centralized operational visibility yet; sanitized stack frames omit source filenames | Live infrastructure milestone plus browser/worker slices; review source-map privacy before richer traces |
 | Deployment rollout | API image, Swarm files and local restore rehearsal exist. Fresh image acceptance for the release commit is required. Manual release workflow gates publication on application verification and image rehearsal. Swarm/Dokploy/TLS/off-host restore have not run | Deployment is unverified; local application development can proceed | Deployment preparation before exposure: rebuild/rehearse API and worker, then complete operator gates in docs/runbooks/release.md |
 | Auth throughput and budgets | Authenticated product and auth mutations use a shared transaction advisory lock; source and identity budgets are fixed | Simple cross-process correctness bounds throughput; NAT users share source capacity | Measure lock wait and real traffic before scoped-lock or adaptive-budget work |
 | Link metadata growth | `link_metadata` keeps a row per address ever saved or previewed (Save a link previews store what they fetch); rows outlive removed items | The table only grows, slowly (previews are budgeted at 30/min per account) | Before public release: worker cleanup of rows no item references and unchanged for 30 days, with an index on `resources.url` (a reviewed migration) |
 | Read-path queries | Each referenced collection in a list runs its own access check; comments load replies per question (up to 100 each) and mutations re-read what they hold | ~5 queries per reference, ~40 per comment page, extra queries under the write lock | Measured traffic, or the comments/notifications slice: bulk policy resolve, windowed reply query, smaller reply preview |
-| Write-lock opt-outs | Four ways to skip the global authority lock (method list, two metadata keys, a path regex) | A new POST under `/operations` or `/invitations` silently runs unlocked | Next authority change: one `@Authority(mode)` metadata value set per controller |
+| Write-lock opt-outs | Four ways to skip the global authority lock (method list, two metadata keys, a path regex) | A new POST under `/operations` silently runs unlocked | Next authority change: one `@Authority(mode)` metadata value set per controller |
 | Forms route | One `/forms/[action]` handler with a growing action chain and per-action status-to-notice mappings | Inconsistent notices for the same status | Next new form action: action table or per-action route files, one notice helper |
 | Capture drafts in cookies | Drafts (2 links + tags) live in one encrypted cookie; oversized tags are dropped | Rare silent tag loss on very long input | Server-side draft store (Redis) if users hit it |
 | Keyboard-only focus rings | `FocusMode` hides rings after a pointer press until Tab/arrows/F6 (requested) | Screen-reader virtual cursors don't fire those keys, so rings stay hidden after a click | Accessibility review with assistive-technology testing |
@@ -44,3 +46,53 @@ collections over the last 90 days; private content never contributes. See
 Date-range filtering needs a concrete discovery use case. Desktop Previous/Next
 has no visible numeric range between the controls; accessible page feedback remains.
 Do not ship placeholder search/filter controls before their query path works.
+
+## Sharing and hub engagement
+
+Revisit in the home/subscriptions and web-sharing slices in `PRODUCT.md` §11.
+Profiles, hubs, collections and the site now use one contextual Share page with
+Copy link. Social destinations and footer social links remain deferred; the
+collection sidebar presents Contributors above Discussion.
+
+- Extend the common Share page with social destinations only when requested;
+  settle any footer role in that slice.
+- Keep durable ID links and distinguish public addresses from explicit access
+  links; never leak an access token through a social action or reference.
+- Implement hub subscriptions and subscriber counts from authoritative data.
+- Prioritize saving/bookmarking whole collections and total collection saves as
+  the engagement signal; settle Bookmark/Bookmarked and Bookmarks terminology
+  in that slice. Define aggregation and public visibility rules before counts ship.
+- Keep individual Add to my collection copies separate from collection bookmarks;
+  owner permission and source credit remain required by ADR-0019.
+- Review all these controls as one coherent experience, with real data and
+  accessible interactions, rather than adding provisional widgets in isolation.
+
+## Collection contributor visibility
+
+Open product decision: whether collection owners may hide the contributor list.
+Do not couple this to the implemented public profile/hub connection preference;
+existing contributor display and authorship remain unchanged until settled.
+
+## Page performance investigation
+
+The user reported slow page navigation during development. Measure cold and warm
+production navigation and API timings before attributing it to development
+compilation or sequential server reads. Record query counts and bottlenecks in
+the [internals plan](active/final-pass-internals.md); its query-batching work
+must preserve authorization and visible behavior. No production baseline has
+been established yet.
+
+## Deferred audit redesign investigation
+
+When the ADR-0020 milestone resumes, start with the investigative questions an
+owner or operator needs answered: who did what to which entity, when, and what
+changed. Inventory current writers and transaction boundaries against the
+current unified audit model; older two-store handoffs are obsolete. Keep the
+primary target distinct from surrounding collection/hub context.
+
+Decide which evidence may be retained, distinguish current display labels from
+event-time values, and address renames, deletion, access, integrity and retention
+before designing the table. Historical rows cannot acquire changes that were
+never captured. General content snapshots require an explicit revision of the
+current bounded-evidence contract. Preserve existing recording and attribution
+while this work is deferred; do not suppress reads merely to make the UI quieter.

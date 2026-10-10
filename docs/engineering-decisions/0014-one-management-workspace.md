@@ -1,47 +1,65 @@
 # ADR-0014: One management workspace, scoped by role
 
-**Status:** accepted, amended 2026-10-08: **Manage** (`/manage`) is the hub
-owner's workspace; running the service is a separate console, `/platform`
-(renamed from `/ops`), for admins and operators  
+**Status:** accepted, amended 2026-10-08: one **Manage** workspace at `/manage`
 **Date:** 2026-10-08
 
 ## Context
 
-Service operators and admins had their own console ("Service operations"),
-while hub owners had nowhere to manage their hub as a whole: moderate comments
-across collections, see who has access, block someone, import, or review their
-hub's audit. Operators cannot do those things for owners, because they cannot
-see private content.
-
-## Options considered
-
-- Separate consoles per role (service operations plus a new owner area).
-- One workspace whose scope and sections follow the viewer's roles.
+A person can own a hub and also administer or operate the service. Separate
+workspaces make navigation depend on switching roles rather than the task.
+Shared navigation must not collapse the authority boundary: service operators
+cannot read private collections or manage someone else's hub.
 
 ## Decision
 
-Under the recorded 2026-10-08 amendment, **Manage** is the hub owner’s workspace,
-scoped to their own hub. Admins and operators use a separate **platform console**
-at `/platform` (implemented at `/ops` until the route change ships). Owners
-manage only their hub; service authority never grants private-content access.
-Sections and routes: [manage-workspace.md](../design-docs/manage-workspace.md).
+Use one **Manage** entry and route family at `/manage`. Sections and actions
+follow the authenticated person's capabilities. Accounts concerns service-wide
+accounts; People concerns current access to the owner's collections. Team lists
+admins/operators; Invitations sends and tracks invitations in the applicable
+context. Collections and Audit identify My hub versus Service for people who
+have both authorities. Owner and service API contracts remain separate.
+
+## Amendment — 2026-10-08
+
+The product owner explicitly replaced the separate owner/service workspace
+choice with a unified Manage workspace. This supersedes both the earlier
+separation and the interim decision to retain `/ops` as the service console.
+There is no `/platform` migration or old-route compatibility requirement; the
+product has not been deployed. Shared navigation with explicit context preserves
+the authorization boundary while avoiding duplicate management areas.
 
 ## Rationale
 
-- One place for hub-wide management, with consistent table, row-action and
-  audit patterns; the separate platform console preserves the scope boundary.
-- Owners can do what operators must not: moderate and manage private content
-  in their own hub.
-- Hub-level work (imports, people, activity) gets a natural home.
+- One place for management, with consistent tables, actions and audit patterns.
+- A person sees the union of capabilities they hold, without duplicate accounts.
+- Hub owners manage their own content; service authority stays operational.
 
 ## Constraints to preserve
 
-- Each section is authorized by the API for the viewer's role and scope; the
-  UI showing a section is never the permission.
-- Service sections never show private titles or content (ADR-0009).
-- Owner scope never reaches beyond the owner's hub.
+- The API authorizes every read and action; navigation is never a permission.
+- Service sections never expose private titles or content (ADR-0009).
+- Owner scope is derived from the authenticated user, never a requested hub ID.
+- Only implemented capabilities appear. Owner invitation delivery, subscriptions,
+  blocking and cross-collection moderation remain planned until their full
+  authorized journeys are implemented.
 
 ## Links
 
-- [manage-workspace.md](../design-docs/manage-workspace.md)
-- [ADR-0009](0009-operator-authority.md), [ADR-0013](0013-permission-roles-and-display-labels.md)
+- [Manage](../design-docs/manage-workspace.md)
+- [ADR-0009](0009-operator-authority.md)
+- [ADR-0013](0013-permission-roles-and-display-labels.md)
+
+## Label clarification (2026-10-09)
+
+The owner-facing People section is now labelled **Access**, including its page
+heading. It manages granted access rather than person accounts; Accounts remains
+the service-wide identity section. The existing `/manage/people` route and API
+permissions are unchanged.
+
+## Amendment — 2026-10-09
+
+[ADR-0023](0023-account-lifecycle-and-unified-collection-actions.md) replaces the Collections My hub / Service split with one capability-scoped table. Audit keeps explicit contexts. The authority boundary remains unchanged.
+
+## Audit consolidation — 2026-10-09
+
+[ADR-0024](0024-one-audit-log.md) supersedes separate audit storage and the Audit context switch. All event categories use one AuditLog; permissions and attribution rules remain unchanged.

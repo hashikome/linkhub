@@ -139,7 +139,7 @@ are in [auth delivery](../design-docs/auth-delivery-integration.md).
 Open `http://localhost:3000` after `bun run dev` for the landing page. `/discover`
 and `/c/<id>` are available alongside public hubs, profile/settings,
 notifications, email-code sign-in, capture, collection details editing,
-discussion, History and `/ops`. Resource organization and sharing controls
+discussion, History and `/manage`. Resource organization and sharing controls
 remain planned. The
 root orchestrator sets `BETTER_AUTH_URL=http://localhost:3000` (or `WEB_PORT`)
 and the trusted `API_INTERNAL_ORIGIN=http://127.0.0.1:4000` (or `PORT`). Use
@@ -188,7 +188,7 @@ short only by the isolated browser verification.
 Set `BOOTSTRAP_ADMIN_EMAIL` in the ignored API environment before startup. The
 application emails an invitation. New recipients enter their name and accept
 before account creation. Everyone, including signed-in recipients, then verifies
-a fresh emailed OTP to activate the role and reach `/ops`. Admins invite operators from
+a fresh emailed OTP to activate the role and reach `/manage`. Admins invite operators from
 there. See [service operations](service-operations.md) for delivery and recovery.
 
 ### A newly added web route still returns 404

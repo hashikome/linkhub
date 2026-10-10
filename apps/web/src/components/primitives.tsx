@@ -1,13 +1,21 @@
 import type { Collection, PersonRef, Resource } from "@nslinkhub/types";
 import { hubPath, permalink, prettyPath } from "../lib/http";
+import { ItemDetails } from "./item-details";
+import { ItemDisclosure } from "./item-disclosure";
 import { Updated } from "./local-time";
 
-export function Tags({ tags }: { tags: string[] }) {
+export function Tags({ tags, limit = tags.length }: { tags: string[]; limit?: number }) {
+  const remaining = Math.max(0, tags.length - limit);
   return tags.length ? (
     <ul className="tags" aria-label="Tags">
-      {tags.map((tag) => (
+      {tags.slice(0, limit).map((tag) => (
         <li key={tag}>{tag}</li>
       ))}
+      {remaining > 0 && (
+        <li className="resource-tag-count" title={tags.slice(limit).join(", ")}>
+          +{remaining} {remaining === 1 ? "tag" : "tags"}
+        </li>
+      )}
     </ul>
   ) : null;
 }
@@ -22,12 +30,11 @@ export function CollectionRow({ item, handle }: { item: Collection; handle?: str
     </li>
   );
 }
-// A person, the same way everywhere: their @handle, linking to their hub (where
-// their name shows, if they choose).
+// People link to their own profile; hubs keep their separate @handle identity.
 export function Person({ person }: { person: PersonRef }) {
   return (
-    <a className="person" href={`/h/${encodeURIComponent(person.hubId)}`}>
-      <span className="person-handle">@{person.handle}</span>
+    <a className="person" href={`/${encodeURIComponent(person.username)}`}>
+      <span className="person-handle">{person.username}</span>
     </a>
   );
 }
@@ -40,21 +47,18 @@ export function CollectionMeta({
   handle?: string;
   compact?: boolean;
 }) {
-  const owner: PersonRef | null = item.hub ? { hubId: item.hub.id, handle: item.hub.handle } : null;
+  const owner = item.hub;
   const creator =
     // Only when the owner is known and the creator is someone else.
-    !compact && item.hub && item.creator && item.creator.hubId !== item.hub.id
+    !compact && item.hub?.owner && item.creator && item.creator.userId !== item.hub.owner.userId
       ? item.creator
       : null;
-  // Contributors, GitHub-style: "Paul John · 2 contributors · Updated …", shown
-  // when anyone besides the owner has shaped the collection.
-  const contributors = item.contributors;
-  const ownerShaped = contributors?.people.some((person) => person.hubId === item.hubId) ?? false;
-  const others = compact || !contributors ? 0 : contributors.total - (ownerShaped ? 1 : 0);
   return (
     <div className="row-meta">
       {owner ? (
-        <Person person={owner} />
+        <a className="person" href={`/h/${encodeURIComponent(owner.id)}`}>
+          <span className="person-handle">@{owner.handle}</span>
+        </a>
       ) : (
         handle && (
           <a className="person" href={hubPath(handle)}>
@@ -68,9 +72,6 @@ export function CollectionMeta({
         </span>
       )}
 
-      {others > 0 && contributors && (
-        <span className="contributors">{contributors.total} contributors</span>
-      )}
       <span>
         Updated <Updated at={item.updatedAt} />
       </span>
@@ -86,36 +87,25 @@ export function CollectionMeta({
     </div>
   );
 }
-export function ResourceRow({ item }: { item: Resource }) {
+export function ResourceRow({
+  item,
+  itemBase,
+  expanded = false,
+  onExpandedChange,
+}: {
+  item: Resource;
+  itemBase?: string;
+  expanded?: boolean;
+  onExpandedChange?: (open: boolean) => void;
+}) {
+  const detailsUrl = new URL(itemBase ?? permalink(item.collectionId), "http://local.invalid");
+  detailsUrl.searchParams.set("item", item.id);
+  detailsUrl.hash = `item-${item.id}`;
   if (item.kind === "heading")
     return (
       <li className="resource-heading">
         <h2>{item.title}</h2>
-      </li>
-    );
-  if (item.kind === "collection_link")
-    return (
-      <li className={`resource-row${item.linkedCollection ? "" : " resource-unavailable"}`}>
-        <h2>
-          {item.linkedCollection ? (
-            <a href={permalink(item.linkedCollection.id)}>
-              {item.title || item.linkedCollection.title}
-            </a>
-          ) : (
-            "Collection unavailable"
-          )}
-        </h2>
-        <div className="meta resource-meta">
-          {item.linkedCollection ? (
-            <>
-              <CollectionIcon />
-              <span className="resource-kind">Collection</span>
-            </>
-          ) : (
-            <span>This collection may be private or no longer available.</span>
-          )}
-          <Tags tags={item.tags} />
-        </div>
+        {item.description && <p className="section-description">{item.description}</p>}
       </li>
     );
   let url: URL | undefined;
@@ -123,26 +113,60 @@ export function ResourceRow({ item }: { item: Resource }) {
     const value = new URL(item.url ?? "");
     if (["http:", "https:"].includes(value.protocol)) url = value;
   } catch {}
+  const reference = item.kind === "collection_link";
+  const destination = reference
+    ? item.linkedCollection && permalink(item.linkedCollection.id)
+    : url?.href;
+  const title = reference
+    ? item.linkedCollection?.title || "Collection unavailable"
+    : item.title || url?.href || "Link unavailable";
   return (
-    <li className="resource-row">
-      <h2>
-        {url ? (
-          <a href={url.href} rel="noreferrer" referrerPolicy="no-referrer">
-            {item.title || url.href}
-          </a>
-        ) : (
-          item.title || "Link unavailable"
-        )}
-      </h2>
-      {url ? (
-        <div className="meta hostname resource-meta">
-          <span>{url.hostname.replace(/^www\./, "")}</span>
-          <ExternalIcon />
-          <Tags tags={item.tags} />
-        </div>
-      ) : (
-        <Tags tags={item.tags} />
-      )}
+    <li
+      className={`resource-row${reference && !destination ? " resource-unavailable" : ""}`}
+      id={`item-${item.id}`}
+    >
+      <ItemDisclosure
+        expanded={expanded}
+        itemId={item.id}
+        collectionId={item.collectionId}
+        onExpandedChange={onExpandedChange}
+      >
+        <summary aria-label={`Details: ${title}`}>
+          <h2>
+            {destination ? (
+              <a href={destination} rel="noreferrer" referrerPolicy="no-referrer">
+                {title}
+              </a>
+            ) : (
+              title
+            )}
+          </h2>
+          <div className="meta resource-meta">
+            {reference ? (
+              destination ? (
+                <>
+                  <CollectionIcon />
+                  <span className="resource-kind">Collection</span>
+                </>
+              ) : (
+                <span>This collection may be private or no longer available.</span>
+              )
+            ) : (
+              url && (
+                <>
+                  <span>{url.hostname.replace(/^www\./, "")}</span>
+                  <ExternalIcon />
+                </>
+              )
+            )}
+            <Tags tags={item.tags} />
+          </div>
+        </summary>
+        <ItemDetails
+          item={item}
+          permalink={detailsUrl.pathname + detailsUrl.search + detailsUrl.hash}
+        />
+      </ItemDisclosure>
     </li>
   );
 }

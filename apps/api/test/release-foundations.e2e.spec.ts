@@ -55,7 +55,7 @@ describe("release foundations over real HTTP and PostgreSQL", () => {
       "CREATE FUNCTION test_reject_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic failure'; END $$",
     );
     await prisma.$executeRawUnsafe(
-      "CREATE TRIGGER test_reject_audit BEFORE INSERT ON audit_records FOR EACH ROW EXECUTE FUNCTION test_reject_audit()",
+      "CREATE TRIGGER test_reject_audit BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION test_reject_audit()",
     );
     try {
       const response = await request(app.getHttpServer())
@@ -68,7 +68,7 @@ describe("release foundations over real HTTP and PostgreSQL", () => {
         (await prisma.collection.findUniqueOrThrow({ where: { id: collectionId } })).published,
       ).toBe(false);
     } finally {
-      await prisma.$executeRawUnsafe("DROP TRIGGER test_reject_audit ON audit_records");
+      await prisma.$executeRawUnsafe("DROP TRIGGER test_reject_audit ON audit_logs");
       await prisma.$executeRawUnsafe("DROP FUNCTION test_reject_audit()");
     }
   });
@@ -109,7 +109,7 @@ describe("release foundations over real HTTP and PostgreSQL", () => {
     await request(server)
       .post(`/api/v1/collections/${collectionId}/shares`)
       .set("Authorization", `Bearer ${owner}`)
-      .send({ email: recipientEmail, role: "editor" })
+      .send({ email: recipientEmail, role: "contributor" })
       .expect(201);
     await request(server)
       .post(`/api/v1/collections/${collectionId}/transfer`)
@@ -125,11 +125,11 @@ describe("release foundations over real HTTP and PostgreSQL", () => {
       .set("Authorization", `Bearer ${recipient}`)
       .expect(200);
     const old = await request(server)
-      .get("/api/v1/me/audit?limit=100")
+      .get(`/api/v1/manage/audit?limit=100&targetId=${collectionId}`)
       .set("Authorization", `Bearer ${owner}`)
       .expect(200);
     const current = await request(server)
-      .get("/api/v1/me/audit?limit=100")
+      .get(`/api/v1/manage/audit?limit=100&targetId=${collectionId}`)
       .set("Authorization", `Bearer ${recipient}`)
       .expect(200);
     const oldActions = old.body.data.map((row: { action: string }) => row.action);
@@ -144,18 +144,18 @@ describe("release foundations over real HTTP and PostgreSQL", () => {
     const serialized = JSON.stringify([old.body, current.body]);
     for (const forbidden of [recipientEmail, "Private title", link.body.data.token])
       expect(serialized).not.toContain(forbidden);
-    await request(server).get("/api/v1/me/audit").expect(401);
+    await request(server).get("/api/v1/manage/audit").expect(401);
     const page = await request(server)
-      .get("/api/v1/me/audit?limit=1")
+      .get("/api/v1/manage/audit?limit=1")
       .set("Authorization", `Bearer ${owner}`)
       .expect(200);
     const next = await request(server)
-      .get(`/api/v1/me/audit?limit=1&cursor=${page.body.meta.nextCursor}`)
+      .get(`/api/v1/manage/audit?limit=1&cursor=${page.body.meta.nextCursor}`)
       .set("Authorization", `Bearer ${owner}`)
       .expect(200);
     expect(next.body.data[0].id).not.toBe(page.body.data[0].id);
     await request(server)
-      .get(`/api/v1/me/audit?cursor=${page.body.meta.nextCursor}`)
+      .get(`/api/v1/manage/audit?cursor=${page.body.meta.nextCursor}`)
       .set("Authorization", `Bearer ${recipient}`)
       .expect(400);
   });

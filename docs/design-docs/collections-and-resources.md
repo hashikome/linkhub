@@ -1,7 +1,8 @@
 # Collections and resources
 
-Status: item APIs, link metadata and Save a link are implemented. Web resource
-organization, preview/details and notes are planned as labelled below. Settled in
+Status: item APIs, link metadata and Save a link are implemented. Web
+section authoring and inline details are implemented; further organization,
+preview cards and notes are planned as labelled below. Settled in
 [ADR-0007](../engineering-decisions/0007-resolved-titles-read-only-items.md) and
 [ADR-0008](../engineering-decisions/0008-references-grant-nothing.md).
 
@@ -16,14 +17,20 @@ Collections have no structural parent. Resources are ordered rows with versions:
   tags and position; its title is the target's. Requires source write and target read,
   including cross-hub references. One reference per source/target pair; cycles
   and multiple incoming references are allowed. No copied target title by default.
-- `POST /collections/:id/resources/heading`: nonblank `title` and position.
-  A heading groups resources without a collection or an access boundary.
-- `PATCH /collections/:id/resources/:resourceId`: tags and position only. To
-  change an address or a heading, remove the item and add it again.
+- `POST /collections/:id/resources/heading`: nonblank `title`, optional plain-text
+  `description` (500 characters), `firstItemId` and `firstItemVersion`. Inserts the
+  heading before that existing link or reference, shifting subsequent positions
+  and versions atomically. A heading creates no access boundary.
+- `PATCH /collections/:id/resources/:resourceId`: tags, position and heading-only
+  `description`; empty text clears context. To change an address or heading title,
+  remove the item and add it again.
 
 A link must be a public web address (`isPublicLinkHost`, shared with the web):
 IP literals, single-label, local/internal and reserved example/test names are
 refused with `link_not_public`.
+
+The planned [link-health workflow](link-health.md) adds a narrow approved-redirect
+URL update (ADR-0029); ordinary resource edits still cannot change addresses.
 
 ## Link metadata
 
@@ -40,7 +47,7 @@ addresses with no row, failures a day after they gave up, and ready metadata old
 than 30 days. Nothing runs under the write lock, and a lookup never changes an
 item (no version bump). Items expose `title` (a link's page title, null until
 found; a section's text; a readable reference's target title), `description`
-and `siteName`. The Save a link preview answers from stored metadata first and
+and `siteName`. The Save a link title lookup answers from stored metadata first and
 stores what it fetches. Imports ignore titles in the source file.
 
 Reference edits, reorders and removal require only source write access. The
@@ -48,36 +55,92 @@ viewer-filtered `linkedCollection` payload is `{ id, title }` or null; it never
 reveals an unreadable destination's title. Deleting a target nulls its reference
 FK and leaves an unavailable resource. Collections are independent; references
 create no structural parent or inherited grant.
-Resources carry no summary. Titles and tags clarify links; headings organize guides.
+Resources carry no summary; heading descriptions are authored section context. Titles and tags clarify links; headings organize guides.
 
-## Sections in the web (planned)
+## Sections (implemented)
 
-A collection's edit view has **Add section**, which adds a heading. A link's
-edit form has **Section**, to move it under a heading; items reorder by drag,
-with Move up and Move down for keyboard users. Save a link's destination can be
-"Collection › Section". Bulk import maps bookmark folders to sections.
+Owners and contributors use **Add section** from the collection’s **Edit** page, choose its first
+existing item and optionally add a description. **Edit section description**
+changes context with version checks and preserves drafts on errors or expired
+sessions. A section must contain at least one web link or collection reference;
+the backend rejects creation, removal, movement or reordering that would leave an
+empty section. Deleting a heading retains its items. See
+[ADR-0027](../engineering-decisions/0027-section-context-and-inline-details.md).
 
-## Preview cards and details (planned)
+Each native disclosure groups the items until the next heading. Section and item
+rows use hover/cursor feedback without plus/minus indicators; native keyboard
+expansion remains available. Descriptions stay
+visible below headings even when the items collapse. Collapsed sections show a
+**Show items** cue within the clickable heading area; it disappears when opened
+and works without JavaScript. There are no global Expand/Collapse controls.
+Reloading restores open sections and opens the item selected in the URL, scrolling
+it into view. Collapsing a section with JavaScript clears its selected item.
+Only one item can be
+expanded at a time. With JavaScript, opening/closing an item updates/removes its
+`?item=<id>` URL parameter without a page reload, preserving other parameters.
+Direct item links open the item and scroll it into view. Cursor responses include an
+optional `meta.section` resource when a page starts inside a section, so native
+pagination preserves context without duplicating resources.
+
+**Reorder** on the Edit page opens an owner/contributor list with drag-to-place-before and native
+Move up/Move down buttons. Moves save immediately; section moves carry all their
+items, including items beyond the visible page. Individual items can move between
+sections, subject to the backend's nonempty rule. Compact relative commands carry
+source and drag-target versions; expired sessions use account-bound continuation.
+Full-order and relative moves advance versions and reject stale submissions.
+Clicking non-interactive expanded item content collapses its details; title,
+attribution and permalink anchors retain navigation, and selecting text does not
+collapse the item. Native summaries retain keyboard/no-JavaScript toggling.
+
+Targeting a section from Save a link and bulk import folder organization remain
+planned in their own slices.
+
+## Preview cards and notes (planned)
 
 Hovering a link (or focusing it; on phones, a details button) shows a card with
 the page's metadata: title, domain, site name and the page's description — what
 the resource is about. No images or icons. The note (up to 280
 characters) is shown in full in the item's details; whether a short version
 also appears on the card is decided once the screen is built. The card offers
-**View** (details) and, for the owner and editors, **Edit** (tags, note, section,
+**View** (details) and, for the owner and contributors, **Edit** (tags, note, section,
 remove).
-Item details open over the collection at `?item=<itemId>` on either of its
-addresses (`/c/<id>?item=…`, `/@handle/<slug>?item=…`), so the link to one item
-is shareable and works without JavaScript.
+
+## Item details (implemented)
+
+Link and collection-reference rows expand metadata and attribution inline using
+native disclosures. There is no dialog, Close details action or heading Details
+link. Title links still open their destination. **Link to this item** preserves
+the containing collection address, token and cursor and adds `?item=<itemId>`.
+On either collection address, that URL opens authorized item context inline,
+including an item beyond the first page. These interactions work without
+JavaScript; reloading restores default section visibility and URL-selected content.
+
+`GET /collections/:id/resources/:resourceId` authorizes the containing collection
+first, looks up the item within that collection and hub, and uses the same
+viewer-filtered representation as resource lists. An item beyond page one is
+read directly. Missing or foreign items return 404; malformed IDs return 400.
+Reference destinations are authorized independently, never with the source token.
 
 ## Tags
 
-Optional labels stored **directly on** a collection or resource as a normalized
-`text[]` (lowercase, de-duplicated, capped at write time) — set as part of
-create/update, not a separate attach/detach step. There is no shared tag table,
-no global namespace, and no "click a tag → everything tagged it" view.
-Planned cross-library retrieval uses text search, covering
-titles, tags, and text together. Keep tags flat — no hierarchies or governance.
+Optional item labels use a normalized-name `tags` catalogue (UUIDv7 identities,
+unique names) and `item_tags(item_id, tag_id, position)` assignments. Normalization
+trims/collapses whitespace, lowercases, deduplicates and caps item tags at 30 names
+of at most 80 characters. The API still accepts/returns names as `string[]`;
+database IDs are an internal relationship, never an authorization shortcut.
+
+`collection_tags(collection_id, tag_id, item_count)` stores the unique set used
+by a collection's own items. Database triggers update counts with item assignment
+inserts/deletes and resource deletion/movement, within the same transaction.
+Removing one item's assignment keeps the collection tag while another item uses
+it. Collection reads include the stored relation, never aggregate resource pages.
+Collection create/update requests cannot set tags. Reference-item tags count;
+contents of reference destinations do not. Existing section tags are preserved.
+
+There is no public catalogue/usage endpoint, cross-account autocomplete or tag
+hierarchy. Unused catalogue names remain reusable, without exposing previous use.
+Authorization still precedes collection/item tag reads. Planned text search can
+include these relations. See [ADR-0032](../engineering-decisions/0032-relational-item-and-collection-tags.md).
 
 ## First-link capture command
 
@@ -87,9 +150,12 @@ deduplicated, appended in order; links already in the collection are kept
 as they are) plus a user-scoped operation receipt, returning the collection
 and the resource IDs in input order. A collection it creates takes
 `collectionTitle`, or a default "Saved links, <date>" suffixed so it never
-repeats a hub title. `GET /api/v1/link-preview?url=` (signed-in, read-only,
-own "lookup" budget of 30/min) returns a canonical URL and looked-up title
-for the save form. The command
+repeats a hub title. `GET /api/v1/link-preview?url=` (public, no account required,
+own source-based "lookup" budget of 30/min) returns a canonical URL and looked-up title
+and validation status for the save form, before and after sign-in. The form shows
+only the title and address feedback; richer previews belong on saved collection
+items. Lookup failure leaves a valid address saveable with an explanatory message.
+The command
 uses the existing collection policy and resource canonicalization, and shares
 the authority transaction. Its destination is first, new, or an explicit owned
 collection ID. First-save concurrency uses a nullable immutable collection ID
@@ -106,3 +172,23 @@ below browser cookie limits; a draft that would outgrow its cookie drops tags
 before any link. Ordinary email verification may submit the pending
 capture with the newly issued session; invitation verification is separate.
 Auth and capture intentionally commit separately, preserving login on save failure.
+
+## Add to my collection (planned)
+
+The owner has a collection setting allowing or refusing the product's link-copy
+action. The backend checks source access and this permission; publication is
+not consent. Allowed copies always show a source-collection credit in the
+recipient's item list, identified by immutable collection ID. Credit never
+bypasses refusal and never grants source access. The initial default and private/
+removed-source presentation are implementation decisions for this future slice.
+See [ADR-0019](../engineering-decisions/0019-copy-permission-and-source-credit.md).
+
+## Collection tag presentation
+
+The API orders stored collection tags by tagged-item count descending, then by
+name ascending for ties. Each item counts once per tag, across every page; usage
+in other collections does not affect ranking. The reader shows the first three,
+then **+N tags** for the remaining names (**+1 tag** for one). The suffix counts
+only tags not already shown; empty collections show nothing. It is supporting
+metadata, not a filter. Item rows keep their own tags in their authored order.
+The sidebar contains Contributors and Discussion without a separate Tags section.

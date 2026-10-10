@@ -11,7 +11,12 @@ export async function revokeAccountAccess(
   secret: string,
 ) {
   const intent = await tx.emailChangeIntent.findUnique({ where: { userId } });
+  const lifecycleProofs = await tx.verification.findMany({
+    where: { identifier: { startsWith: `account-action:${userId}:` } },
+    select: { identifier: true },
+  });
   const identifiers = [
+    ...lifecycleProofs.map((proof) => proof.identifier),
     `sign-in-otp-${address}`,
     `email-verification-otp-${address}`,
     ...(intent ? Object.values(handoverIdentifiers(secret, intent)) : []),

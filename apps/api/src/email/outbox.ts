@@ -2,9 +2,10 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes }
 import {
   type RenderedEmail,
   renderEmailChangeConfirmation,
-  renderLoginCode,
   renderNewEmailVerification,
+  renderVerificationCode,
 } from "@nslinkhub/email";
+import type { VerificationPurpose } from "@nslinkhub/types";
 import type { Prisma } from "../generated/prisma/client";
 
 export type EmailKind = "sign-in" | "current-email" | "new-email";
@@ -38,6 +39,7 @@ export async function enqueueEmail(
     to: string;
     code: string;
     kind: EmailKind;
+    purpose?: VerificationPurpose;
     identifier: string;
     newEmail?: string;
   },
@@ -50,7 +52,7 @@ export async function enqueueEmail(
   };
   const rendered =
     input.kind === "sign-in"
-      ? await renderLoginCode(base)
+      ? await renderVerificationCode({ ...base, purpose: input.purpose ?? "sign-in" })
       : input.kind === "current-email"
         ? await renderEmailChangeConfirmation({ ...base, newEmail: input.newEmail ?? "" })
         : await renderNewEmailVerification(base);

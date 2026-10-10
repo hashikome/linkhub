@@ -6,10 +6,9 @@ import type { AuthUser } from "src/common/interfaces/auth-user.interface";
 import { apiOk } from "src/common/utils/response.util";
 import { HandleAvailabilityDto } from "./dto/handle-availability.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
+import { UsernameAvailabilityDto } from "./dto/username-availability.dto";
 import { UsersService } from "./users.service";
 
-// The authenticated user's own profile. Public identity is the hub handle
-// (see the hub page), so there is no public user-by-username lookup.
 @ApiTags("profile")
 @ApiBearerAuth()
 @UseGuards(AuthGuard)
@@ -25,6 +24,14 @@ export class UsersController {
   @Get("handle-availability")
   async handleAvailability(@CurrentUser() user: AuthUser, @Query() query: HandleAvailabilityDto) {
     return apiOk(await this.usersService.handleAvailability(user, query.handle));
+  }
+
+  @Get("username-availability")
+  async usernameAvailability(
+    @CurrentUser() user: AuthUser,
+    @Query() query: UsernameAvailabilityDto,
+  ) {
+    return apiOk(await this.usersService.usernameAvailability(user, query.username));
   }
 
   @Patch()

@@ -1,6 +1,8 @@
 import { Toast } from "./toast";
 
 const messages: Record<string, string> = {
+  "order-saved": "Order saved.",
+  "section-saved": "Section saved.",
   "link-saved": "Link saved.",
   "links-saved": "Links saved.",
   "link-not-public":
@@ -12,7 +14,11 @@ const messages: Record<string, string> = {
   "save-failed": "We couldn't confirm the save. Your link is still here. Try saving it again.",
   "collection-saved": "Collection saved.",
   "profile-saved": "Your profile has been saved.",
-  "profile-invalid": "Enter a name and a valid hub handle, then try again.",
+  "profile-invalid": "Check your profile fields, then try again.",
+  "username-unavailable": "That username is already in use. Choose another.",
+  "username-invalid": "Choose a different username using lowercase letters, numbers and hyphens.",
+  "handle-claimed": "Your hub handle is permanent. Reload Settings to see the saved handle.",
+  "handle-confirmation-required": "Confirm your permanent hub handle choice before saving.",
   "handle-unavailable": "That hub handle is already in use. Choose another.",
   "handle-invalid": "Choose a different hub handle using lowercase letters, numbers and hyphens.",
   "invitation-accepted":

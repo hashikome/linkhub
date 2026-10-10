@@ -15,18 +15,22 @@ export class SessionController {
       select: {
         id: true,
         name: true,
+        username: true,
         email: true,
         emailVerified: true,
         notificationsSeenAt: true,
         notificationsClearedAt: true,
         operatorGrant: { select: { userId: true } },
         adminGrant: { select: { userId: true } },
+        hub: { select: { id: true } },
       },
     });
     return apiOk({
       userId: user.id,
+      hubId: user.hub?.id ?? null,
       email: user.email,
       name: user.name,
+      username: user.username,
       operator: !!user.operatorGrant || !!user.adminGrant,
       admin: !!user.adminGrant,
       unreadNotifications: user.emailVerified

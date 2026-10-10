@@ -1,6 +1,7 @@
+import type { SetLinkSharingRequest } from "@nslinkhub/types";
 import { IsBoolean, IsOptional } from "class-validator";
 
-export class SetLinkSharingDto {
+export class SetLinkSharingDto implements SetLinkSharingRequest {
   @IsBoolean()
   enabled: boolean;
 

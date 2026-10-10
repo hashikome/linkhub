@@ -50,8 +50,34 @@ alongside their original rationale.
 - [0011-toolchain.md](0011-toolchain.md) — Toolchain: Bun, Biome, reviewed Prisma migrations.
 - [0012-bulk-import-through-reviewed-drafts.md](0012-bulk-import-through-reviewed-drafts.md) — Bulk import through reviewed drafts.
 - [0013-permission-roles-and-display-labels.md](0013-permission-roles-and-display-labels.md) — Permission roles are stable; display labels are chosen per surface.
-- [0014-one-management-workspace.md](0014-one-management-workspace.md) — Owner Manage workspace and separate platform console (amended).
+- [0014-one-management-workspace.md](0014-one-management-workspace.md) — One Manage workspace with owner and service contexts (amended).
 - [0015-attribution-from-activity-records.md](0015-attribution-from-activity-records.md) — Attribution comes from activity records.
 - [0016-curator-accounts-are-the-paid-tier.md](0016-curator-accounts-are-the-paid-tier.md) — Everyone's library is free; Curator accounts are the paid tier.
 - [0017-hubs-are-entities-with-members.md](0017-hubs-are-entities-with-members.md) — Hubs as entities with members (rejected; GitHub-style organizations later if ever needed).
 - [0018-people-and-hubs-are-separate.md](0018-people-and-hubs-are-separate.md) — People and hubs are separate identities (amends 0001).
+- [0019-copy-permission-and-source-credit.md](0019-copy-permission-and-source-credit.md) — Add to my collection requires owner permission and source credit.
+- [0020-logging-after-core-operations.md](0020-logging-after-core-operations.md) — Audit strategy and wide event logging get separate milestones after core operations; existing recording remains.
+- [0021-bounded-audit-effects.md](0021-bounded-audit-effects.md) — Interim core audit captures bounded state changes and no-op results; full strategy remains deferred.
+
+- [0022-operator-account-profile-evidence.md](0022-operator-account-profile-evidence.md) — Operator account profiles expose recorded identity, status and session dates; no credentials, IP or user agent.
+
+- [ADR-0023: Account lifecycle and unified collection actions](0023-account-lifecycle-and-unified-collection-actions.md)
+
+- [ADR-0024: One audit log for every domain](0024-one-audit-log.md)
+
+- [ADR-0025: One contextual Share page](0025-contextual-sharing.md)
+
+- [0026-username-availability.md](0026-username-availability.md) — Lowercase usernames; hyphens affect spelling but not availability.
+
+- [0027-section-context-and-inline-details.md](0027-section-context-and-inline-details.md) — Bounded section descriptions, nonempty sections and native inline disclosures.
+
+- [0028-free-public-curation-paid-private-sharing.md](0028-free-public-curation-paid-private-sharing.md) — Free public collections and ordinary imports; paid private sharing, AI and DOCX; prospective public creation default.
+
+- [0029-link-health-and-approved-redirects.md](0029-link-health-and-approved-redirects.md) — Paid monitoring, unavailable/recovery updates and explicit owner-approved URL redirects.
+
+- [0030-one-selected-item-in-the-url.md](0030-one-selected-item-in-the-url.md) — One expanded item, synchronized URL and direct-link scrolling; amends ADR-0027 global expansion.
+
+- [0031-direct-disclosures-without-global-controls.md](0031-direct-disclosures-without-global-controls.md) — Remove global Expand/Collapse controls; direct disclosures and reload preserve the reading workflow.
+- [0032-relational-item-and-collection-tags.md](0032-relational-item-and-collection-tags.md) — Shared tag identities, item assignments and a transactionally maintained collection-tag relation.
+
+- [0033-permanent-hub-handles-and-self-service-accounts.md](0033-permanent-hub-handles-and-self-service-accounts.md) — Permanent hub handles, retained reservations and distinct self-service deactivation/deletion.

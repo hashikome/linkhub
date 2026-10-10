@@ -36,3 +36,12 @@ for the account it belongs to. Purposes, screens and limits:
 
 - [SECURITY.md](../SECURITY.md)
 - [web-interface-system.md](../design-docs/web-interface-system.md)
+
+
+## Email copy extension — 2026-10-09
+
+The shared verification purpose also selects fixed email subject, preview and
+body copy, preserved on resend. This keeps inbox wording consistent with the
+screens. Ordinary code issuance accepts a bounded presentation purpose;
+invitation purpose is selected from its backend workflow. Copy context never
+changes proof namespaces, verification rules, authorization or action replay.

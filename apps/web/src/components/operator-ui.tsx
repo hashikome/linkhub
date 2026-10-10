@@ -1,24 +1,39 @@
 import { randomUUID } from "node:crypto";
-import type { OperationAction, OperationReason, SessionView } from "@nslinkhub/types";
+import type {
+  AccountOperationAction,
+  OperationAction,
+  OperationReason,
+  SessionView,
+} from "@nslinkhub/types";
 import { serverRead } from "../lib/server-api";
 import { NativeForm } from "./native-form";
 
-export type OpsTab = "accounts" | "collections" | "team" | "audit";
+export type OpsTab =
+  | "accounts"
+  | "people"
+  | "collections"
+  | "team"
+  | "invitations"
+  | "analytics"
+  | "audit";
 
-// One tab per operations area, so one long list never pushes another task down
-// the page. The current tab is marked for assistive technology and visually.
 export async function OperatorNav({ current }: { current?: OpsTab }) {
   const session = await serverRead<SessionView>("/api/v1/session");
-  const tabs: [OpsTab, string, string][] = [
-    ["accounts", "/ops", "Accounts"],
-    ["collections", "/ops/collections", "Collections"],
-    ...(session.ok && session.data.admin
-      ? [["team", "/ops/team", "Team"] as [OpsTab, string, string]]
-      : []),
-    ["audit", "/ops/audit", "Audit"],
-  ];
+  if (!session.ok) return null;
+  const { operator, admin, hubId } = session.data;
+  const tabs: [OpsTab, string, string][] = [];
+  if (operator) tabs.push(["accounts", "/manage", "Accounts"]);
+  if (hubId) tabs.push(["people", "/manage/people", "Access"]);
+  if (operator || hubId) tabs.push(["collections", "/manage/collections", "Collections"]);
+  if (admin)
+    tabs.push(
+      ["team", "/manage/team", "Team"],
+      ["invitations", "/manage/invitations", "Invitations"],
+    );
+  if (operator || admin) tabs.push(["analytics", "/manage/analytics", "Analytics"]);
+  if (operator || hubId) tabs.push(["audit", "/manage/audit", "Audit Log"]);
   return (
-    <nav aria-label="Service operations" className="ops-tabs">
+    <nav aria-label="Manage" className="ops-tabs">
       {tabs.map(([key, href, label]) => (
         <a key={key} href={href} aria-current={key === current ? "page" : undefined}>
           {label}
@@ -30,6 +45,9 @@ export async function OperatorNav({ current }: { current?: OpsTab }) {
 
 const choices: Record<OperationAction, OperationReason[]> = {
   "account.suspend": ["spam", "harmful_content", "account_compromise", "owner_request"],
+  "account.deactivate": ["owner_request", "access_administration"],
+  "account.delete": ["owner_request", "spam", "harmful_content", "access_administration"],
+  "account.cancel_deletion": ["owner_request", "mistake_corrected", "review_completed"],
   "account.reactivate": ["review_completed", "mistake_corrected", "owner_request"],
   "sessions.revoke": ["account_compromise", "owner_request", "access_administration"],
   "collection.hold": ["spam", "harmful_content", "owner_request"],
@@ -45,7 +63,16 @@ const labels: Record<OperationReason, string> = {
   access_administration: "Access administration",
 };
 const restrictive = (action: OperationAction) =>
-  action.endsWith("suspend") || action.endsWith("hold");
+  ["account.suspend", "account.deactivate", "account.delete", "collection.hold"].includes(action);
+
+export const accountActionLabels: Record<AccountOperationAction, string> = {
+  "sessions.revoke": "Sign out everywhere",
+  "account.deactivate": "Deactivate",
+  "account.suspend": "Suspend",
+  "account.reactivate": "Reactivate",
+  "account.delete": "Delete account",
+  "account.cancel_deletion": "Cancel deletion",
+};
 
 // The fields every operation submits. The required reason plus a clearly
 // labelled button is the deliberate step; there is no extra confirmation box.
@@ -54,24 +81,19 @@ function OperationFields({
   targetId,
   version,
   label,
-  returnTo,
-  idSuffix = "",
 }: {
   action: OperationAction;
   targetId: string;
   version: number;
   label: string;
-  returnTo?: string;
-  idSuffix?: string;
 }) {
-  const field = `${action}-reason${idSuffix}`;
+  const field = `${action}-reason`;
   return (
     <>
       <input type="hidden" name="action" value={action} />
       <input type="hidden" name="targetId" value={targetId} />
       <input type="hidden" name="version" value={version} />
       <input type="hidden" name="operationId" value={randomUUID()} />
-      {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
       <label htmlFor={field}>Reason</label>
       <select id={field} name="reason" required defaultValue="">
         <option value="" disabled>
@@ -112,37 +134,5 @@ export function OperationForm({
         <OperationFields action={action} targetId={targetId} version={version} label={label} />
       </NativeForm>
     </section>
-  );
-}
-
-// A table-row action: the short label opens an inline reason and confirm
-// button, then the page reloads with the row's new state.
-export function QuickAction({
-  action,
-  targetId,
-  version,
-  label,
-  returnTo,
-}: {
-  action: OperationAction;
-  targetId: string;
-  version: number;
-  label: string;
-  returnTo: string;
-}) {
-  return (
-    <details className="quick-action">
-      <summary className={`text-button${restrictive(action) ? " danger" : ""}`}>{label}</summary>
-      <NativeForm action="/forms/operation">
-        <OperationFields
-          action={action}
-          targetId={targetId}
-          version={version}
-          label={label}
-          returnTo={returnTo}
-          idSuffix={`-${targetId}`}
-        />
-      </NativeForm>
-    </details>
   );
 }

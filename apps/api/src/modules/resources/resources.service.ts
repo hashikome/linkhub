@@ -4,7 +4,6 @@ import { CursorQueryDto } from "src/common/dto/cursor-query.dto";
 import { ResourceKind } from "src/common/enums/resource-kind.enum";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";
 import { decodeCursor, encodeCursor } from "src/common/utils/cursor.util";
-import { normalizeTags } from "src/common/utils/tags.util";
 import { publicLinkUrl } from "src/common/utils/url.util";
 import { PrismaService } from "src/database/prisma.service";
 import { Collection, Prisma, Resource } from "src/generated/prisma/client";
@@ -18,8 +17,10 @@ import {
   CreateHeadingResourceDto,
 } from "./dto/create-collection-resource.dto";
 import { CreateExternalResourceDto } from "./dto/create-external-resource.dto";
+import { MoveResourceDto } from "./dto/move-resource.dto";
 import { ReorderResourcesDto } from "./dto/reorder-resources.dto";
 import { UpdateResourceDto } from "./dto/update-resource.dto";
+import { itemTags } from "./item-tags";
 import { type LinkMeta, metadataFor, readLinkMetadata, requestLinkMetadata } from "./link-metadata";
 
 @Injectable()
@@ -61,7 +62,7 @@ export class ResourcesService {
         collectionId: collection.id,
         kind: ResourceKind.EXTERNAL_LINK,
         url,
-        tags: normalizeTags(tags),
+        tags: await itemTags(this.prisma, tags),
         position,
         addedByUserId: user.userId,
       },
@@ -112,7 +113,7 @@ export class ResourcesService {
         kind: ResourceKind.COLLECTION_LINK,
         linkedCollectionId: target.id,
         position: dto.position,
-        tags: normalizeTags(dto.tags),
+        tags: await itemTags(this.prisma, dto.tags),
         addedByUserId: user.userId,
       },
     });
@@ -122,13 +123,34 @@ export class ResourcesService {
 
   async createHeading(collectionId: string, user: AuthUser, dto: CreateHeadingResourceDto) {
     const collection = await this.requireWritableCollection(collectionId, user);
-    await this.ensurePositionAvailable(collectionId, dto.position);
+    const rows = await this.prisma.resource.findMany({
+      where: { collectionId },
+      orderBy: { position: "asc" },
+    });
+    const index = rows.findIndex((row) => row.id === dto.firstItemId);
+    const first = rows[index];
+    if (!first || first.kind === ResourceKind.HEADING) throw appError("bad_request");
+    if (Number(first.version) !== dto.firstItemVersion) throw appError("version_conflict");
+    this.assertSectionOrder([
+      ...rows.slice(0, index),
+      { kind: ResourceKind.HEADING },
+      ...rows.slice(index),
+    ]);
+    // Shift backwards to keep unique positions valid at every statement. Bump
+    // versions so concurrent drafts cannot silently target a moved boundary.
+    for (const row of rows.slice(index).reverse()) {
+      await this.prisma.resource.update({
+        where: { id: row.id, collectionId },
+        data: { position: row.position + 1, version: { increment: 1 } },
+      });
+    }
     const heading = await this.prisma.resource.create({
       data: {
         collectionId,
         kind: ResourceKind.HEADING,
         titleOverride: dto.title.trim(),
-        position: dto.position,
+        sectionDescription: dto.description?.trim() || null,
+        position: first.position,
         addedByUserId: user.userId,
       },
     });
@@ -170,11 +192,40 @@ export class ResourcesService {
     const nextCursor =
       rows.length > limit ? encodeCursor({ p: items[items.length - 1].position }) : null;
 
-    const context = await this.context(items);
+    const section =
+      items.length && items[0].kind !== ResourceKind.HEADING
+        ? await this.prisma.resource.findFirst({
+            where: {
+              collectionId,
+              kind: ResourceKind.HEADING,
+              position: { lt: items[0].position },
+            },
+            orderBy: { position: "desc" },
+          })
+        : null;
+    const context = await this.context(section ? [...items, section] : items);
     return {
       items: await Promise.all(items.map((item) => this.resourceView(item, viewer, context))),
-      meta: { limit, nextCursor },
+      meta: {
+        limit,
+        nextCursor,
+        ...(section ? { section: this.toPublicResource(section, context) } : {}),
+      },
     };
+  }
+
+  async getOne(
+    collectionId: string,
+    resourceId: string,
+    viewer: AuthUser | null,
+    shareToken?: string,
+  ): Promise<WireResource> {
+    const collection = await this.requireReadableCollection(collectionId, viewer, shareToken);
+    const resource = await this.prisma.resource.findFirst({
+      where: { id: resourceId, collectionId, collection: { hubId: collection.hubId } },
+    });
+    if (!resource) throw new NotFoundException("Resource not found");
+    return this.resourceView(resource, viewer, await this.context([resource]));
   }
 
   async update(collectionId: string, resourceId: string, user: AuthUser, dto: UpdateResourceDto) {
@@ -191,6 +242,9 @@ export class ResourcesService {
       throw appError("version_conflict");
     }
 
+    if (dto.description !== undefined && resource.kind !== ResourceKind.HEADING)
+      throw appError("bad_request");
+
     let position = resource.position;
     if (dto.position !== undefined && dto.position !== resource.position) {
       await this.ensurePositionAvailable(collectionId, dto.position, resource.id);
@@ -201,11 +255,17 @@ export class ResourcesService {
       where: { id: resource.id },
       data: {
         position,
-        ...(dto.tags !== undefined ? { tags: normalizeTags(dto.tags) } : {}),
+        ...(dto.tags !== undefined
+          ? { tags: { deleteMany: {}, ...(await itemTags(this.prisma, dto.tags)) } }
+          : {}),
+        ...(dto.description !== undefined
+          ? { sectionDescription: dto.description.trim() || null }
+          : {}),
         version: { increment: 1 },
       },
     });
 
+    if (position !== resource.position) await this.requireNonemptySections(collectionId);
     await this.record(collection, user, "item.updated", saved.id);
     return this.resourceView(saved, user, await this.context([saved]));
   }
@@ -221,9 +281,59 @@ export class ResourcesService {
     }
 
     await this.prisma.resource.delete({ where: { id: resource.id, collectionId } });
+    await this.requireNonemptySections(collectionId);
     await this.record(collection, user, "item.removed", resource.id);
 
     return { id: resource.id, deleted: true };
+  }
+
+  async move(collectionId: string, resourceId: string, user: AuthUser, dto: MoveResourceDto) {
+    await this.requireWritableCollection(collectionId, user);
+    if (
+      (dto.direction !== undefined &&
+        (dto.beforeId !== undefined || dto.beforeVersion !== undefined)) ||
+      (dto.beforeId !== undefined) !== (dto.beforeVersion !== undefined)
+    )
+      throw appError("invalid_reorder");
+    const rows = await this.prisma.resource.findMany({
+      where: { collectionId },
+      orderBy: { position: "asc" },
+    });
+    const start = rows.findIndex((row) => row.id === resourceId);
+    if (start < 0) throw new NotFoundException("Resource not found");
+    const source = rows[start];
+    if (Number(source.version) !== dto.version) throw appError("version_conflict");
+    const section = source.kind === ResourceKind.HEADING;
+    const nextHeading = (from: number) => {
+      const index = rows.findIndex((row, i) => i >= from && row.kind === ResourceKind.HEADING);
+      return index < 0 ? rows.length : index;
+    };
+    const end = section ? nextHeading(start + 1) : start + 1;
+    let destination = rows.length;
+    if (dto.direction === "up") {
+      destination = Math.max(0, start - 1);
+      if (section) {
+        while (destination > 0 && rows[destination].kind !== ResourceKind.HEADING) destination--;
+      }
+    } else if (dto.direction === "down") {
+      destination = section ? nextHeading(end + 1) : Math.min(rows.length, end + 1);
+    } else if (dto.beforeId !== undefined) {
+      destination = rows.findIndex((row) => row.id === dto.beforeId);
+      if (destination < 0) throw appError("invalid_reorder");
+      if (Number(rows[destination].version) !== dto.beforeVersion)
+        throw appError("version_conflict");
+    }
+    if (destination >= start && destination <= end) return { reordered: false, count: rows.length };
+    const moving = rows.slice(start, end);
+    const remaining = [...rows.slice(0, start), ...rows.slice(end)];
+    remaining.splice(destination > end ? destination - moving.length : destination, 0, ...moving);
+    return this.reorder(collectionId, user, {
+      items: remaining.map((row, position) => ({
+        resourceId: row.id,
+        position,
+        version: Number(row.version),
+      })),
+    });
   }
 
   async reorder(collectionId: string, user: AuthUser, dto: ReorderResourcesDto) {
@@ -270,24 +380,49 @@ export class ResourcesService {
     await this.prisma.$transaction(async (tx) => {
       // Avoid transient unique conflicts on (collection_id, position) by
       // writing temporary positions first, then final positions.
-      const offset = resources.length + 1024;
-
+      // Temporary slots must avoid both all existing positions and final slots.
+      // A fixed offset can overlap sparse positions supplied by imports/API clients.
+      const occupied = new Set(resources.map((row) => row.position));
+      let temporary = resources.length;
       for (const item of dto.items) {
+        while (occupied.has(temporary)) temporary++;
         await tx.resource.updateMany({
           where: { id: item.resourceId, collectionId },
-          data: { position: item.position + offset },
+          data: { position: temporary++ },
         });
       }
       for (const item of dto.items) {
         await tx.resource.updateMany({
           where: { id: item.resourceId, collectionId },
-          data: { position: item.position },
+          data: { position: item.position, version: { increment: 1 } },
         });
       }
     });
 
+    await this.requireNonemptySections(collectionId);
     await this.record(collection, user, "items.reordered");
     return { reordered: true, count: dto.items.length };
+  }
+
+  private assertSectionOrder(rows: Array<{ kind: string }>) {
+    if (
+      rows.some(
+        (row, index) =>
+          row.kind === ResourceKind.HEADING &&
+          (!rows[index + 1] || rows[index + 1].kind === ResourceKind.HEADING),
+      )
+    )
+      throw appError("section_empty");
+  }
+
+  private async requireNonemptySections(collectionId: string) {
+    this.assertSectionOrder(
+      await this.prisma.resource.findMany({
+        where: { collectionId },
+        orderBy: { position: "asc" },
+        select: { kind: true },
+      }),
+    );
   }
 
   private async requireWritableCollection(
@@ -300,7 +435,7 @@ export class ResourcesService {
     if (!collection) {
       throw new NotFoundException("Collection not found");
     }
-    // Content write: hub owners and direct-share editors.
+    // Content write: hub owners and direct-share contributors.
     await this.policy.requireWriteContent(collection, user);
     return collection;
   }
@@ -339,14 +474,25 @@ export class ResourcesService {
 
   // Link metadata and the people who added the items, for one page of items.
   private async context(items: Resource[]): Promise<ItemContext> {
-    const [metadata, people] = await Promise.all([
+    const [metadata, people, taggedItems] = await Promise.all([
       readLinkMetadata(this.prisma, linkUrls(items)),
       personRefs(
         this.prisma,
         items.map((item) => item.addedByUserId),
       ),
+      this.prisma.resource.findMany({
+        where: { OR: items.map(({ id, collectionId }) => ({ id, collectionId })) },
+        select: {
+          id: true,
+          tags: { orderBy: { position: "asc" }, select: { tag: { select: { name: true } } } },
+        },
+      }),
     ]);
-    return { metadata, people };
+    return {
+      metadata,
+      people,
+      tags: new Map(taggedItems.map((item) => [item.id, item.tags.map(({ tag }) => tag.name)])),
+    };
   }
 
   private async resourceView(
@@ -388,10 +534,14 @@ export class ResourcesService {
         : resource.kind === ResourceKind.HEADING
           ? resource.titleOverride
           : null,
-      description: link ? meta.description : null,
+      description: link
+        ? meta.description
+        : resource.kind === ResourceKind.HEADING
+          ? resource.sectionDescription
+          : null,
       siteName: link ? meta.siteName : null,
       addedBy: (resource.addedByUserId && context.people.get(resource.addedByUserId)) || null,
-      tags: resource.tags,
+      tags: context.tags.get(resource.id) ?? [],
       position: resource.position,
       version: Number(resource.version),
       createdAt: resource.createdAt.toISOString(),
@@ -401,6 +551,7 @@ export class ResourcesService {
 }
 
 interface ItemContext {
+  tags: Map<string, string[]>;
   metadata: Map<string, LinkMeta>;
   people: Map<string, PersonRef>;
 }

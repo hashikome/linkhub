@@ -79,10 +79,19 @@ describe("link metadata", () => {
   });
 
   it("sections keep their text as title and links never accept one", async () => {
+    const first = await request(app.getHttpServer())
+      .post(`/api/v1/collections/${collectionId}/resources/external`)
+      .auth(token, { type: "bearer" })
+      .send({ url: "https://fixture-links.dev/section", position: 50 })
+      .expect(201);
     const heading = await request(app.getHttpServer())
       .post(`/api/v1/collections/${collectionId}/resources/heading`)
       .auth(token, { type: "bearer" })
-      .send({ title: "Getting started", position: 50 })
+      .send({
+        title: "Getting started",
+        firstItemId: first.body.data.id,
+        firstItemVersion: first.body.data.version,
+      })
       .expect(201);
     expect(heading.body.data).toMatchObject({ title: "Getting started", description: null });
     await request(app.getHttpServer())

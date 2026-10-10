@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { FormNotice } from "../components/form-notice";
 import { LandingQuestions } from "../components/landing-questions";
+import { ShareAction } from "../components/share-action";
+import { ShareOpen } from "../components/share-open";
 import { queryValue } from "../lib/http";
 
 export const metadata: Metadata = {
@@ -14,9 +16,11 @@ export default async function Page({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const notice = queryValue((await searchParams).notice);
+  const query = await searchParams;
+  const notice = queryValue(query.notice);
   return (
     <div className="landing" data-reader>
+      <ShareOpen shareId={queryValue(query.via)} kind="site" />
       {notice === "signed-out" && <FormNotice code={notice} />}
       <section className="landing-hero" aria-labelledby="landing-title">
         <div className="landing-intro">
@@ -94,6 +98,14 @@ export default async function Page({
             your next good read.
           </h2>
           <a href="/discover">Discover the links someone kept</a>
+          <p>
+            <ShareAction
+              target={{ kind: "site" }}
+              returnTo="/"
+              label="Share nslinkhub"
+              className=""
+            />
+          </p>
         </div>
       </section>
     </div>

@@ -3,7 +3,7 @@
 ## Purpose
 
 NSLinkHub turns the links people collect into curated, shareable collections.
-Each user owns one hub (their personal space, the tenant root); collections are
+Each user may own one hub (their publishing space, the tenant root); collections are
 shared per collection, Google-Drive style, or published to Discover.
 
 This is the repository's stable system-architecture authority. Product purpose,
@@ -13,13 +13,13 @@ foundations and their rationale in `docs/engineering-decisions/`; repeatable
 procedures in `docs/runbooks/`.
 
 ```txt
-User (1:1) Hub → Collections → Resources (links, references, headings)
+User (1:0..1) Hub → Collections → Resources (links, references, headings)
 ```
 
-The implemented model has no usernames. The accepted
-[people-and-hubs design](docs/design-docs/people-and-hubs.md) introduces separate
-person usernames and makes hubs optional, created on first save. Until it ships,
-signup creates a hub and person references use its handle.
+People have usernames and profiles; hubs have independent handles and names.
+Signup creates an account. First link/collection creation or receipt of a
+transferred collection creates its hub in the same transaction. See
+[people and hubs](docs/design-docs/people-and-hubs.md).
 
 There are no memberships, invitations into hubs or hub roles.
 Collaboration is per-collection sharing only; a hub is never a space others
@@ -65,12 +65,13 @@ ref/               disposable, git-ignored implementation context
 
 | Area | Owns |
 | --- | --- |
-| `auth` (`apps/api/src/auth`) | better-auth instance + personal-hub onboarding hook; handler mounted in `app.setup.ts` |
+| `auth` (`apps/api/src/auth`) | better-auth instance + account-username onboarding hook; handler mounted in `app.setup.ts` |
 | `common/guards` | `AuthGuard`/`OptionalAuthGuard` via `resolveSessionUser` |
 | `hubs` | one-hub-per-user ownership + handle management (`HubsService`), collection access policy — owner → direct share → link → published independently for each collection (`CollectionPolicyService`) |
 | `email` (`apps/api/src/email`) | encrypted PostgreSQL outbox, BullMQ relay/worker, capture/Resend providers, signed delivery webhooks and cleanup |
-| `users` | self-service profile at `/profile` (full name, hub name/handle/description, name attribution, appearance) |
-| `collections` | collection CRUD, Save a link (`/capture`), publish/unpublish, link + direct sharing, ownership transfer, saves, `/discover`, public hub pages + handle resolution (`/hubs/by-handle/:handle`), `/me/{shared,saved,audit}`, hub+slug lookup and the durable id permalink (`GET /collections/:id`) |
+| `sharing` | canonical previews, share entries and reported opens at `/share`; creator/resource-owner analytics and admin metadata obey existing access boundaries |
+| `users` | self-service profile at `/profile` (username, full name, optional hub identity, name visibility); public person profiles at `/people/:id` and `/people/by-username/:username` |
+| `collections` | collection CRUD, Save a link (`/capture`), publish/unpublish, link + direct sharing, ownership transfer, saves, `/discover`, public hub pages + handle resolution (`/hubs/by-handle/:handle`), `/me/{shared,saved,people}`, hub+slug lookup and the durable id permalink (`GET /collections/:id`) |
 | `resources` | items (links with server-resolved titles, collection references, headings), tags, reorder with version checks, public-address rule, link preview |
 | `imports` | bookmarks-HTML + universal-CSV ingestion with per-row error reports |
 | `exports` | synchronous export (`POST /exports`): markdown/PDF/Word, one document per collection, zipped when several — programmatic renderers, no queue |
@@ -83,11 +84,11 @@ ref/               disposable, git-ignored implementation context
 
 ```txt
 User            — global identity (better-auth). userId immutable; name (the
-                  full name), email, image mutable. No
-                  username, no role column.
-Hub             — the user's one personal space. hubId immutable; ownerUserId
-                  (unique FK, 1:1); handle (unique, mutable) — the public
+                  full name), username, email, image mutable. No role column.
+Hub             — the user's optional publishing space. hubId immutable; ownerUserId
+                  (unique FK, at most one per user); handle (unique, permanent once claimed) — the public
                   identity; name and description.
+HubHandleReservation — issued handle and originating hub ID; survives hub deletion.
 Collection      — belongs to a hub (hubId = owner). creatorUserId immutable
                   (provenance). slug (unique per hub), title, description,
                   published, linkSharingEnabled, share_token_hash, version.
@@ -95,18 +96,25 @@ Resource        — an item in a collection; the smallest unit of content.
                   kind = external_link (its own canonical `url`, one per
                   collection) | collection_link (linkedCollectionId) | heading.
                   title_override holds a section's text (never a link's
-                  title), added_by_user_id (who added it), tags (text[]),
+                  title), added_by_user_id (who added it), tags (ItemTag relation),
                   position, version. What belongs to
                   an item (address, page title, target, section text) is
                   fixed; only what people add (tags, position; notes planned)
                   is editable.
-AuditRecord     — append-only activity per hub: actor, action, collection,
-                  item, target person (ids only). The hub audit and every
-                  attribution (creator, contributors, history) derive from it.
+Tag             — UUIDv7 identity with a unique normalized name.
+ItemTag         — item/tag association, retaining the item's tag order.
+CollectionTag   — stored collection/tag association with an internal item count;
+                  database triggers synchronize it with item assignments.
+AuditLog        — unified content, operation and authentication evidence.
+                  Actor/action/target/effect, with category-based access and
+                  retention. Content events drive collection attribution.
 LinkMetadata    — one row per canonical address: page title, description,
                   site name (text only); a pending row is the durable lookup
                   job the worker claims (docs/design-docs/collections-and-resources.md).
-CollectionShare — (collectionId, userId, role reader|editor, source
+ShareEntry/ShareOpen — authenticated share requests and idempotent reported opens;
+separate from grants, with creator history, owner aggregates and admin metadata.
+
+CollectionShare — (collectionId, userId, role viewer|contributor, source
                   direct|link). Per-collection access without any hub
                   membership. Feeds the shared/ surface.
 CollectionSave  — (collectionId, userId, savedAt). A social-style bookmark of a
@@ -114,8 +122,8 @@ CollectionSave  — (collectionId, userId, savedAt). A social-style bookmark of 
 CollectionComment — the collection's discussion (`docs/design-docs/discussion.md`).
 CaptureReceipt  — user-scoped retry identity for Save a link (ids and an input
                   fingerprint only).
-Operator tables — OperatorGrant, AdminGrant, ServiceInvitation, CollectionHold,
-                  OperatorAudit (`docs/design-docs/service-operations.md`).
+Operator tables — OperatorGrant, AdminGrant, ServiceInvitation, CollectionHold
+                  (`docs/design-docs/service-operations.md`).
 ```
 
 (No export entity: exports are synchronous and stateless — see `docs/design-docs/exports.md`.)
@@ -185,19 +193,19 @@ explicit shared boundary.
 
 1. **Immutable IDs are the only identity.** Every entity keys on an immutable
    UUIDv7 (`userId`, `hubId`, `collectionId`, `resourceId`). Human-facing
-   values — the hub **handle**, the **display name**, emails — are mutable
+   values — person **username**, hub **handle**, **display name**, emails — are human-facing
    attributes and never appear in authorization rules, foreign keys, or durable
    route contracts. A durable link uses `hubId`/`collectionId`; renaming a
    handle never breaks a saved reference.
-2. **One hub per user.** The hub is the tenant root and is 1:1 with its owner
+2. **At most one hub per user.** The hub is the tenant root and has one owner
    (`hub.ownerUserId`, unique). Every hub-owned query carries `hubId`; a route
-   id never proves access. A user has no domain data except through their hub.
+   id never proves access. Accounts may read, comment, receive shares and save published collections without a hub.
 3. **Ownership is a transferable relationship, not identity.** A collection's
    owner is its `hubId`; a resource belongs to its collection. Transferring a
    collection reassigns the owning hub; the immutable **creator**
    (`collection.creatorUserId`) never changes.
 4. **Collaboration is per-collection, Drive-style.** The only ways a non-owner
-   gains access are a direct share (reader/editor), an active share link, or
+   gains access are a direct share (viewer/contributor), an active share link, or
    publication. There is no hub membership or content-admin bypass. The hub
    owner manages their space, subject to service availability
    restrictions; operator authority never grants collection access.
@@ -210,7 +218,7 @@ explicit shared boundary.
 7. **Auth boundary.** better-auth owns credentials, sessions, and verification
    primitives; the product owns identity, authorization, and workflows. Session
    resolution goes through `resolveSessionUser`; services consume `AuthUser`.
-   Sign-up onboarding (personal-hub creation) is an app-owned service callable
+   Sign-up onboarding (account username creation) is an app-owned service callable
    from any auth path, so the later SSO integration is an integration, not a
    rewrite.
 8. **Stable envelopes.** Success `{ data, meta? }`; failure

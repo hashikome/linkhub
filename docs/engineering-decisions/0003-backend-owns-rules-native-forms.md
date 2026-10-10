@@ -37,3 +37,17 @@ in [ARCHITECTURE.md](../../ARCHITECTURE.md) (Runtime Architecture) and the
 
 - [ARCHITECTURE.md](../../ARCHITECTURE.md)
 - [web-interface-system.md](../design-docs/web-interface-system.md)
+
+## Clarification: shared request contracts (2026-10-09)
+
+The existing web client consumes exported request types as well as response
+shapes and backend-provided capabilities. Constructed payloads use shared input
+types; decorated API DTOs implement them. Exact typecheck assertions cover DTO
+keys and types, including optional fields, to catch drift such as commentsEnabled
+being accepted by the backend but missing from UpdateCollectionRequest.
+
+This shares the wire vocabulary, not business logic. API DTOs/services still own
+runtime validation, authorization and transitions. Form state and untrusted
+transport input are not wire contracts; keep adaptation explicit and never use a
+type assertion to pretend optional share-open metadata has already been validated.
+No generated client or shared runtime domain engine is introduced.
