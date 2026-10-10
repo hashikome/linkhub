@@ -12,7 +12,7 @@ answer in your own words before continuing. Reading the whole file in one go
 is the failure mode this structure exists to prevent. Every file is a
 clickable link.
 
-**Pin:** verified against commit `e99047f`. This is enforced, not honor
+**Pin:** verified against commit `6da33eb`. This is enforced, not honor
 system: `check:guide-pin` (part of `bun run verify`) fails when any file this
 guide links changes after the pinned commit. To clear it, reread the affected
 sessions, fix any drift, and move the pin to the latest commit — in a
@@ -127,10 +127,10 @@ until its additional proof completes.
 curl -si localhost:4000/api/v1/auth/code/send \
   -H 'content-type: application/json' \
   -d '{"email":"me@example.com"}'
-# Enter the received code; first verification creates the account only.
+# Enter the received code and explicitly consent to creating an account without a hub.
 curl -si localhost:4000/api/v1/auth/code/verify \
   -H 'content-type: application/json' \
-  -d '{"email":"me@example.com","code":"<received-code>","name":"Paul"}' \
+  -d '{"email":"me@example.com","code":"<received-code>","name":"Paul","createAccount":true}' \
   | grep -i set-auth-token
 export T="<token>"
 
@@ -223,14 +223,14 @@ Now trace why, through five files (read in this order):
    — find `readCollectionView` (permalink + slug reads share it) and
    resource references (each destination is authorized separately).
 5. [SECURITY.md](../SECURITY.md) — all of it, especially § Origins, CORS,
-   and CSRF (why *no* CORS config is deliberate and complete).
+   and CSRF (exact-origin credentialed CORS and independent mutation checks).
 
 **Checkpoint 4**:
 
 - [ ] Why 404 instead of 403 for a collection you cannot read?
 - [ ] Why may a reference in a readable collection have an unavailable target?
-- [ ] Why does the absence of CORS configuration protect browser users, and
-      what does it deliberately not protect against?
+- [ ] Which browser Origin receives CORS permission, and why are authorization
+      and CSRF checks still required?
 
 ---
 
@@ -309,7 +309,7 @@ browser fixtures use their own database and capture email.
 **Checkpoint 6:**
 
 - [ ] Which URLs are durable, and which do share controls copy?
-- [ ] How do API and web agree on the public Origin, and why is a separate
+- [ ] How do the public API origin and web origin differ, and why is a separate
       internal API origin a server-only setting?
 - [ ] Which person identity and collection roles are implemented, and which
       accepted changes are still planned?
