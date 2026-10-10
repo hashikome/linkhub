@@ -9,6 +9,9 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Fix available Gravatar pictures falling back on slower connections: allow five
+  seconds for image retrieval instead of 1.5, with a delayed-response regression.
+
 - Show Gravatar pictures on public person profiles, contributions and account
   navigation, with the existing generated icon for missing or failed images.
   Replace chosen-image priority; keep email hashes server-side and discard

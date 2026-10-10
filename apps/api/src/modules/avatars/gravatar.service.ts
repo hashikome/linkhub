@@ -38,7 +38,9 @@ export class GravatarService {
     let ttl = 60_000;
     try {
       const response = await fetch(`https://gravatar.com/avatar/${hash}?s=128&d=404&r=g`, {
-        signal: AbortSignal.timeout(1500),
+        // Allow cold DNS/TLS connections on higher-latency networks while
+        // bounding the entire image transfer, including response-body reads.
+        signal: AbortSignal.timeout(5000),
         redirect: "error",
         headers: { Accept: "image/png,image/jpeg,image/webp,image/gif" },
       });

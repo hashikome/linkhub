@@ -53,4 +53,26 @@ describe("Gravatar image resolution", () => {
     spyOn(globalThis, "fetch").mockRejectedValue(new DOMException("Timeout", "TimeoutError"));
     expect(await new GravatarService().resolve("timeout@example.com")).toBeNull();
   });
+  it("accepts a valid image after a slow connection instead of caching a premature fallback", async () => {
+    const fetcher = spyOn(globalThis, "fetch").mockImplementation(
+      (async (_input, options) =>
+        new Promise<Response>((resolve, reject) => {
+          const signal = options?.signal;
+          const abort = () => {
+            clearTimeout(timer);
+            reject(signal?.reason);
+          };
+          const timer = setTimeout(() => {
+            signal?.removeEventListener("abort", abort);
+            resolve(new Response(png, { headers: { "content-type": "image/png" } }));
+          }, 2000);
+          if (signal?.aborted) abort();
+          else signal?.addEventListener("abort", abort, { once: true });
+        })) as typeof fetch,
+    );
+    const service = new GravatarService();
+    expect((await service.resolve("slow@example.com"))?.body).toEqual(png);
+    expect((await service.resolve("slow@example.com"))?.body).toEqual(png);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
 });

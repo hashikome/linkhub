@@ -47,6 +47,22 @@ fallback behavior. Existing local identity and collection access are unchanged.
 Cached bytes may remain bounded in server memory after account changes, but every
 user-ID request checks current eligibility before any photo can be served.
 
+## Operational correction (2026-10-10)
+
+The original 1.5-second image deadline rejected a valid live Gravatar that took
+about 1.9 seconds over a cold connection, then cached the generated fallback for
+a minute. Increase the total transfer deadline to five seconds, superseding the
+initial timeout in the identity design. Keep the existing concurrency, body-size,
+cache and fixed-origin bounds. A cold request can wait longer, but normal network
+latency no longer unnecessarily hides an available picture. The regression test
+delivers a valid image after two seconds; live acceptance must also check the
+affected same-origin endpoint, since immediate provider mocks missed this defect.
+
+Avatar-image retrieval does not require the profile API key. Live image requests
+returned HTTP 200 without credentials; profile data remains a separate milestone.
+After correction, both the local API and web proxy returned the real 23,339-byte
+PNG, and Chromium rendered the 128px source in the public profile's 64px container.
+
 ## References
 
 - [Identity and handles](../design-docs/identity-and-handles.md#gravatar-follow-up)

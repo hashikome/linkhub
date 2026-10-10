@@ -122,7 +122,7 @@ to 128; TTLs are one hour for pictures, 15 minutes for missing images and one mi
 for failures. A reactivated account may use its current email's cached picture.
 
 Keep the existing fixed HTTPS origin, SHA256 normalization, `d=404`, G rating,
-128px requests, 1.5-second timeout, 256KB response limit, content-type/signature
+128px requests, five-second timeout, 256KB response limit, content-type/signature
 checks and 16-request concurrency cap. Provider redirects are rejected. Hashes
 stay server-side and never appear in browser markup or redirects. Provider
 requests carry no viewer cookies or referrers; no profile API credentials,
