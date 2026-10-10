@@ -1,14 +1,16 @@
 # Service operations
 
-Service admins and operators use ordinary email-code sign-in and separate
-product grants. The contract is [service operations](../design-docs/service-operations.md).
+Service admins and operators use ordinary passwordless sign-in, enrolled
+protection and separate product grants. Invitation acceptance always requires
+a fresh invitation-bound email code. The contract is [service operations](../design-docs/service-operations.md).
 Apply all migrations before starting the API and email worker.
 
 ## First admin
 
 1. Configure `BOOTSTRAP_ADMIN_EMAIL` in the API environment (locally, its ignored
    `.env`). Set it to the intended admin's email. Configure the email provider,
-   sender and public `BETTER_AUTH_URL` for reachable invitation links.
+   sender, backend `BETTER_AUTH_URL` and public `WEB_ORIGIN` for reachable
+   invitation links on the web.
 2. Start the application (`bun run dev` locally). API startup atomically records
    one admin invitation and queues its email. The email worker delivers it.
    No user or role is created by startup; restarting does not repeatedly send it.
@@ -17,7 +19,7 @@ Apply all migrations before starting the API and email worker.
    Everyone then enters a fresh email code, including recipients already signed
    in. The role activates only after verification, then `/manage` opens. Existing
    names stay unchanged. A wrong-account session must sign out first.
-4. Open **Operators and invitations** to invite others. They follow the same
+4. Open **Manage → Invitations** to invite others. They follow the same
    email-entry journey. Invites expire after seven days. Sending one creates only
    the invitation and delivery records; abandoned invitations create no accounts.
 
@@ -39,13 +41,14 @@ account to **Remove operator access**. Their account stays
 active; removal takes effect on the next privileged request. Restoring access
 requires a fresh invitation and acceptance. Operators cannot administer another
 operator or admin account. Admin suspension is unavailable through these tools.
-Routine admin/operator mutations require email-code verification within five minutes;
+Routine admin/operator mutations require completed authentication within five minutes;
 the web asks “Confirm it’s you” and resumes the waiting action once after
 verification, preserving its operation ID and account binding.
 
-Verified email handover removes both service roles, ends sessions, and cancels
-pending incoming/authored invitations. Account suspension also invalidates these
-workflows. Reactivation never restores service authority.
+Account email stays fixed for service operators and admins as well (ADR-0041);
+there is no email-change command. Account suspension ends sessions, removes
+applicable service authority and cancels pending incoming/authored invitations.
+Reactivation never restores service authority.
 
 ## Emergency admin recovery
 
@@ -90,8 +93,9 @@ submission once; network errors never trigger automatic retries.
   sharing, account state and any independent collection hold. It never republishes
   a collection. Review those consequences before confirming.
 
-Owners can edit collection details and add links in the web; other resource
-corrections use the content API until organization controls ship. Owners see a restriction notice and
+Owners can edit collection details and add links in the web; owners and
+contributors can author sections and reorder items. Additional content edits
+use the API where no complete web journey exists. Owners see a restriction notice and
 the configured support link on their collection page. The hold's active record
 remains independent of the audit history.
 
@@ -127,8 +131,10 @@ the configured mailbox, for example `nslinkhub <no-reply@your-domain.example>`.
 The subject and body come from the nslinkhub templates; the sender name comes
 from this setting. Keep deployment/local sender configuration consistent.
 
-API and web must share `BETTER_AUTH_URL` as the exact public HTTP(S) origin,
-plus the independent `WEB_SOURCE_SECRET`. Never trust arbitrary forwarding
+API and web must share backend `BETTER_AUTH_URL`, browser `WEB_ORIGIN`,
+and the independent `WEB_SOURCE_SECRET`. Local origins use the same hostname
+and scheme with API port 4000 and web port 3000; production ingress serves
+both paths on one public origin. Never trust arbitrary forwarding
 headers: configure only actual ingress addresses in the API/web proxy settings.
 The web entry point overwrites read/form attribution; forms verify the browser
 Origin before forwarding bounded JSON. The API independently checks Origin,

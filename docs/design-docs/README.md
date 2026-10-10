@@ -14,8 +14,8 @@ Each document distinguishes implemented contracts from planned behavior.
 - [tenancy-and-access.md](tenancy-and-access.md): the access model (owner →
   direct share → active link → published), service-operation restrictions,
   ownership transfer, publication and discovery.
-- [passwordless-security.md](passwordless-security.md): passkeys, existing-account Google, TOTP, recovery and authentication assurance.
-- [identity-and-handles.md](identity-and-handles.md): person usernames and profiles, hub handles and names, code-first sign-in, email change and the web
+- [passwordless-security.md](passwordless-security.md): passkeys, Google sign-in and confirmed account creation, TOTP, recovery and authentication assurance.
+- [identity-and-handles.md](identity-and-handles.md): person usernames and profiles, hub handles and names, passwordless sign-in, fixed account email and the web
   URL scheme.
 - [collections-and-resources.md](collections-and-resources.md): item kinds and
   their API, link titles and public addresses, tags, and the Save a link
@@ -59,7 +59,7 @@ Each document distinguishes implemented contracts from planned behavior.
 ## Platform and delivery
 
 - [auth-delivery-integration.md](auth-delivery-integration.md): better-auth
-  delivery and verified email change, with transaction and acceptance boundaries.
+  delivery and account recovery, with transaction and acceptance boundaries.
 - [transactional-email.md](transactional-email.md): Resend adapter, React Email
   templates, PostgreSQL outbox and BullMQ worker, signed webhooks.
 - [observability.md](observability.md): LogTape/Sentry boundary, telemetry and
@@ -68,8 +68,8 @@ Each document distinguishes implemented contracts from planned behavior.
   mode, GHCR images and topology files.
 - [identity-sso.md](identity-sso.md): ns-series IAM direction ("Continue with
   namestarlit").
-- [monetization.md](monetization.md): the accepted free-library/Curator-account
-  direction; features and pricing remain open.
+- [monetization.md](monetization.md): accepted free public curation and paid private sharing, AI/DOCX and
+  monitoring; billing, quotas and public creation defaults await implementation.
 
 Foundation comparison and delivery history live in the
 [completed adoption record](../exec-plans/completed/foundation-adoption-decisions.md).

@@ -55,6 +55,7 @@ function generatedHandle() {
 export async function accountUsername(
   db: Pick<Prisma.TransactionClient, "$queryRaw">,
   name: string,
+  available?: (username: string) => Promise<boolean>,
 ) {
   const normalized = name
     .toLowerCase()
@@ -63,7 +64,7 @@ export async function accountUsername(
     .replace(/^-+|-+$/g, "");
   if (normalized.length > USERNAME_MAX) {
     const suggestion = await suggestUsername(db, normalized);
-    if (suggestion) return suggestion;
+    if (suggestion && (!available || (await available(suggestion)))) return suggestion;
   }
   const seed = normalized.slice(0, USERNAME_MAX).replace(/-+$/, "");
   for (let attempt = 0; attempt < 50; attempt++) {
@@ -75,7 +76,8 @@ export async function accountUsername(
           : `${seed.slice(0, USERNAME_MAX - suffix.length).replace(/-+$/, "")}${suffix}`
         : generatedHandle();
     if (isReservedUsername(username)) continue;
-    if (!(await usernameOwner(db, username))) return username;
+    if (!(await usernameOwner(db, username)) && (!available || (await available(username))))
+      return username;
   }
   throw new Error("Could not derive a unique username");
 }

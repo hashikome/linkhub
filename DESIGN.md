@@ -146,7 +146,7 @@ and relative luminance `0.2126 R + 0.7152 G + 0.0722 B`; contrast is
 `(lighter + 0.05) / (darker + 0.05)`. All listed colors are inside sRGB gamut;
 ratios below are rounded to two decimals. This validates the chosen tokens,
 not every eventual rendered combination. Recheck screenshots and computed
-styles when the web exists, including hover, focus and background variants.
+styles when changing rendered combinations, including hover, focus and background variants.
 
 | Foreground / background | Ratio |
 | --- | --- |
@@ -174,9 +174,12 @@ these tokens, including error, success, focus, hover and native control colors.
 `globals.css` is the exact palette source; verify the dark contrast pairs as part
 of browser acceptance. Motion respects reduced-motion preferences.
 
-Signed-out visitors always follow the system color preference, even when the
-browser retains an earlier appearance cookie. Saved Light/Dark/System preferences
-apply only with a currently valid session; preference changes require sign-in.
+Appearance is available in the header to every visitor. Signed-out readers
+default to System and can choose a temporary appearance for their browser session.
+Their toggle shows only the resolved Light/Dark mode; System is an explicit choice
+only for signed-in users. CSS resolves the reader icon before hydration.
+Their reader choice is separate from the saved Light/Dark/System preference used
+with a valid account session; changing one never overwrites the other.
 
 #### Dark contrast evidence
 
@@ -209,7 +212,9 @@ Body/muted/feedback pairs exceed 4.5:1; control boundaries exceed 3:1.
 | Sans family | Schibsted Grotesk variable (OFL-1.1), self-hosted from `apps/web/src/fonts/` via `next/font/local`; system sans as metric-adjusted fallback |
 | Small metadata | `0.875rem / 1.25rem`; regular |
 | Body and controls | `1rem / 1.5rem`; regular, controls medium |
-| Resource/row title | `1.0625rem / 1.5rem`; semibold, ink (not accent) |
+| Collection row title | `1.0625rem / 1.5rem`; semibold, ink (not accent) |
+| Resource item title | `1.125rem / 1.5rem`; weight 600, ink (not accent), shared by the reader and landing demo |
+| Expanded item description | `1rem`, line-height `1.6`, weight 400; subordinate to its title, above the smaller metadata |
 | Section heading | `1.25rem / 1.75rem`; weight 650, `-0.015em` |
 | Page heading | `2.125rem / 2.5rem` (`1.875rem` below 640 px); weight 650, `-0.025em` tracking |
 | Wordmark | The text `nslinkhub` alone is the logo (no icon), `1.125rem`; bold, `-0.025em` tracking |
@@ -226,6 +231,9 @@ Body/muted/feedback pairs exceed 4.5:1; control boundaries exceed 3:1.
 | Motion | `160ms`, `cubic-bezier(0.22, 1, 0.36, 1)`; immediate for reduced motion |
 | Layers | content 0, sticky 10, dropdown 20, modal backdrop 30, modal 40, toast 50, tooltip 60 |
 
+The landing hero’s single primary CTA uses a 2.75rem minimum height with 1rem
+text and 1rem inline padding; it anchors the message beside the interactive example.
+
 Product pages use fixed rem typography. The landing hero scales from 2.5rem to
 3.5rem with -0.035em tracking at weight 700. Text wraps with balanced
 headings, normal readable prose, and `overflow-wrap: anywhere` for user content.
@@ -234,18 +242,27 @@ separators or surface changes establish grouping. The one elevation token
 (`--elevation`) is reserved for surfaces that float above content: the account
 menu popup and the landing example sheet.
 
+Exact timestamps use the account's selected timezone, or the device in Automatic
+mode, without a timezone suffix. Explicit account choices render on the server;
+Automatic waits for browser formatting rather than showing UTC before hydration.
+With JavaScript disabled, Automatic uses a labelled UTC fallback; operator tables
+label that fallback once. Saved explicit choices still apply without JavaScript.
+Relative ages retain exact timestamps in the same timezone on hover. Profile
+Settings offers a labelled Timezone select with Automatic first, using the ordinary
+autosave/native Save changes flow.
+
 ## Components
 
 The header separates the left wordmark from Explore and the avatar-only account menu on the right. The menu groups Profile, Hub (when owned),
 Notifications (with an unread count), Settings and role-gated Manage above
 Sign out. The footer stacks “© <current year> nslinkhub” above the smaller, muted
-"an ns series product" line on the left, with a muted, vertically centered Support
-link on the right at the same font size as header navigation (wrapping below on
-phones). The footer sits at the viewport bottom on short pages and follows
+"an ns series product" line on the left, with muted, vertically centered Share
+nslinkhub and Support links on the right at the same font size as header
+navigation (wrapping below on phones). The footer sits at the viewport bottom on short pages and follows
 content at the end of long pages; it never stays pinned during document scrolling.
-Sharing UI is deferred; there is no footer Discover
-link, status link or appearance control. Generated geometric SVGs
-come from the API, seeded by immutable user UUID. The approved avatar palette
+Site sharing belongs in the footer. There
+is no footer Discover link, status link or appearance control. Generated geometric
+SVGs come from the API, seeded by immutable user UUID. The approved avatar palette
 and grid geometry stay fixed in both themes; no external provider is involved.
 
 The account-menu trigger shows only the avatar, and Notifications sits directly
@@ -265,3 +282,14 @@ crowd a layout.
 **Don't:** copy a second palette into components or email templates; add
 decorative shadows, accent side-stripes or icons beside the wordmark; dim whole
 controls with opacity; use the pale notice color as decoration.
+
+## Authentication entry
+
+Sign-in and signup share a roughly 400px column, horizontally centered and slightly
+above the viewport midpoint. Keep the same anchor across proof/creation screens.
+Sign-in heading: Sign in to nslinkhub. Signup heading: Create your account.
+Email label/input precedes the full-width primary Continue with email; quiet or
+and full-width secondary Continue with Google follow. Footer links switch intent.
+No image or extra marketing copy is needed. Optional hub creation is progressively
+revealed after proof, with a visible hub-name label. See
+[ADR-0044](docs/engineering-decisions/0044-explicit-auth-entry-and-optional-hub.md).

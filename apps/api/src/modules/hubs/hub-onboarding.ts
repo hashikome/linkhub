@@ -6,6 +6,7 @@ import { isReservedHandle } from "./handle";
 export async function ensurePersonalHub(
   db: Pick<Prisma.TransactionClient, "hub" | "user" | "hubHandleReservation">,
   userId: string,
+  name?: string,
 ) {
   const existing = await db.hub.findUnique({ where: { ownerUserId: userId } });
   if (existing) return existing;
@@ -23,7 +24,7 @@ export async function ensurePersonalHub(
       data: {
         ownerUserId: userId,
         handle,
-        name: person.name.trim() || nameFromHandle(person.username),
+        name: name ?? (person.name.trim() || nameFromHandle(person.username)),
       },
     });
   }

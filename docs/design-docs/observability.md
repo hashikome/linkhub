@@ -168,10 +168,11 @@ affected hub, collection, and user identifiers in the internal audit record.
 
 ## Internal Audit Logs
 
-Sensitive audit records belong in PostgreSQL, protected by hub-aware access
-control, retention rules, and audit access logging (deferred work in
-`PRODUCT.md` §11). Store the information required to
-explain who did what, to which entity, when, and why.
+Sensitive audit records live in PostgreSQL with implemented scope-aware access,
+retention rules and audited reads; see [attribution and activity](attribution-and-activity.md)
+and [service operations](service-operations.md). The broader strategy and
+presentation redesign remain deferred in `PRODUCT.md` §11. Existing evidence
+records who acted, the entity, timestamp and bounded effects/reasons where captured.
 
 When external telemetry needs to correlate with an internal audit record, emit an
 opaque random `audit_ref` rather than the database audit-record ID or sensitive

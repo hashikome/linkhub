@@ -1,16 +1,18 @@
 "use client";
 import type { HandleAvailability, Profile, UsernameAvailability } from "@nslinkhub/types";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
-import { readJson, submitForm } from "../lib/http";
+import { browserRead } from "../lib/browser-api";
+import { submitForm } from "../lib/http";
 import { FormNotice } from "./form-notice";
 import { LocalTime } from "./local-time";
+import { useTimeZone } from "./time-zone";
 
 type Draft = {
-  confirmHandle: boolean;
   username: string;
   showOwner: boolean;
   displayName: string;
   bio: string;
+  timeZone: string;
   hubName: string;
   handle: string;
   hubDescription: string;
@@ -28,10 +30,10 @@ const handleMessages: Record<HandleState, string> = {
 };
 function draftOf(profile: Profile): Draft {
   return {
-    confirmHandle: false,
     username: profile.username,
     displayName: profile.displayName,
     bio: profile.bio ?? "",
+    timeZone: profile.timeZone ?? "",
     showOwner: profile.showOwner ?? false,
     hubName: profile.hubName ?? "",
     handle: profile.handle ?? "",
@@ -40,10 +42,10 @@ function draftOf(profile: Profile): Draft {
 }
 function sameDraft(a: Draft, b: Draft) {
   return (
-    a.confirmHandle === b.confirmHandle &&
     a.username === b.username &&
     a.displayName === b.displayName &&
     a.bio === b.bio &&
+    a.timeZone === b.timeZone &&
     a.showOwner === b.showOwner &&
     a.hubName === b.hubName &&
     a.handle === b.handle &&
@@ -53,13 +55,13 @@ function sameDraft(a: Draft, b: Draft) {
 function readDraft(form: HTMLFormElement): Draft {
   const data = new FormData(form);
   return {
-    confirmHandle: data.get("confirmHandle") === "on",
     username: String(data.get("username") ?? ""),
     displayName: String(data.get("displayName") ?? ""),
     bio: String(data.get("bio") ?? ""),
+    timeZone: String(data.get("timeZone") ?? ""),
     showOwner: data.get("showOwner") === "on",
     hubName: String(data.get("hubName") ?? ""),
-    handle: String(data.get("handle") ?? ""),
+    handle: form.querySelector<HTMLInputElement>('[name="handle"]')?.value ?? "",
     hubDescription: String(data.get("hubDescription") ?? ""),
   };
 }
@@ -83,9 +85,9 @@ function useAvailability(
     if (!enabled || !valid || normalized === current) return;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
-      const result = await readJson<Pick<UsernameAvailability, "status" | "suggestion">>(
+      const result = await browserRead<Pick<UsernameAvailability, "status" | "suggestion">>(
         `/api/v1/profile/${kind}-availability?${kind}=${encodeURIComponent(normalized)}`,
-        { timeout: 5000, signal: controller.signal },
+        AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]),
       );
       if (!controller.signal.aborted)
         setCheck({
@@ -111,11 +113,14 @@ export function ProfileEditor({
   profile,
   notice,
   section: initialSection = "profile",
+  timeZones,
 }: {
   profile: Profile;
   notice?: string;
   section?: SettingsSection;
+  timeZones: string[];
 }) {
+  const { setPreference } = useTimeZone();
   const [section, setSection] = useState<SettingsSection>(initialSection);
   useEffect(() => {
     const sync = () => {
@@ -130,13 +135,15 @@ export function ProfileEditor({
   const form = useRef<HTMLFormElement>(null);
   const latest = useRef(draft);
   const [enhanced, setEnhanced] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [savingPart, setSavingPart] = useState<"profile" | "handle" | null>(null);
+  const saving = savingPart !== null;
   const busy = useRef(false);
   const navigateAfterSave = useRef<"profile" | "hub" | null>(null);
   const [feedback, setFeedback] = useState<{
     message: string;
     success: boolean;
     signIn?: boolean;
+    part: "profile" | "handle";
   }>();
   const { status: handleState } = useAvailability(
     "handle",
@@ -150,11 +157,8 @@ export function ProfileEditor({
     saved.username,
   );
   const invalidStates = ["invalid", "checking", "taken", "reserved"];
-  const validFormat =
-    draft.username.trim().length <= 20 &&
-    !invalidStates.includes(usernameState) &&
-    (!saved.hubId || !invalidStates.includes(handleState));
-  const dirty = !sameDraft(draft, draftOf(saved));
+  const validFormat = draft.username.trim().length <= 20 && !invalidStates.includes(usernameState);
+  const dirty = !sameDraft(draft, { ...draftOf(saved), handle: draft.handle });
   const savedFeedback =
     !saving && !dirty && (feedback ? feedback.success : notice === "profile-saved");
 
@@ -186,17 +190,27 @@ export function ProfileEditor({
     )
       return;
     event.preventDefault();
-    if (!form.current?.reportValidity()) return;
+    if (!form.current) return;
+    for (const field of form.current.elements) {
+      if (
+        (field instanceof HTMLInputElement ||
+          field instanceof HTMLTextAreaElement ||
+          field instanceof HTMLSelectElement) &&
+        field.name !== "handle" &&
+        !field.reportValidity()
+      )
+        return;
+    }
     navigateAfterSave.current = target;
-    if (!saving) form.current.requestSubmit();
+    if (!saving) void save("profile");
   }
 
   // Native fields retain typing during requests; only confirmed server values
   // replace an unchanged draft. Newer edits schedule their own subsequent save.
-  async function save() {
+  async function save(part: "profile" | "handle" = "profile") {
     if (busy.current || !form.current) return;
     busy.current = true;
-    setSaving(true);
+    setSavingPart(part);
     setFeedback(undefined);
     const submitted = readDraft(form.current);
     latest.current = submitted;
@@ -204,53 +218,56 @@ export function ProfileEditor({
     try {
       const result = await submitForm<Profile>(
         "/forms/profile-save",
-        new URLSearchParams({
-          confirmHandle: submitted.confirmHandle ? "on" : "",
-          username: submitted.username,
-          displayName: submitted.displayName,
-          bio: submitted.bio,
-          ...(saved.hubId
-            ? {
-                showOwner: submitted.showOwner ? "on" : "",
-                hubName: submitted.hubName,
-                handle: submitted.handle,
-                hubDescription: submitted.hubDescription,
-              }
-            : {}),
-        }),
+        new URLSearchParams(
+          part === "handle"
+            ? { savePart: "handle", handle: submitted.handle }
+            : {
+                username: submitted.username,
+                displayName: submitted.displayName,
+                bio: submitted.bio,
+                timeZone: submitted.timeZone,
+                ...(saved.hubId
+                  ? {
+                      showOwner: submitted.showOwner ? "on" : "",
+                      hubName: submitted.hubName,
+                      hubDescription: submitted.hubDescription,
+                    }
+                  : {}),
+              },
+        ),
       );
       if (result.ok) {
         setSaved(result.data);
-        const unchanged = sameDraft(latest.current, submitted);
-        if (unchanged) {
-          const next = draftOf(result.data);
-          latest.current = next;
-          setDraft(next);
-          for (const [key, value] of Object.entries(next)) {
-            const field = form.current?.elements.namedItem(key);
+        setPreference(result.data.timeZone);
+        const confirmed = draftOf(result.data);
+        const next = { ...latest.current };
+        for (const key of Object.keys(confirmed) as (keyof Draft)[]) {
+          const sent =
+            part === "handle"
+              ? key === "handle"
+              : key !== "handle" || (!saved.hubId && !!result.data.hubId);
+          // A confirmed rename starts cooldown: reconcile that field even if
+          // its DOM value changed, while preserving newer unrelated edits.
+          if (sent && (key === "handle" || latest.current[key] === submitted[key])) {
+            Object.assign(next, { [key]: confirmed[key] });
+            const field = form.current?.querySelector(`[name="${key}"]`);
+            const value = confirmed[key];
             if (field instanceof HTMLInputElement && typeof value === "boolean")
               field.checked = value;
             else if (
-              (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) &&
+              (field instanceof HTMLInputElement ||
+                field instanceof HTMLTextAreaElement ||
+                field instanceof HTMLSelectElement) &&
               typeof value === "string"
             )
               field.value = value;
           }
-        } else if (!saved.hubId && result.data.hubId) {
-          // These fields did not exist in the submitted form. Adopt the newly
-          // created hub while retaining profile edits made during the request.
-          const hub = draftOf(result.data);
-          const next = {
-            ...latest.current,
-            hubName: hub.hubName,
-            handle: hub.handle,
-            hubDescription: hub.hubDescription,
-            showOwner: hub.showOwner,
-          };
-          latest.current = next;
-          setDraft(next);
         }
+        latest.current = next;
+        setDraft(next);
+        const unchanged = sameDraft(next, { ...confirmed, handle: next.handle });
         setFeedback({
+          part,
           success: true,
           message: unchanged
             ? "Your profile has been saved."
@@ -277,32 +294,31 @@ export function ProfileEditor({
             ? "That username is already in use. Choose another."
             : code === "username_reserved" || code === "username_invalid"
               ? "Choose a different username using lowercase letters, numbers and hyphens."
-              : code === "handle_claimed"
-                ? "Your hub handle is permanent. Reload Settings to see the saved handle."
-                : code === "handle_confirmation_required"
-                  ? "Confirm that this is the permanent handle you want for your hub."
-                  : code === "handle_unavailable"
-                    ? "That hub handle is already in use. Choose another."
-                    : code === "handle_reserved" || code === "handle_invalid"
-                      ? "Choose a different hub handle using lowercase letters, numbers and hyphens."
-                      : code === "unauthorized"
-                        ? "Your session ended. Continue with email before saving."
-                        : code === "too_many_requests"
-                          ? "Too many attempts. Wait a minute, then save again."
-                          : code === "validation_failed"
-                            ? "Check your name and hub handle, then save again."
-                            : "We couldn't confirm the save. Your edits are still here; try saving again.";
-        setFeedback({ success: false, message, signIn: code === "unauthorized" });
+              : code === "handle_change_cooldown"
+                ? "You can change your hub handle once every 30 days. Reload Settings to see when."
+                : code === "handle_unavailable"
+                  ? "That hub handle is already in use. Choose another."
+                  : code === "handle_reserved" || code === "handle_invalid"
+                    ? "Choose a different hub handle using lowercase letters, numbers and hyphens."
+                    : code === "unauthorized"
+                      ? "Your session ended. Continue with email before saving."
+                      : code === "too_many_requests"
+                        ? "Too many attempts. Wait a minute, then save again."
+                        : code === "validation_failed"
+                          ? "Check your name and hub handle, then save again."
+                          : "We couldn't confirm the save. Your edits are still here; try saving again.";
+        setFeedback({ part, success: false, message, signIn: code === "unauthorized" });
       }
     } catch {
       navigateAfterSave.current = null;
       setFeedback({
+        part,
         success: false,
         message: "We couldn't confirm the save. Your edits are still here; try saving again.",
       });
     } finally {
       busy.current = false;
-      setSaving(false);
+      setSavingPart(null);
     }
   }
 
@@ -312,27 +328,15 @@ export function ProfileEditor({
       !dirty ||
       saving ||
       !validFormat ||
-      (saved.hubId &&
-        (!draft.hubName.trim() || draft.handle !== saved.handle || draft.confirmHandle)) ||
-      ["checking", "taken", "reserved"].includes(handleState) ||
-      (feedback && !feedback.success)
+      (saved.hubId && !draft.hubName.trim()) ||
+      (feedback?.part === "profile" && !feedback.success)
     )
       return;
     const timer = setTimeout(() => {
       if (form.current?.checkValidity()) form.current.requestSubmit();
     }, 800);
     return () => clearTimeout(timer);
-  }, [
-    enhanced,
-    dirty,
-    draft,
-    saving,
-    validFormat,
-    handleState,
-    feedback,
-    saved.hubId,
-    saved.handle,
-  ]);
+  }, [enhanced, dirty, draft, saving, validFormat, feedback, saved.hubId]);
 
   return (
     <div className="settings-layout">
@@ -483,6 +487,29 @@ export function ProfileEditor({
                   </p>
                 </div>
               </div>
+              <div className="settings-field">
+                <label htmlFor="time-zone">Timezone</label>
+                <div className="settings-field-control">
+                  <select
+                    id="time-zone"
+                    name="timeZone"
+                    defaultValue={profile.timeZone ?? ""}
+                    onChange={edit}
+                    aria-describedby="time-zone-help"
+                  >
+                    <option value="">Automatic (your device’s timezone)</option>
+                    {timeZones.map((zone) => (
+                      <option key={zone} value={zone}>
+                        {zone.replaceAll("_", " ")}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="field-help" id="time-zone-help">
+                    Choose how dates and times appear. A selected timezone follows your account
+                    across devices.
+                  </p>
+                </div>
+              </div>
               <dl className="account-facts">
                 <div>
                   <dt>Member since</dt>
@@ -522,17 +549,54 @@ export function ProfileEditor({
                       onChange={edit}
                     />
                   </div>
-                  {saved.handleClaimedAt ? (
+                  <div className="settings-field">
+                    <label htmlFor="handle">Handle</label>
                     <div className="settings-field-control">
-                      <input type="hidden" name="handle" value={saved.handle ?? ""} />
-                      <dl className="account-facts">
-                        <div>
-                          <dt>Handle</dt>
-                          <dd>{saved.handle}</dd>
-                        </div>
-                      </dl>
-                      <p className="field-help">This is your claimed permanent hub handle.</p>
+                      <input
+                        id="handle"
+                        name="handle"
+                        form="profile-handle-form"
+                        required
+                        minLength={3}
+                        maxLength={60}
+                        pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                        title="3–60 lowercase letters, numbers and hyphens"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        aria-describedby={`handle-help handle-status${saved.handleChangeAvailableAt ? " handle-cooldown" : ""}`}
+                        aria-invalid={
+                          enhanced && ["invalid", "reserved", "taken"].includes(handleState)
+                        }
+                        readOnly={!!saved.handleChangeAvailableAt || savingPart === "handle"}
+                        defaultValue={saved.handle ?? ""}
+                        onChange={edit}
+                      />
                       <p className="field-help">
+                        You can change your handle once every 30 days. Once changed, your previous
+                        handle can never be used again. Shared links will keep working.
+                      </p>
+                      {saved.handleChangeAvailableAt && (
+                        <p className="field-help" id="handle-cooldown">
+                          You can change your handle again on{" "}
+                          <LocalTime at={saved.handleChangeAvailableAt} />.
+                        </p>
+                      )}
+                      <p className="field-help">Your hub address: /@{draft.handle}</p>
+                      <button
+                        className="button handle-save-button"
+                        type="submit"
+                        form="profile-handle-form"
+                        disabled={
+                          !!saved.handleChangeAvailableAt ||
+                          (enhanced &&
+                            (saving ||
+                              draft.handle === saved.handle ||
+                              invalidStates.includes(handleState)))
+                        }
+                      >
+                        Save handle
+                      </button>
+                      <p id="handle-help" className="field-help">
                         <a
                           href={`/h/${encodeURIComponent(saved.hubId)}?view=public`}
                           onClick={(event) => openPublicView(event, "hub")}
@@ -540,65 +604,16 @@ export function ProfileEditor({
                           View your public hub
                         </a>
                       </p>
+                      <p
+                        id="handle-status"
+                        className={`field-help handle-status ${["invalid", "reserved", "taken"].includes(handleState) ? "error" : handleState === "available" ? "success" : ""}`}
+                        role="status"
+                        hidden={!enhanced || handleState === "current"}
+                      >
+                        {handleMessages[handleState]}
+                      </p>
                     </div>
-                  ) : (
-                    <div className="settings-field">
-                      <label htmlFor="handle">Handle</label>
-                      <div className="settings-field-control">
-                        <input
-                          id="handle"
-                          name="handle"
-                          required
-                          minLength={3}
-                          maxLength={60}
-                          pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                          title="3–60 lowercase letters, numbers and hyphens"
-                          autoCapitalize="none"
-                          spellCheck={false}
-                          aria-describedby="handle-help handle-status"
-                          aria-invalid={
-                            enhanced && ["invalid", "reserved", "taken"].includes(handleState)
-                          }
-                          defaultValue={saved.handle ?? ""}
-                          onChange={edit}
-                        />
-                        <p className="field-help">
-                          Choose your hub handle once. It stays reserved even if you delete your
-                          account.
-                        </p>
-                        <p className="field-help">Your hub address: /@{draft.handle}</p>
-                        <label className="handle-claim-confirm">
-                          <input type="checkbox" name="confirmHandle" onChange={edit} />
-                          <span>I choose this permanent hub handle.</span>
-                        </label>
-                        <button
-                          className="button handle-claim-button"
-                          type="submit"
-                          name="claimHandle"
-                          value="true"
-                          disabled={enhanced && (!draft.confirmHandle || !validFormat || saving)}
-                        >
-                          Claim handle
-                        </button>
-                        <p id="handle-help" className="field-help">
-                          <a
-                            href={`/h/${encodeURIComponent(saved.hubId)}?view=public`}
-                            onClick={(event) => openPublicView(event, "hub")}
-                          >
-                            View your public hub
-                          </a>
-                        </p>
-                        <p
-                          id="handle-status"
-                          className={`field-help handle-status ${["invalid", "reserved", "taken"].includes(handleState) ? "error" : handleState === "available" ? "success" : ""}`}
-                          role="status"
-                          hidden={!enhanced || handleState === "current"}
-                        >
-                          {handleMessages[handleState]}
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                  </div>
                   <div className="settings-field">
                     <label htmlFor="show-owner">Show owner</label>
                     <div className="settings-field-control">
@@ -672,7 +687,13 @@ export function ProfileEditor({
                 <button
                   type="button"
                   className="button"
-                  onClick={() => form.current?.requestSubmit()}
+                  onClick={() => {
+                    const target =
+                      feedback.part === "handle"
+                        ? document.getElementById("profile-handle-form")
+                        : form.current;
+                    if (target instanceof HTMLFormElement) target.requestSubmit();
+                  }}
                 >
                   Retry
                 </button>
@@ -680,6 +701,18 @@ export function ProfileEditor({
               {feedback.signIn && <a href="/sign-in?returnTo=%2Fsettings">Sign in</a>}
             </div>
           )}
+        </form>
+        <form
+          id="profile-handle-form"
+          action="/forms/profile-save"
+          method="post"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void save("handle");
+          }}
+        >
+          <input type="hidden" name="savePart" value="handle" />
+          <input type="hidden" name="section" value="hub" />
         </form>
         <p hidden={section !== "profile"}>
           <a href="/account">Account access and deletion</a>

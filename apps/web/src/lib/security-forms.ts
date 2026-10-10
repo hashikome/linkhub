@@ -1,13 +1,14 @@
 import "server-only";
 import { webServerConfig } from "@nslinkhub/config/web-server";
+import { authenticatedFlow } from "./authenticated-flow";
 import { completeSignIn } from "./complete-sign-in";
 import { serverCookie } from "./cookies";
 import { flowCookie, formPost, readFlow, redirectResponse, sealFlow } from "./form-server";
 import { safeReturn } from "./http";
 import { readPendingAction } from "./pending-action";
-import type { SecurityStatus } from "./security-types";
 import { serverRead } from "./server-api";
 import { readOwnProfile } from "./session";
+import { resendTiming } from "./sign-in-flow";
 
 const setupCookie = (value: string) => serverCookie("security_setup", value, value ? 300 : 0);
 export async function securityForm(
@@ -16,6 +17,108 @@ export async function securityForm(
   form: URLSearchParams,
 ): Promise<Response | null> {
   const settings = "/settings/security";
+  if (action === "email-start") {
+    const intent = form.get("intent") === "sign-up" ? "sign-up" : "sign-in";
+    const email = (form.get("email") ?? "").trim().toLowerCase();
+    const returnTo = safeReturn(form.get("returnTo") ?? "/hub");
+    const result = await formPost(request, "/api/v1/auth/sign-in/identify", { email }, true);
+    if (!result.ok)
+      return redirectResponse(
+        `/${intent}?returnTo=${encodeURIComponent(returnTo)}&notice=${result.status === 400 ? "invalid" : "unavailable"}`,
+        result.setCookies ?? [],
+      );
+    const pending = await readPendingAction();
+    return redirectResponse("/sign-in/continue", [
+      ...(result.setCookies ?? []),
+      flowCookie(
+        sealFlow({
+          email,
+          intent,
+          returnTo,
+          issued: Date.now(),
+          purpose: pending?.target === returnTo ? "resume" : "sign-in",
+        }),
+      ),
+      serverCookie(
+        `${webServerConfig().publicOrigin.startsWith("https:") ? "__Secure-" : ""}better-auth.two_factor`,
+        "",
+        0,
+      ),
+    ]);
+  }
+  if (action === "google-cancel" || action === "email-registration-cancel") {
+    const previous = await readFlow();
+    const returnTo = safeReturn(previous?.returnTo ?? "/hub");
+    const result = await formPost(
+      request,
+      action === "google-cancel"
+        ? "/api/v1/auth/google-connection/cancel"
+        : "/api/v1/auth/email-registration/cancel",
+      {},
+      true,
+    );
+    return redirectResponse(
+      result.ok
+        ? returnTo === "/hub"
+          ? "/sign-in"
+          : `/sign-in?returnTo=${encodeURIComponent(returnTo)}`
+        : `/sign-up/confirm?method=${action === "google-cancel" ? "google" : "email"}&notice=unavailable`,
+      result.ok ? [...(result.setCookies ?? []), flowCookie("", 0)] : [],
+    );
+  }
+  if (action === "google-register" || action === "email-register") {
+    const previous = await readFlow();
+    const result = await formPost<{ user: { email: string } }>(
+      request,
+      action === "google-register"
+        ? "/api/v1/auth/google-connection/register"
+        : "/api/v1/auth/email-registration/confirm",
+      {
+        confirm: form.get("confirm") === "yes",
+        ...(form.get("startHub") === "yes" ? { hubName: (form.get("hubName") ?? "").trim() } : {}),
+      },
+      true,
+    );
+    if (!result.ok || !result.data?.user.email)
+      return redirectResponse(
+        `/sign-up/confirm?method=${action === "google-register" ? "google" : "email"}&notice=${result.status === 404 ? "registration-expired" : result.status === 400 ? "registration-invalid" : "unavailable"}`,
+      );
+    return completeSignIn(
+      request,
+      {
+        ...previous,
+        email: result.data.user.email,
+        returnTo: previous?.returnTo ?? "/hub",
+        issued: previous?.issued ?? Date.now(),
+      },
+      result,
+    );
+  }
+  if (action === "google-code-send") {
+    const pending = await serverRead<{ email: string; registration: boolean }>(
+      "/api/v1/auth/google-connection",
+    );
+    if (!pending.ok || pending.data.registration)
+      return redirectResponse("/sign-in/google?notice=expired");
+    const previous = await readFlow();
+    const result = await formPost(
+      request,
+      "/api/v1/auth/code/send",
+      { email: pending.data.email, googleConnection: true },
+      true,
+    );
+    const flow = {
+      ...previous,
+      email: pending.data.email,
+      returnTo: previous?.returnTo ?? "/hub",
+      googleConnection: true,
+      ...resendTiming(null, result, webServerConfig().codeResendSeconds),
+    };
+    return redirectResponse(
+      `/sign-in/code?notice=${result.ok ? "sent" : result.status === 429 ? "limited" : "unavailable"}`,
+      [flowCookie(sealFlow(flow)), ...(result.setCookies ?? [])],
+    );
+  }
   if (action === "auth-start" || action === "google-start" || action === "google-link") {
     const returnTo = safeReturn(form.get("returnTo") ?? "/hub");
     const clearFactor = serverCookie(
@@ -27,6 +130,7 @@ export async function securityForm(
     const flow = flowCookie(
       sealFlow({
         email: "",
+        intent: form.get("intent") === "sign-up" ? "sign-up" : "sign-in",
         returnTo,
         issued: Date.now(),
         purpose: pending?.target === returnTo ? "resume" : "sign-in",
@@ -62,21 +166,11 @@ export async function securityForm(
     ]);
   }
   if (action === "auth-complete") {
-    const flow = await readFlow();
-    const [profile, status] = await Promise.all([
-      readOwnProfile(),
-      serverRead<SecurityStatus>("/api/v1/auth/security/status"),
-    ]);
-    if (
-      !profile ||
-      !flow ||
-      !status.ok ||
-      !status.data.verifiedAt ||
-      Date.parse(status.data.verifiedAt) < flow.issued - 1000
-    )
-      return redirectResponse("/sign-in?notice=expired");
-    return completeSignIn(request, { ...flow, email: profile.email }, { setCookies: [] });
+    const flow = await authenticatedFlow();
+    if (!flow) return redirectResponse("/sign-in?notice=expired");
+    return completeSignIn(request, flow, { setCookies: [] });
   }
+
   if (action === "factor-verify") {
     const flow = await readFlow();
     if (!flow) return redirectResponse("/sign-in?notice=expired");

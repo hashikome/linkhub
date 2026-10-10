@@ -25,8 +25,8 @@ Design: [bulk-import.md](../../design-docs/bulk-import.md). Decision:
 - [ ] M2 — Background title lookups and revalidation (worker), on the
   link-metadata foundation's lookup queue (built first; `PRODUCT.md` §11).
 - [ ] M3 — Folder destinations and commit (API).
-- [ ] M4 — Web start and preview pages under Manage (`/manage/import-export`), after
-  the Manage workspace exists (`PRODUCT.md` §11).
+- [ ] M4 — Web start and preview pages under the implemented Manage workspace
+  (`/manage/import-export`; `PRODUCT.md` §11).
 - [ ] M5 — Remove one-shot import, expiry cleanup, docs and acceptance.
 
 ## Surprises & Discoveries

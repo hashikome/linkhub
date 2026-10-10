@@ -5,6 +5,11 @@
 **Amends:** ADR-0001 (a hub is optional, created on first use; still one per
 person, owned by them, never transferred).
 
+[ADR-0044](0044-explicit-auth-entry-and-optional-hub.md) supersedes the unified
+entry and implicit ordinary email creation policy, adds a shared verified creation
+screen and permits an optional named hub during signup. Other decisions remain
+accepted unless already marked superseded.
+
 ## Context
 
 Every account was a hub: the hub's handle was the person's identity, so
@@ -106,9 +111,12 @@ created hub from returned profile data while preserving newer profile edits.
 
 ## Amendment (2026-10-10)
 
-[ADR-0033](0033-permanent-hub-handles-and-self-service-accounts.md) makes explicitly
-claimed hub handles permanent and retains every issued handle after deletion.
-Person usernames remain freely editable. It also adds distinct self-service
-deactivation, recovery, deletion and cancellation alongside operator lifecycle
-controls. Its rules supersede conflicting handle-renaming/release and
-operator-only initiation statements above; UUID identity and authorization remain.
+[ADR-0033](0033-permanent-hub-handles-and-self-service-accounts.md) introduced
+self-service account lifecycle and retained handle reservations. Its permanent
+handle rule was superseded by [ADR-0042](0042-editable-hub-handles.md), then
+[ADR-0043](0043-deliberate-hub-handle-changes.md) settled the current policy:
+30 days between handle changes, with retired spellings never reusable by anyone.
+Person username rules are separate. [ADR-0041](0041-fixed-account-email.md) fixes
+account email pending a dedicated identity-change workflow; immutable UUIDs
+continue to own references and authorization. Self-service lifecycle remains
+accepted, with contextual recovery under [ADR-0040](0040-contextual-account-recovery.md).

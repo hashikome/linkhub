@@ -1,22 +1,21 @@
 # Auth-delivery integration
 
 Status: implemented and locally verified. Dependency pinned by `bun.lock`:
-better-auth **1.6.23**. Email codes own signup and both email-change proofs.
-Passkeys, existing-account Google and optional TOTP/recovery are implemented;
-see [passwordless security](passwordless-security.md). Web email-change screens
-and targeted collection invitations remain planned.
+better-auth **1.6.23**. Email codes support signup and sign-in. Account email is fixed (ADR-0041).
+Passkeys, Google sign-in and confirmed account creation and optional TOTP/recovery are implemented;
+see [passwordless security](passwordless-security.md). Controlled email change is backlog; targeted collection invitations remain planned.
 
 ## Ownership and transaction boundary
 
 `create-auth.ts` composes better-auth; `delivery-auth.ts` supplies its Prisma
-adapter and account-username hook with the request's transaction client. The library
+adapter and app-owned signup hooks with the request's transaction client. The library
 mints, hashes and consumes OTPs, writes credentials, creates sessions and
 revokes them. No parallel proof store or custom OTP comparison exists.
 
 Every mutating auth request takes PostgreSQL transaction advisory lock
 `74201931`. This serializes authenticated product mutations, auth writes and
 operator commands across replicas, including code session creation, resend and
-email change. Read-only product requests remain concurrent; see
+account recovery. Read-only product requests remain concurrent; see
 [RELIABILITY.md](../RELIABILITY.md). This is a deliberate small-installation throughput tradeoff: measure
 lock wait before replacing it with carefully ordered account/challenge locks.
 Transaction acquisition is bounded to 5 seconds. Email execution is bounded to
@@ -32,27 +31,26 @@ callback count detect better-auth's swallowed callback errors, so a failed
 persistence operation cannot report success. HTTP 5xx rolls back; invalid proof
 responses commit attempt consumption. Responses are returned only after commit.
 
+Successful authentication is finalized only by `auth/complete-authentication.ts`,
+through the shared security policy hook. Email delivery never separately stamps
+the session or writes a success for code verification. It records code issuance
+and rejected verification as delivery evidence; `security.sign_in.email` is the
+account-bound success for ordinary email, explicit registration, capture and
+invitation sign-in. Google and factors use the same completion with their method.
+Proof-only recovery/lifecycle actions keep their dedicated audit events.
+`modules/users/signup-onboarding.ts` owns generated identity and optional-hub
+orchestration; Better Auth user hooks only call its preparation/completion phases.
+See [ADR-0046](../engineering-decisions/0046-shared-authentication-completion.md).
+
 `auth-delivery.e2e.spec.ts` proves the production wrapper, including
-separate-process consumption and rollback after final email-change work.
+separate-process consumption, rollback and rejection of retired email-change routes.
 Library integration limitations and the wrapper's original proof are preserved
 in the [completed integration plan](../exec-plans/completed/prove-auth-delivery-boundary.md).
 
-The pinned library's `change-email-otp-${old}-${new}` identifier is ambiguous:
-distinct address pairs can share it. Before invoking handover endpoints,
-`handover-proofs.ts` binds the request-local, fully initialized internal adapter
-to purpose-specific HMAC identifiers over a JSON tuple of immutable user ID,
-initiating session ID, current address and target address. Creation, lookup,
-atomic consumption, updates and deletion all delegate to better-auth under
-that namespace; proof generation, hashing, comparison and attempt accounting
-remain library-owned. Outbox challenge keys use the same identifiers. Sign-in
-proofs keep their existing namespace. Lookups accept only the purpose-bound email-change namespace.
-
-Restarting handover deletes both prior scoped proofs through better-auth and
-erases their pending email payloads in the same transaction as intent replacement.
-This also prevents returning to an earlier account/session/address tuple from
-reviving its code. Regression coverage reproduces the colliding address pairs,
-checks independent delivery and completion, rejects legacy rows, and proves
-restart invalidation and the native wrong-attempt limit.
+Email-change issuance and confirmation are retired. The old intent schema and
+identifier helper remain only for revoking historical proofs and normal cleanup;
+no public route can start or consume them. See
+[ADR-0041](../engineering-decisions/0041-fixed-account-email.md).
 
 ## Public HTTP contract
 
@@ -77,20 +75,25 @@ spoofed forwarding headers.
 
 | Path | Body | Success |
 | --- | --- | --- |
-| `/code/send` | `{ email, purpose? }` | `{ success: true }`; same shape for new/existing/suppressed addresses |
-| `/code/verify` | `{ email, code, name? }` | better-auth token/user response and session cookie/bearer header |
-| `/email-change/start` | `{ newEmail }` | current-address confirmation queued; names the target address |
-| `/email-change/confirm-current` | `{ code }` | new-address verification queued after current proof |
-| `/email-change/confirm-new` | `{ code }` | address applied, all sessions revoked; client clears identity/cache and signs in again |
+| `/code/send` | `{ email, purpose?, googleConnection? }` | `{ success: true }`; same shape for new/existing/suppressed addresses |
+| `/code/verify` | `{ email, code, name?, createAccount? }` | Completed sign-in returns the better-auth token/user response and session cookie/bearer header; pending creation consent, factor or account recovery returns its workflow response without a usable session |
 
-Email-change steps require the initiating session. The workflow intent binds
-immutable user/session IDs, current and target addresses, phase and ten-minute
-expiry. Starting again replaces that intent. Generic sign-in codes cannot
-confirm it. Occupied-target issuance keeps a generic success response without
-sending mail to that account. GET never consumes email proof; Google's state/PKCE-validated callback is the documented OAuth exception. Native
+Ordinary code issuance cancels abandoned Google and email-creation state. Only the inline
+Google continuation sets `googleConnection: true`, preserving its identity-bound
+proof. Verification can return `twoFactorRedirect: true` for an enrolled factor
+or `accountRecovery: true` for contextual recovery. Unknown ordinary identities return
+`registrationRequired: true`; explicit confirmation at `/email-registration/confirm`
+creates from browser-bound proof with optional `hubName`. Only explicit task
+consent (`createAccount: true`, used by capture) creates directly at verification. Clients continue the indicated
+workflow rather than treating successful email proof as a completed sign-in. See
+[passwordless security](passwordless-security.md) and the contextual recovery
+contract below.
+
+GET never consumes email proof; Google's state/PKCE-validated callback is the documented OAuth exception. Native
 OTP, verification, magic-link and password-reset HTTP paths are unavailable so
 they cannot bypass the delivery or workflow boundary. The explicit native
-allowlist preserves sign-out, session revocation and non-credential user updates.
+allowlist preserves sign-out and session revocation. Native user updates and
+email-change routes are unavailable; profile edits use the product endpoint.
 Password signup/sign-in/enrollment/change/reset are unavailable, and better-auth
 email/password authentication is disabled. No password migration or compatibility
 workflow is needed: the product has not been deployed. The vendor adapter's
@@ -106,9 +109,15 @@ its name (`hubName`), handle, description (`hubDescription`) and `showOwner`.
 `showOwner` belongs only to the Hub model; the settings response returns null
 for this field when no hub exists. Profile edits
 never create a hub or edit credentials.
-A handle change requires explicit `confirmHandle`; `handleClaimedAt` records
-the permanent claim. Later handle changes fail in both the service and database.
-Usernames remain editable. Email change preserves immutable user and hub identity.
+Hub handles are editable under ADR-0043. Renames
+require 30 days between successful changes; retired spellings cannot be reused
+by anyone. The backend returns `handleChangeAvailableAt` during cooldown, and
+clients cannot write change timestamps. SQL enforces cadence and retirement.
+Shared UUID links survive.
+Usernames remain editable. Profile PATCH rejects user UUID and email, including
+mixed requests containing valid fields; profile PUT is unsupported. Account email
+stays fixed. Any future email change requires a dedicated POST action after its
+proof, notification and identity-continuity policy is settled.
 
 ## Self-service account actions
 
@@ -177,8 +186,8 @@ bounced, suppressed and complained. Only minimal outcome metadata survives.
 ## Local and deployment status
 
 Local tests force capture delivery and isolated queue namespaces. Source and
-browser acceptance cover code sign-in and verification; verified email change
-has API acceptance but no web screens. Live provider/domain/webhook acceptance
+browser acceptance cover code sign-in, verification and contextual recovery.
+Identity-update rejection has API acceptance. Live provider/domain/webhook acceptance
 remains a release prerequisite. Local configuration is private and provides no
 release evidence.
 
@@ -194,3 +203,18 @@ Invitation emails derive their purpose from the validated invitation workflow,
 never from an ordinary code-send request. Web forms derive purpose before
 sending and retain it in sealed resend state. No free-form action, collection
 title, URL or role details are accepted as email copy.
+
+### Contextual recovery from email sign-in
+
+Eligible self-deactivated accounts receive a normal-looking code from `/code/send`.
+The proof uses a separate action/account/version-bound identifier. Correct
+`/code/verify` returns `{ accountRecovery: true }` and an HttpOnly recovery cookie,
+never a session or bearer token. GET `/account/recovery` then returns only the
+eligible action and verified email. POST `/account/recovery/confirm` accepts
+`{ confirm: true }`; the backend rechecks state/version/expiry, uses the existing
+lifecycle mutation and revokes proof atomically. New restrictions or an expired
+deletion deadline invalidate recovery. See ADR-0040. Active-account and invitation
+verification retain their existing behavior and factor requirements.
+The account page checks recovery independently of session resolution. A verified
+recovery action takes precedence even when the browser retains another account's
+session; completing recovery does not switch that session or mutate its account.

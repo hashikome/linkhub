@@ -4,9 +4,12 @@ import { type Theme, ThemePicker } from "./theme-picker";
 export function SessionNav({ session, theme }: { session: SessionView | null; theme: Theme }) {
   if (!session)
     return (
-      <a className="button nav-button" href="/sign-in">
-        Sign in
-      </a>
+      <div className="session-nav">
+        <ThemePicker theme={theme} compact allowSystem={false} />
+        <a className="button nav-button" href="/sign-in">
+          Sign in
+        </a>
+      </div>
     );
   return (
     <div className="session-nav">

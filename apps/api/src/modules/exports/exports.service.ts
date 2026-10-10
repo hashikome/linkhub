@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { publicOrigins } from "@nslinkhub/config/public-origins";
 import { zipSync } from "fflate";
 import { ResourceKind } from "src/common/enums/resource-kind.enum";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";
@@ -85,7 +86,7 @@ export class ExportsService {
   }
 
   private collectionUrl(id: string): string {
-    return new URL(`/c/${id}`, process.env.BETTER_AUTH_URL ?? "http://localhost:3000").href;
+    return new URL(`/c/${id}`, publicOrigins(process.env).webOrigin).href;
   }
 
   // Stored page titles for links (read-only: an export never requests lookups).

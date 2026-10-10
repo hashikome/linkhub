@@ -133,7 +133,6 @@ describe("canonical sharing descriptors (HTTP)", () => {
       .send({
         username: `renamed-${randomUUID().slice(0, 8)}`,
         handle: `renamed-${randomUUID()}`,
-        confirmHandle: true,
         displayName: "Renamed person",
         hubName: "Renamed hub",
       })

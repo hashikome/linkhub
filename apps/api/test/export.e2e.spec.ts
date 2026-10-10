@@ -115,7 +115,9 @@ describe("Export (e2e)", () => {
     const content = (res.body as Buffer).toString("utf8");
     expect(content).not.toContain(`## section-${sfx}`);
     expect(content).not.toContain(`https://fixture-links.dev/sec-${sfx}`);
-    expect(content).toContain(`[section-${sfx}](<http://localhost:3000/c/${section}>)`);
+    const webOrigin =
+      process.env.WEB_ORIGIN || process.env.BETTER_AUTH_URL || "http://localhost:3000";
+    expect(content).toContain(`[section-${sfx}](<${webOrigin}/c/${section}>)`);
   });
 
   it("zips the documents when several collections are selected", async () => {

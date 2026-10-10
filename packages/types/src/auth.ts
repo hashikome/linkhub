@@ -21,8 +21,12 @@ export interface SendSignInCodeRequest {
   email: string;
   /** Defaults to sign-in. Invitation copy is selected by the invitation workflow. */
   purpose?: SignInCodePurpose;
+  /** Continue the pending, identity-bound Google connection instead of starting ordinary sign-in. */
+  googleConnection?: boolean;
 }
 export interface VerifySignInCodeRequest {
+  /** Explicit consent to create an account if this verified email is new. */
+  createAccount?: boolean;
   email: string;
   code: string;
   /** Optional display name, used only when the verified address creates an account. */

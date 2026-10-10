@@ -21,6 +21,7 @@ function tests(directory: string): string[] {
 const env = maskVerificationOverrides({ ...process.env, NODE_ENV: "test" });
 // A local API .env may configure live Resend delivery. Tests always select the
 // capture provider; dotenv must not replace this explicit child environment.
+env.BETTER_AUTH_URL = "http://localhost:4000";
 env.EMAIL_PROVIDER = "capture";
 env.EMAIL_SUPPRESSION_SECRET = "test-runner-suppression-secret-independent";
 env.QUEUE_NAMESPACE = `test-email-${crypto.randomUUID()}`;

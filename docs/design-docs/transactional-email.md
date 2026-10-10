@@ -2,11 +2,11 @@
 
 ## Direction
 
-Implementation status: codes-only templates, transaction-scoped auth,
+Implementation status: code and invitation templates, transaction-scoped auth,
 encrypted PostgreSQL outbox, BullMQ relay/worker, capture and Resend providers,
 and signed webhooks are implemented locally. See the
 [integration contract](auth-delivery-integration.md) for endpoints, evidence and
-retention. Web email-change screens, live sender/domain validation and live webhook
+retention. Live sender/domain validation and live webhook
 configuration remain separate acceptance work; no live sending is claimed.
 
 Use Resend as the initial transactional-email provider. It fits the
@@ -17,9 +17,8 @@ adapter so switching providers does not change domain workflows.
 
 Implemented messages:
 
-- sign-in code (continue-with-email);
-- account-email change (confirmation to the current address, then
-  verification to the new address);
+- sign-in codes, including first-link and protected-action confirmation purposes;
+- account deactivation/deletion and eligible recovery codes;
 - service admin/operator invitations and their acceptance codes.
 
 Other message kinds require their own product workflow and template work:
@@ -37,8 +36,7 @@ Do not use the transactional channel for marketing.
 better-auth owns credentials, sessions, and verification primitives (see
 `AGENTS.md`). The product does **not** re-implement verification or OTP
 primitives. better-auth **mints**, hashes and consumes the OTP; the application
-binds the email-change workflow to its purpose, initiating session and target
-address. The outbox + Resend adapter deliver the library-issued code.
+binds verification to the app-owned sign-in, invitation or account-action workflow. The outbox + Resend adapter deliver the library-issued code.
 
 Concretely, better-auth's OTP send callbacks receive the code from
 better-auth and enqueue an application email-outbox intent. They never call the
@@ -134,13 +132,14 @@ never carries the code):
   inbox preview and body for sign-in, saving a first link, continuing, resuming
   after session expiry, confirming a sensitive action, and invitation acceptance.
   Resends retain the same purpose. All variants share the code layout and warning.
-- **email-change confirmation** (`renderEmailChangeConfirmation`) — to the
+- **Retained, inactive: email-change confirmation** (`renderEmailChangeConfirmation`) — to the
   **current** address, naming the target address; step one of the
-  double-verified account-email change
+  retired double-verified account-email change
   ([identity-and-handles.md](identity-and-handles.md)). Ignoring it changes
   nothing.
-- **new-email verification** (`renderNewEmailVerification`) — to the **new**
-  address; completing it applies the change and revokes all sessions.
+- **Retained, inactive: new-email verification** (`renderNewEmailVerification`) — to the **new**
+  address in the retired workflow. Neither template has a current public issuer
+  or completion route (ADR-0041).
 
 Collection-share notification remains separate sharing work. Password reset
 is not a product feature; sign-in uses mailbox codes.
@@ -226,9 +225,9 @@ shared issue/verify budgets and non-enumerating issuance responses apply.
 See the [integration contract](auth-delivery-integration.md) for endpoints,
 transaction semantics, retention, failure recovery and local acceptance.
 
-Email change confirms the current address, verifies the new one, and revokes
-all sessions. Its proof cannot be replaced by a normal sign-in code. Security
-audit outcomes land with the flow, never including codes or links.
+Account email is fixed (ADR-0041). The former two-inbox email-change API is
+retired. Any future identity change needs a dedicated POST action with an agreed
+proof and notification policy. Security audit outcomes never include codes or links.
 
 ## Domain And Deliverability
 

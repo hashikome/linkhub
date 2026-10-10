@@ -13,7 +13,7 @@ const app = next({ dev, hostname, port, ...(dev ? { webpack: true } : {}) });
 await app.prepare();
 const handle = app.getRequestHandler();
 const server = createServer((request, response) => {
-  // Always overwrite client-supplied attribution, before Next handles rewrites
+  // Always overwrite client-supplied attribution, before Next handles forms
   // or rendering. This header is server-only and carries no session authority.
   request.headers["x-web-read-source"] = attribute(request);
   request.headers["x-web-form-source"] = formAttribute(request);

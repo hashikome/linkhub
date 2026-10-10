@@ -1,29 +1,25 @@
 "use client";
 import { useEffect, useState } from "react";
 
-function dateInput(value: string | undefined, local: boolean) {
-  if (!value) return "";
-  if (!local || /^\d{4}-\d{2}-\d{2}$/.test(value)) return value.slice(0, 10);
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return "";
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-}
+import { calendarDate, dayBoundary } from "../lib/time";
+import { useTimeZone } from "./time-zone";
 
-function boundary(value: string, end: boolean) {
+function dateInput(value: string | undefined, timeZone: string) {
   if (!value) return "";
-  const date = new Date(`${value}T${end ? "23:59:59.999" : "00:00:00.000"}`);
-  return Number.isFinite(date.getTime()) ? date.toISOString() : "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : calendarDate(value, timeZone);
 }
 
 export function AuditDates({ from, to }: { from?: string; to?: string }) {
-  const [local, setLocal] = useState(false);
-  const [start, setStart] = useState(() => dateInput(from, false));
-  const [end, setEnd] = useState(() => dateInput(to, false));
+  const { timeZone, ready } = useTimeZone();
+  const zone = timeZone ?? "UTC";
+  const [enhanced, setEnhanced] = useState(false);
+  useEffect(() => setEnhanced(true), []);
+  const [start, setStart] = useState(() => dateInput(from, zone));
+  const [end, setEnd] = useState(() => dateInput(to, zone));
   useEffect(() => {
-    setLocal(true);
-    setStart(dateInput(from, true));
-    setEnd(dateInput(to, true));
-  }, [from, to]);
+    setStart(dateInput(from, zone));
+    setEnd(dateInput(to, zone));
+  }, [from, to, zone]);
   return (
     <>
       <label>
@@ -42,14 +38,14 @@ export function AuditDates({ from, to }: { from?: string; to?: string }) {
       <input
         type="hidden"
         name="fromInstant"
-        disabled={!local}
-        value={local ? boundary(start, false) : ""}
+        disabled={!ready || !enhanced}
+        value={ready ? dayBoundary(start, false, zone) : ""}
       />
       <input
         type="hidden"
         name="toInstant"
-        disabled={!local}
-        value={local ? boundary(end, true) : ""}
+        disabled={!ready || !enhanced}
+        value={ready ? dayBoundary(end, true, zone) : ""}
       />
     </>
   );

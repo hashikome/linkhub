@@ -71,13 +71,14 @@ const collectionShape = {
   updatedAt: iso,
 } satisfies Shape<Collection>;
 const profileShape = {
-  handleClaimedAt: nullableString,
   id: uuid,
   username: string,
   displayName: string,
   bio: nullableString,
+  timeZone: nullableString,
   showOwner: (v) => v === null || bool(v),
   handle: nullableString,
+  handleChangeAvailableAt: nullableString,
   hubId: (v) => v === null || uuid(v),
   hubName: nullableString,
   email: string,

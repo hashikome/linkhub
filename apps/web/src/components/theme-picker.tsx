@@ -1,11 +1,35 @@
 "use client";
 import { usePathname, useSearchParams } from "next/navigation";
 export type Theme = "light" | "dark" | "system";
-export function ThemePicker({ theme, compact = false }: { theme: Theme; compact?: boolean }) {
+export function ThemePicker({
+  theme,
+  compact = false,
+  allowSystem = true,
+}: {
+  theme: Theme;
+  compact?: boolean;
+  allowSystem?: boolean;
+}) {
   const pathname = usePathname(),
     search = useSearchParams().toString();
-  const nextTheme: Record<Theme, Theme> = { system: "light", light: "dark", dark: "system" };
-  const toggleLabel = `Appearance: ${theme}. Switch to ${nextTheme[theme]}`;
+  const nextTheme: Record<Theme, Theme> = {
+    system: "light",
+    light: "dark",
+    dark: allowSystem ? "system" : "light",
+  };
+  // CSS resolves the OS preference before hydration, including native browsers.
+  const automaticReader = compact && !allowSystem && theme === "system";
+  const choices: Theme[] = compact
+    ? automaticReader
+      ? ["light", "dark"]
+      : [theme]
+    : allowSystem
+      ? ["light", "dark", "system"]
+      : ["light", "dark"];
+  const toggleLabel = (value: Theme) =>
+    allowSystem
+      ? `Appearance: ${value}. Switch to ${nextTheme[value]}`
+      : `Switch to ${nextTheme[value]} theme`;
   return (
     <form
       action="/forms/theme"
@@ -16,15 +40,16 @@ export function ThemePicker({ theme, compact = false }: { theme: Theme; compact?
       <fieldset>
         <legend className={compact ? "sr-only" : undefined}>Appearance</legend>
         <div className="theme-options">
-          {(compact ? [theme] : (["light", "dark", "system"] as const)).map((value) => (
+          {choices.map((value) => (
             <button
               key={value}
+              className={automaticReader ? `theme-auto-${value}` : undefined}
               type="submit"
               name="theme"
-              value={compact ? nextTheme[theme] : value}
+              value={compact ? nextTheme[value] : value}
               aria-pressed={compact ? undefined : theme === value}
-              aria-label={compact ? toggleLabel : value[0].toUpperCase() + value.slice(1)}
-              title={compact ? toggleLabel : undefined}
+              aria-label={compact ? toggleLabel(value) : value[0].toUpperCase() + value.slice(1)}
+              title={compact ? toggleLabel(value) : undefined}
             >
               {compact ? (
                 <svg

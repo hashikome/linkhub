@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { webServerConfig } from "@nslinkhub/config/web-server";
 import {
   permalink,
+  postJson,
   readJson,
   routeHandle,
   routeSegment,
@@ -223,4 +224,58 @@ it("preserves validated sharing tasks through sign-in without external returns",
     returnTo: "//evil.test",
   });
   expect(safeReturn(`/share?${query}`)).toBe(`/share?kind=collection&id=${id}&returnTo=%2F`);
+});
+
+it("separates public backend callbacks from web destinations and private transport", () => {
+  const config = webServerConfig({
+    BETTER_AUTH_URL: "http://localhost:4000",
+    WEB_ORIGIN: "http://localhost:3000",
+    API_INTERNAL_ORIGIN: "http://127.0.0.1:4000",
+    WEB_SOURCE_SECRET: "s".repeat(32),
+  });
+  expect(config.authOrigin).toBe("http://localhost:4000");
+  expect(config.publicOrigin).toBe("http://localhost:3000");
+  expect(config.apiOrigin).toBe("http://127.0.0.1:4000");
+  for (const web of [
+    "http://foreign.test",
+    "https://localhost:3000",
+    "http://localhost:3000/path",
+    "null",
+  ])
+    expect(() => webServerConfig({ WEB_ORIGIN: web, WEB_SOURCE_SECRET: "s".repeat(32) })).toThrow();
+});
+
+it("forwards proof cancellation on failed code issuance without forwarding session cookies", async () => {
+  const original = globalThis.fetch;
+  const clear = "better-auth.google_connection=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+  const clearRegistration =
+    "better-auth.email_registration=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0";
+  globalThis.fetch = (async () =>
+    Response.json(
+      { error: { code: "too_many_requests" } },
+      {
+        status: 429,
+        headers: [
+          ["Retry-After", "30"],
+          ["Set-Cookie", clear],
+          ["Set-Cookie", clearRegistration],
+          ["Set-Cookie", "better-auth.session_token=must-not-forward; Path=/"],
+        ],
+      },
+    )) as unknown as typeof fetch;
+  try {
+    const response = await postJson(
+      "http://fixture.test/api/v1/auth/code/send",
+      {},
+      { headers: new Headers(), raw: true },
+    );
+    expect(response).toMatchObject({
+      ok: false,
+      status: 429,
+      retryAfter: 30,
+      setCookies: [clear, clearRegistration],
+    });
+  } finally {
+    globalThis.fetch = original;
+  }
 });

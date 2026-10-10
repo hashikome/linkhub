@@ -94,32 +94,27 @@ is one failure domain: apply explicit resource limits, monitor disk and
 memory pressure, keep builds off-host, and keep required backups **off-host**
 with tested restores.
 
-### Origins: web and API share one origin (no CORS)
+### Origins: direct backend routing
 
-Each product's web and API are served from **one public origin**, path-routed
-by Traefik: `/api/*` goes to the API container, everything else to the web
-container. In local development the web dev server proxies `/api/*` to the API
-process (Next.js rewrites; API listens on 4000, web on 3000). Consequences,
-relied on by the app code:
+Production uses one public origin: Traefik routes `/api/*` straight to the API,
+all other paths to the web. Development follows Pigfarm's direct API pattern:
+API 4000, web 3000, with no Next rewrite. Exact-origin credentialed CORS admits
+only WEB_ORIGIN; cookie mutation checks remain independent (ADR-0036).
 
-- No CORS configuration exists anywhere — same-origin end to end. This is
-  deliberate and complete, not missing: the security rationale (browser
-  Same-Origin Policy at full default strength, CSRF nuance, the rule for
-  future "simple"-shaped endpoints) is recorded in `docs/SECURITY.md`
-  § Origins, CORS, and CSRF. Adding a second origin later means adding CORS
-  + better-auth `trustedOrigins` deliberately, not flipping a wildcard.
-- better-auth cookies are host-only, first-party, and need no cross-site
-  attributes; `BETTER_AUTH_URL` is the public origin in production and the
-  web entry origin (`http://localhost:3000` by default) in development.
-- File responses (exports) and headers like `X-Request-Id` are readable by
-  the web app without exposed-header lists.
+`BETTER_AUTH_URL` identifies the public API and Google callback destination.
+`WEB_ORIGIN` identifies web redirects, public links and the passkey origin.
+It defaults to an explicitly configured BETTER_AUTH_URL in single-origin
+production. Both must share a hostname and scheme for host-only cookies.
+The development launcher sets both from PORT and WEB_PORT. Public browser
+requests use the validated API origin rendered into the document at runtime;
+no environment-specific client build is needed.
 
-The root development launcher gives API and web the same public
-`BETTER_AUTH_URL` and a shared ephemeral `WEB_SOURCE_SECRET`; server reads use
-`API_INTERNAL_ORIGIN`. The browser receives no API-origin setting. Cookie
-mutations require the exact public Origin; cookie-free bearer clients remain
-supported. [Local development](../runbooks/local-development.md) owns setup and
-[SECURITY.md](../SECURITY.md) owns the origin and source-attribution rules.
+`API_INTERNAL_ORIGIN` remains the private server-to-server address. API and web
+share WEB_SOURCE_SECRET for attributable SSR reads/native forms. Neither value
+is browser configuration. X-Request-Id and Retry-After are exposed by CORS;
+credentials and authorization remain backend-owned. See
+[local development](../runbooks/local-development.md) and
+[security](../SECURITY.md#origins-cors-and-csrf).
 
 ## Conventions (apply to every ns product)
 

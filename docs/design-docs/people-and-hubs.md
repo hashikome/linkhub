@@ -3,17 +3,17 @@
 Status: identity, profiles and optional hubs implemented; subscriptions remain
 planned in the home/subscriptions slice. Decision:
 [ADR-0018](../engineering-decisions/0018-people-and-hubs-are-separate.md).
-The collaborator rename is the next delivery slice.
+Collection grants use `viewer` and `contributor`.
 
 ## Two identities
 
 | | Person (the account) | Hub (their publishing space) |
 | --- | --- | --- |
 | Identity | **username** and a name | **Hub name** and its own **@handle** |
-| Has one? | Everyone with an account | Optional — created explicitly with Create hub, or on first saved link, first collection or collection transfer; at most one per person |
-| Owns | Nothing directly | Every collection in it, and its subscribers |
+| Has one? | Everyone with an account | Optional — selected during signup with a name, created explicitly with Create hub, or on first saved link, first collection or collection transfer; at most one per person |
+| Owns | Account identity and private collection bookmarks | Every collection in it; planned hub subscriptions target its immutable ID |
 | Shows up as | Commenters, contributors, History entries (`username`, linking to `/username`); invited viewers and contributors in the owner's access list (name and email) | Collection pages, Discover, its own page (`Hub name @handle`, at `/@handle`) |
-| Others can | Invite them by email to view or contribute | **Subscribe** |
+| Others can | Grant collection access; email invitations are planned | **Subscribe** (planned) |
 | Transferable | — | Never (collections are) |
 
 The hub is the face: wherever something it owns appears, it shows as the hub.
@@ -28,7 +28,7 @@ Like YouTube channels (`/@handle`) and GitHub people (`/username`):
   their own username (`/@paul`) or another handle (`/@webcornerhub`).
 - Usernames sit at the top level, so the app's own route words are reserved
   (`home`, `settings`, `profile`, `notifications`, `discover`, `platform`,
-  `manage`, `capture`, `sign-in`, `support`, `c`, `h`, `api`, `forms`, … plus a
+  `manage`, `capture`, `sign-in`, `sign-up`, `support`, `c`, `h`, `api`, `forms`, … plus a
   buffer for future routes), as handles already reserve words.
 - **The hub page** (`/@handle`) credits its owner — "by Paul John" when they
   show their name, linking to `/paul`.
@@ -75,7 +75,8 @@ the same saved limit.
 
 | Action | Result |
 | --- | --- |
-| **Sign in** (new or returning) | The account only. The person can read public collections, bookmark collections, comment, and accept invitations to view or contribute. No hub yet |
+| **Sign in** | Authenticate an existing account; a verified missing identity requires explicit account creation |
+| **Create account** | Verified creation offers an optional named hub, off by default. Initial hub handle equals the generated username; existing and retired hub handles are excluded. Without a hub, the person can read, bookmark, comment and collaborate (ADR-0044) |
 | **Bookmark a collection** | Saves a private reference for the person (`CollectionSave.userId`); no hub is needed or created |
 | **Create hub** | Explicit, idempotent creation from the Hub entry or own profile; opening either page creates nothing |
 | **Import** | Owner-only, into an existing personal hub; a missing hub returns `hub_unavailable`. Contributors cannot import into shared collections |
@@ -85,10 +86,12 @@ the same saved limit.
 - Sign-up derives the username from the name, or a readable random one; never
   from the email.
 - A new hub is named from the person by default and takes their username as its
-  handle when unreserved. The name stays editable; the owner explicitly claims
-  one permanent handle. All issued handles remain reserved after deletion.
+  handle when unreserved. Both name and handle stay editable as its purpose
+  changes. Handle renames require 30 days between changes; retired spellings
+  cannot be reused by anyone, including the original owner (ADR-0043).
 - Someone who only reads or contributes by invitation never gets a hub.
-- Curator accounts (ADR-0016) upgrade the person and their hub.
+- Paid entitlements are planned under [monetization](monetization.md) and ADR-0028;
+  they extend convenience and private sharing without changing identity or ownership.
 
 ## Subscriptions
 
@@ -101,7 +104,8 @@ followed. See [hub home and subscriptions](hub-home-and-following.md).
 - `users.username` (unique, reserved words blocked); `hubs.handle` stays
   unique in its own namespace.
 - `hubs.owner_user_id` stays unique (one hub per person); a user may have none.
-- The account-creation hook assigns usernames only. Explicit hub creation, first-link
+- The account-creation hook assigns usernames and optionally creates the requested named
+  hub in the same transaction (ADR-0044). Explicit hub creation, first-link
   saves, collection creation and incoming transfers create a missing hub under the
   authority transaction; failed first-link saves leave none. Imports require an
   existing hub and owner management authority; bookmarks require no hub.
@@ -163,3 +167,11 @@ Profiles also resolve at `/people/{userId}` and `GET /api/v1/people/:id`. These
 use the existing public projection and exclude inactive accounts. Shared profile
 links use this immutable ID so renaming a username does not break them. The
 `share` username is reserved. See [sharing](sharing.md).
+
+## Private display preferences
+
+User stores nullable `time_zone`, exposed only as `timeZone` in authenticated
+GET/PATCH profile. Null means Automatic (device timezone); explicit IANA names are
+validated and normalized by the API. The preference follows the account, renders
+on the server, and never appears in public person profiles. See
+[ADR-0045](../engineering-decisions/0045-account-timezone-preference.md).

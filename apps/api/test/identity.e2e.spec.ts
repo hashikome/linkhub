@@ -24,7 +24,13 @@ describe("Identity & profile (e2e)", () => {
         .set("Authorization", `Bearer ${bearer}`)
         .expect(200)
     ).body as {
-      data: { displayName: string; username: string; handle: string | null; hubId: string | null };
+      data: {
+        id: string;
+        displayName: string;
+        username: string;
+        handle: string | null;
+        hubId: string | null;
+      };
     };
 
   beforeAll(async () => {
@@ -77,10 +83,13 @@ describe("Identity & profile (e2e)", () => {
       .expect(400);
   });
 
-  it("rejects profile credential writes without changing credentials or profile fields", async () => {
+  it("allows profile details but rejects identity and credential writes atomically", async () => {
     const email = `credentials-${sfx}@example.com`;
     const bearer = await signUp("Credential owner", email);
+    const before = await profile(bearer);
     for (const fields of [
+      { id: crypto.randomUUID() },
+      { userId: crypto.randomUUID() },
       { email: `replacement-${sfx}@example.com` },
       { password: "ChangedPassword123!" },
       { email: `replacement-${sfx}@example.com`, password: "ChangedPassword123!" },
@@ -92,7 +101,25 @@ describe("Identity & profile (e2e)", () => {
         .expect(400);
       expect(response.body.error.code).toBe("validation_failed");
     }
-    expect((await profile(bearer)).data.displayName).toBe("Credential owner");
+    await request(app.getHttpServer())
+      .put("/api/v1/profile")
+      .set("Authorization", `Bearer ${bearer}`)
+      .send({
+        id: crypto.randomUUID(),
+        email: `replacement-${sfx}@example.com`,
+        displayName: "Must not change",
+      })
+      .expect(404);
+    expect(await profile(bearer)).toEqual(before);
+    const edited = await request(app.getHttpServer())
+      .patch("/api/v1/profile")
+      .set("Authorization", `Bearer ${bearer}`)
+      .send({ displayName: "Updated name", bio: "Updated bio" })
+      .expect(200);
+    expect(edited.body.data.displayName).toBe("Updated name");
+    expect(edited.body.data.bio).toBe("Updated bio");
+    expect(edited.body.data.id).toBe(before.data.id);
+    expect(edited.body.data.email).toBe(email);
     const again = await signInWithCode(app.getHttpServer(), { email });
     expect((await profile(again.headers["set-auth-token"])).data).toEqual(
       (await profile(bearer)).data,

@@ -11,6 +11,8 @@ import {
 } from "class-validator";
 import { normalizeUsername, USERNAME_MAX, USERNAME_MIN } from "../username";
 
+// Identity fields (user UUID and email) are deliberately absent. The global
+// validation pipe rejects them instead of silently accepting a partial update.
 export class UpdateUserDto implements UpdateProfileRequest {
   @Transform(({ value }) => (typeof value === "string" ? normalizeUsername(value) : value))
   @ValidateIf((_object, value) => value !== undefined)
@@ -22,16 +24,17 @@ export class UpdateUserDto implements UpdateProfileRequest {
 
   @ValidateIf((_object, value) => value !== undefined)
   @IsBoolean()
-  confirmHandle?: boolean;
-
-  @ValidateIf((_object, value) => value !== undefined)
-  @IsBoolean()
   showOwner?: boolean;
 
   @ValidateIf((_object, value) => value !== undefined)
   @IsString()
   @MaxLength(500)
   bio?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  timeZone?: string | null;
 
   // Account holder full name; separate from the hub public display name.
   @IsOptional()

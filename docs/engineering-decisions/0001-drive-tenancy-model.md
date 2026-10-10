@@ -23,9 +23,9 @@ sharing. One policy service resolves access in order: hub owner (full) → direc
 share → active share link → published. There are no hub memberships or content
 admin bypasses.
 
-Signup-created hubs and `reader`/`editor` grants are the implemented contract;
-optional hubs and `viewer`/`contributor` identifiers are accepted work awaiting
-implementation. See [tenancy and access](../design-docs/tenancy-and-access.md).
+Optional hubs and `viewer`/`contributor` identifiers are implemented under
+ADR-0018. They replace the original signup-created hubs and `reader`/`editor`
+grants. See [tenancy and access](../design-docs/tenancy-and-access.md).
 
 ## Rationale
 

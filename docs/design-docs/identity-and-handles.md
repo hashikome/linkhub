@@ -1,20 +1,22 @@
 # Identity and handles
 
-Status: implemented (web email-change screens pending). Hub identity, the
-account's name, passwordless sign-in, email change and the web URL
+Status: implemented; controlled email change is backlog (ADR-0041). Hub identity,
+the account's name, passwordless sign-in, fixed email and the web URL
 scheme. Settled in [ADR-0002](../engineering-decisions/0002-immutable-identities.md)
 and [ADR-0004](../engineering-decisions/0004-passwordless-email-codes.md).
 
 [People and hubs](people-and-hubs.md) defines implemented separate usernames,
-optional hubs and public person profiles. Signup creates no hub; ownership does.
+optional hubs and public person profiles. Signup optionally creates a named hub;
+otherwise first ownership or explicit Create hub does (ADR-0044).
 
 ## Identity
 
-- **Handle** — a hub's public, unique identity, permanent once explicitly claimed (YouTube-handle style,
+- **Handle** — a hub's public, unique editable address (YouTube-handle style,
   lowercase `[a-z0-9-]`, 3–60 chars, reserved words blocked). It is a *handy
   way to reach a known hub* — `/@handle` resolves to the hub's page — never a
-  key. The durable key is `hubId`. Generated handles allow one explicit choice;
-  all issued spellings stay reserved after deletion (ADR-0033).
+  key. The durable key is `hubId`. Owners may rename once every 30 days.
+  Retired spellings cannot be reused even by the original owner and remain
+  reserved after deletion (ADR-0043).
 - **Hub display name** — free-form `hub.name`, the public name of the hub,
   independent of its owner, email and handle. It is neither unique nor a lookup key.
 - **Hub description** — optional `hub.description`, shown on the public hub and
@@ -28,24 +30,20 @@ optional hubs and public person profiles. Signup creates no hub; ownership does.
   direct-share list includes the invitee's name and email for managing access.
   Opting out hides the public ownership connection in both directions; the
   person’s name remains visible on their profile.
-- **Sign-in: passwordless.** Email codes own onboarding; user-verified passkeys
-  and existing-account Google also sign in. Enrolled passkeys/TOTP protect email
+- **Sign-in: passwordless.** Separate sign-in/signup pages share email and Google
+  authentication. Ordinary missing accounts require explicit creation after proof;
+  task-specific capture/invitation codes retain their focused onboarding.
+  Registered user-verified passkeys also sign in. Enrolled passkeys/TOTP protect email
   and Google fallback with an additional factor or recovery code. Usernames are
   not login credentials. See [passwordless security](passwordless-security.md)
   and [email verification](email-verification.md). Future centralized nsauth
   preserves this product boundary. Live provider acceptance remains before release.
-- **Email change** is only ever the same person updating their address — never
-  a way to hand over a hub. A hub is never transferred (it is its owner's
-  fingerprint); collections are. It is double-verified:
-  1. the signed-in owner sets the new email;
-  2. a **confirmation** goes to the **current** address, naming the target
-     address — nothing changes unless it is confirmed (email code);
-  3. on confirmation, a **verification** goes to the **new** address;
-  4. on verification the change applies, **all sessions are revoked**, and the
-     account signs in with the new email.
-  Templates for both steps exist in `packages/email`; the backend workflow is
-  documented in `auth-delivery-integration.md`. Web screens and
-  live provider acceptance remain outstanding.
+- **Account email** stays fixed, like the immutable user UUID. Profile PUT/PATCH
+  cannot change either. Names and bios remain editable; usernames retain their
+  own rules. Email change is backlog and requires a future dedicated POST action
+  with identity proof, affected owner/operator notifications and explicit handling
+  of credentials/invitations. No hub or account transfer is implied. See
+  [ADR-0041](../engineering-decisions/0041-fixed-account-email.md).
 - **nsauth SSO** is bounded to users + SSO + profile (no orgs); see
   `identity-sso.md`. Products keep their own userId authoritative and their own
   authorization; the IdP never decides who may edit a collection.
@@ -95,7 +93,7 @@ Hub handles remain reserved permanently. See
 [ADR-0033](../engineering-decisions/0033-permanent-hub-handles-and-self-service-accounts.md)
 and [ADR-0023](../engineering-decisions/0023-account-lifecycle-and-unified-collection-actions.md).
 
-## Gravatar follow-up
+## Profile pictures
 
 The shared avatar endpoint is public and viewer-neutral under
 [ADR-0034](../engineering-decisions/0034-public-gravatar-avatars.md). For an active
@@ -117,8 +115,9 @@ provider selector is added.
 The API reads current eligibility and email for every request, then checks them
 again after image retrieval to discard in-flight results from changed accounts.
 User-ID responses remain private/no-store. The provider cache is keyed by the
-normalized-email hash, not user ID: changed emails select a different cache entry,
-and deactivation prevents access to any cached picture. Cache entries are bounded
+normalized-email hash, not user ID. Account email is fixed; the defensive
+post-fetch identity check also rejects results if stored identity changed during
+the request. Deactivation prevents access to any cached picture. Cache entries are bounded
 to 128; TTLs are one hour for pictures, 15 minutes for missing images and one minute
 for failures. A reactivated account may use its current email's cached picture.
 
@@ -131,7 +130,7 @@ profile requests or provider scripts are needed.
 
 Richer Gravatar profile information is a later optional paid feature; field
 selection, consent and backend entitlements remain to be designed. Local names,
-bios, usernames, permanent handles and authorization remain product-owned.
+bios, usernames, hub handles and authorization remain product-owned.
 
 Official references (checked 2026-10-10):
 

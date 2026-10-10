@@ -30,8 +30,11 @@ Designs state what is implemented and label accepted work that is still planned.
 `PRODUCT.md` §11 owns delivery order; code and shared contracts establish the
 implemented API. An accepted decision can precede its implementation.
 
-Current designs and runbooks describe behavior directly. Keep dates and before/
-after accounts in `CHANGELOG.md`, completed plans and ADR rationale when they
+Current designs and runbooks describe behavior directly. Resolve contradictions
+against the implementation and latest accepted decision, then update the current
+design and its summaries together; do not leave conflicting instructions as an
+append-only sequence of updates. Keep dates and before/after
+accounts in `CHANGELOG.md`, completed plans and ADR rationale when they
 explain a decision, migration or acceptance limit. Completed plans are historical
 evidence, not current implementation instructions.
 

@@ -38,8 +38,9 @@ export default function Page() {
       <h2 id="passkeys">How do I use a passkey?</h2>
       <p>
         Sign in, open Settings → Security and choose Add a passkey. Your device will ask for a
-        fingerprint, face scan or PIN. Give the passkey a name you recognize. Next time, choose Sign
-        in with a passkey; you won't need an email or authenticator code.
+        fingerprint, face scan or PIN. Give the passkey a name you recognize. Next time, continue
+        with your email, then choose Sign in with a passkey. You won't need an email or
+        authenticator code. A passkey can also finish Google sign-in.
       </p>
       <p>
         Keep another passkey or your recovery codes somewhere you can reach if you lose your device.
@@ -56,12 +57,26 @@ export default function Page() {
         just used, wait for the next one. A registered passkey can also complete sign-in. Removing
         an authenticator requires a recent completed sign-in.
       </p>
+      <h2 id="create-account">How do I create an account?</h2>
+      <p>
+        Choose Create an account from Sign in, then continue with your email or Google. After
+        verification, review your email and choose Create account. You can select Start with a hub
+        and give it a name, or create a hub later. Its initial handle matches your username; both
+        can be changed in Settings under their usual rules.
+      </p>
       <h2 id="google-sign-in">How do I sign in with Google?</h2>
       <p>
-        Google signs you in to an existing nslinkhub account; it cannot create one. Use the same
-        email address for both accounts. If Google can't connect automatically, sign in with email
-        first, then choose Connect Google in Settings → Security. Any protection you enabled still
-        applies.
+        Choose Continue with Google and use the email for your nslinkhub account. If a first-time
+        check is needed, verify an email code or use a registered passkey to sign in. Any protection
+        you enabled still applies.
+      </p>
+      <p>
+        If that email has no account here, we'll tell you before creating one. Choose Create account
+        to continue with your verified Google email and name, without another email code. If you
+        already have an account, choose Sign in to return and use your account's email or the
+        correct Google account. Your Google email must always match your account email. You can
+        always continue with email instead. Saving your first link and accepting an invitation use
+        email verification directly.
       </p>
       <h2 id="account-recovery">How do I recover access?</h2>
       <p>

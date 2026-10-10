@@ -13,6 +13,14 @@ export interface VerificationCopy {
   codeButton: string;
 }
 
+export const googleConnectionCopy: VerificationCopy = {
+  title: "Verify your email",
+  reason: "Confirm it's you to finish signing in.",
+  after: "Verify the code to sign in. Any two-step verification you enabled still applies.",
+  codeTitle: "Verify your email",
+  codeButton: "Verify and continue",
+};
+
 // What signing in will let someone do, from where they are going.
 function destination(returnTo: string) {
   if (returnTo.includes("compose=comment")) return "join the discussion";
@@ -75,7 +83,7 @@ export function verificationCopy(
     default:
       return {
         title: "Sign in",
-        reason: "Sign in or create your account with your email.",
+        reason: "Welcome back to your corner of the web.",
         after: "We'll email you an eight-digit code. No password needed.",
         codeTitle: "Check your email",
         codeButton: "Verify and continue",

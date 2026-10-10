@@ -2,13 +2,42 @@ import { AppException, appError } from "../common/errors/app-exception";
 import { AUTHORITY_LOCK } from "../database/authority-context";
 import { emailKey } from "../email/outbox";
 import type { Prisma } from "../generated/prisma/client";
+import { completeAccountAction } from "./account-lifecycle";
+import { readRecovery, recoveryCookie } from "./account-recovery";
 import { createAuth } from "./create-auth";
 import type { DeliveryAuthOptions } from "./delivery-auth";
+import {
+  discardEmailRegistration,
+  pendingEmailRegistration,
+  registrationCookie,
+  registrationToken,
+} from "./email-registration";
+import {
+  connectionCookieHeader,
+  discardGoogleConnection,
+  googleConnectionCookie,
+  googleConnectionToken,
+  pendingGoogleConnection,
+  stageGoogleConnection,
+} from "./google-connection";
 import type { SecurityContext } from "./security-plugins";
 
 const root = "/api/v1/auth";
-const getPaths = new Set(["/security/status", "/methods", "/callback/google"]);
+const getPaths = new Set([
+  "/email-registration",
+  "/account/recovery",
+  "/security/status",
+  "/methods",
+  "/callback/google",
+  "/google-connection",
+]);
 const postPaths = new Set([
+  "/email-registration/confirm",
+  "/email-registration/cancel",
+  "/account/recovery/confirm",
+  "/sign-in/identify",
+  "/google-connection/cancel",
+  "/google-connection/register",
   "/sign-in/social",
   "/link-social",
   "/security/google/remove",
@@ -41,6 +70,9 @@ const failed = (status = 400, code = "invalid_request") =>
     status,
   );
 export async function invalidateSecurityChallenges(tx: Prisma.TransactionClient, userId: string) {
+  await tx.verification.deleteMany({
+    where: { identifier: { startsWith: `google-connect:${userId}:` } },
+  });
   const rows = await tx.verification.findMany({
     where: { value: userId, identifier: { startsWith: "2fa-" } },
     select: { identifier: true },
@@ -70,7 +102,7 @@ export async function securityHandler(
     )
   )
     return failed(404);
-  const origin = new URL(baseURL).origin;
+  const origin = options.webOrigin ?? new URL(baseURL).origin;
   if (
     request.method === "POST" &&
     ((request.headers.get("origin") && request.headers.get("origin") !== origin) ||
@@ -102,12 +134,133 @@ export async function securityHandler(
     }
   }
   if (path === "/methods") return json({ data: { google: !!google, passkey: true } });
+  let discardedConnection = false;
+  let discardedRegistration = false;
+  let googleEmailMismatch = false;
   try {
-    return await prisma.$transaction(
+    const result = await prisma.$transaction(
       async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${AUTHORITY_LOCK}::bigint)`;
+        const connectionToken = googleConnectionToken(request.headers, baseURL);
+        if (
+          registrationToken(request.headers, baseURL) &&
+          [
+            "/sign-in/identify",
+            "/sign-in/social",
+            "/passkey/generate-authenticate-options",
+          ].includes(path)
+        ) {
+          await discardEmailRegistration(tx, secret, registrationToken(request.headers, baseURL));
+          discardedRegistration = true;
+        }
+        if (path === "/account/recovery" || path === "/account/recovery/confirm") {
+          const recovery = await readRecovery(tx, secret, baseURL, request.headers);
+          if (!recovery) return failed(404);
+          const { context } = recovery;
+          if (path === "/account/recovery")
+            return json({
+              data: {
+                action: context.action,
+                email: context.address,
+                deletionScheduledFor: context.account?.deletionScheduledFor?.toISOString() ?? null,
+              },
+            });
+          if (body.confirm !== true || Object.keys(body).some((key) => key !== "confirm"))
+            return failed();
+          await completeAccountAction(tx, secret, context);
+          await options.beforeCommit?.();
+          const response = json({ action: context.action });
+          response.headers.append("set-cookie", recoveryCookie(baseURL));
+          return response;
+        }
+        if (path === "/google-connection") {
+          const pending = await pendingGoogleConnection(tx, secret, connectionToken);
+          return pending
+            ? json({
+                data: { email: pending.proof.email, registration: pending.proof.userId === null },
+              })
+            : failed(404);
+        }
+        if (path === "/sign-in/identify") {
+          if (
+            Object.keys(body).some((key) => key !== "email") ||
+            typeof body.email !== "string" ||
+            body.email.length > 254 ||
+            !/^\S+@\S+\.\S+$/.test(body.email.trim())
+          )
+            return failed();
+          await discardGoogleConnection(tx, secret, connectionToken);
+          discardedConnection = true;
+          await options.beforeCommit?.();
+          // Identifying an email proves nothing and reveals no account methods.
+          return json({ success: true });
+        }
+        if (path === "/google-connection/cancel") {
+          if (Object.keys(body).length) return failed();
+          await discardGoogleConnection(tx, secret, connectionToken);
+          const response = json({ success: true });
+          response.headers.append("set-cookie", connectionCookieHeader(baseURL));
+          return response;
+        }
         const security: SecurityContext = {};
-        const auth = createAuth({ prisma: tx, secret, baseURL, google, security });
+        if (
+          ["/email-registration/confirm", "/google-connection/register"].includes(path) &&
+          body.hubName !== undefined
+        ) {
+          if (
+            typeof body.hubName !== "string" ||
+            !body.hubName.trim() ||
+            body.hubName.trim().length > 255
+          )
+            return failed();
+          security.registrationHubName = body.hubName.trim();
+        }
+        if (path.startsWith("/email-registration")) {
+          const token = registrationToken(request.headers, baseURL);
+          if (path === "/email-registration/cancel") {
+            if (Object.keys(body).length) return failed();
+            await discardEmailRegistration(tx, secret, token);
+            const response = json({ success: true });
+            response.headers.append("set-cookie", registrationCookie(baseURL));
+            return response;
+          }
+          const pending = await pendingEmailRegistration(tx, secret, token);
+          if (!pending) return failed(404);
+          if (path === "/email-registration") return json({ data: { email: pending.email } });
+          if (
+            body.confirm !== true ||
+            Object.keys(body).some((key) => !["confirm", "hubName"].includes(key))
+          )
+            return failed();
+          security.emailRegistration = { email: pending.email };
+          await tx.verification.delete({ where: { id: pending.record.id } });
+        }
+        if (path === "/google-connection/register") {
+          if (
+            !google ||
+            body.confirm !== true ||
+            Object.keys(body).some((key) => !["confirm", "hubName"].includes(key))
+          )
+            return failed();
+          const pending = await pendingGoogleConnection(tx, secret, connectionToken);
+          if (!pending || pending.proof.userId !== null || pending.user) return failed();
+          if (
+            await tx.account.findFirst({
+              where: { providerId: "google", accountId: pending.proof.subject },
+            })
+          )
+            return failed();
+          security.googleRegistration = pending.proof;
+          security.googleIdentity = pending.proof;
+        }
+        const auth = createAuth({
+          prisma: tx,
+          secret,
+          baseURL,
+          webOrigin: origin,
+          google,
+          security,
+        });
         const signed = await auth.api.getSession({ headers: request.headers });
         const user = signed ? await tx.user.findUnique({ where: { id: signed.user.id } }) : null;
         if (signed && user?.accountState !== "active") return failed(401);
@@ -138,6 +291,7 @@ export async function securityHandler(
 
         const management =
           (path.startsWith("/security/") && path !== "/security/status") || path === "/link-social";
+        security.sessionMaintenance = management;
         if (path.startsWith("/security/") || path === "/link-social") {
           if (!user?.emailVerified) return failed(401);
           if (management && !fresh) return failed(403, "recent_auth_required");
@@ -169,17 +323,23 @@ export async function securityHandler(
         let native = path;
         let method = request.method;
         let nativeBody = body;
-        const allowed = path.endsWith("/remove")
-          ? ["id", "confirm"]
-          : path.endsWith("/confirm") || path.startsWith("/two-factor/verify-")
-            ? ["code"]
-            : path.endsWith("/verify")
-              ? ["response", "name"]
-              : path === "/passkey/verify-authentication"
-                ? ["response"]
-                : path === "/sign-in/social" || path === "/link-social"
-                  ? ["provider", "callbackURL", "errorCallbackURL", "disableRedirect"]
-                  : [];
+        const allowed = ["/google-connection/register", "/email-registration/confirm"].includes(
+          path,
+        )
+          ? ["confirm", "hubName"]
+          : path === "/passkey/generate-authenticate-options"
+            ? ["continueSignIn", "email", "googleConnection"]
+            : path.endsWith("/remove")
+              ? ["id", "confirm"]
+              : path.endsWith("/confirm") || path.startsWith("/two-factor/verify-")
+                ? ["code"]
+                : path.endsWith("/verify")
+                  ? ["response", "name"]
+                  : path === "/passkey/verify-authentication"
+                    ? ["response"]
+                    : path === "/sign-in/social" || path === "/link-social"
+                      ? ["provider", "callbackURL", "errorCallbackURL", "disableRedirect"]
+                      : [];
         if (request.method === "POST" && Object.keys(body).some((k) => !allowed.includes(k)))
           return failed();
         if (path === "/sign-in/social" || path === "/link-social") {
@@ -202,7 +362,31 @@ export async function securityHandler(
           native = "/passkey/generate-register-options";
           method = "GET";
         }
-        if (path === "/passkey/generate-authenticate-options") method = "GET";
+        if (path === "/passkey/generate-authenticate-options") {
+          if (body.continueSignIn !== undefined && typeof body.continueSignIn !== "boolean")
+            return failed();
+          if (body.googleConnection !== undefined && typeof body.googleConnection !== "boolean")
+            return failed();
+          if (body.email !== undefined) {
+            if (
+              typeof body.email !== "string" ||
+              body.email.length > 254 ||
+              !/^\S+@\S+\.\S+$/.test(body.email.trim())
+            )
+              return failed();
+            security.passkeyEmail = body.email.trim().toLowerCase();
+          }
+          if (body.googleConnection === true) {
+            const pending = await pendingGoogleConnection(tx, secret, connectionToken);
+            if (!pending?.user) return failed();
+            security.passkeyEmail = pending.proof.email;
+          }
+          if (connectionToken && body.continueSignIn !== true && body.googleConnection !== true) {
+            await discardGoogleConnection(tx, secret, connectionToken);
+            discardedConnection = true;
+          }
+          method = "GET";
+        }
         if (path === "/security/passkey/verify") {
           if (
             passkeys >= 10 ||
@@ -261,12 +445,26 @@ export async function securityHandler(
             .filter(
               (part) =>
                 !part.includes("better-auth.trust_device=") &&
+                !(
+                  discardedConnection &&
+                  part.trim().startsWith(`${googleConnectionCookie(baseURL)}=`)
+                ) &&
                 !(management && part.includes("better-auth.two_factor=")),
             )
             .join(";"),
         );
         headers.delete("content-length");
         headers.set("content-type", "application/json");
+        if (path === "/passkey/generate-authenticate-options") {
+          headers.delete("authorization");
+          headers.set(
+            "cookie",
+            (headers.get("cookie") ?? "")
+              .split(";")
+              .filter((part) => !/(?:^|\s)(?:__Secure-)?better-auth\.session/.test(part))
+              .join(";"),
+          );
+        }
         if (path.startsWith("/two-factor/")) {
           // A pending login must never fall back to an existing session's factor.
           headers.delete("authorization");
@@ -287,8 +485,37 @@ export async function securityHandler(
             ...(method === "POST" ? { body: JSON.stringify(nativeBody) } : {}),
           }),
         );
+        if (security.googleEmailMismatch) {
+          googleEmailMismatch = true;
+          throw appError("unauthorized");
+        }
+        if (path === "/email-registration/confirm")
+          response.headers.append("set-cookie", registrationCookie(baseURL));
         if (security.rejected) throw appError("unauthorized");
         if (response.status >= 500) throw appError("service_unavailable");
+        if (path === "/sign-in/social" && response.ok) {
+          await discardGoogleConnection(tx, secret, connectionToken);
+          response.headers.append("set-cookie", connectionCookieHeader(baseURL));
+        }
+        const redirect = response.headers.get("location");
+        if (
+          path === "/callback/google" &&
+          !linkProof &&
+          security.googleIdentity &&
+          response.status === 302 &&
+          redirect &&
+          new URL(redirect).origin === origin &&
+          ["account_not_linked", "signup_disabled"].includes(
+            new URL(redirect).searchParams.get("error") ?? "",
+          )
+        ) {
+          await discardGoogleConnection(tx, secret, connectionToken);
+          const token = await stageGoogleConnection(tx, secret, security.googleIdentity);
+          if (token) {
+            response.headers.set("location", `${origin}/sign-in/google`);
+            response.headers.append("set-cookie", connectionCookieHeader(baseURL, token));
+          }
+        }
         if (!response.ok && response.status !== 302) {
           response.headers.delete("set-cookie");
           response.headers.delete("set-auth-token");
@@ -381,7 +608,18 @@ export async function securityHandler(
       },
       { maxWait: 5000, timeout: 20000 },
     );
+    if (discardedRegistration) result.headers.append("set-cookie", registrationCookie(baseURL));
+    if (discardedConnection) result.headers.append("set-cookie", connectionCookieHeader(baseURL));
+    return result;
   } catch (error) {
+    if (googleEmailMismatch && path === "/callback/google")
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: `${origin}/sign-in?notice=google-email-mismatch`,
+          "Cache-Control": "no-store",
+        },
+      });
     return error instanceof AppException
       ? failed(error.getStatus(), error.code)
       : failed(503, "service_unavailable");

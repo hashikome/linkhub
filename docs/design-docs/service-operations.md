@@ -13,7 +13,7 @@ Existing recording, transaction guarantees and access boundaries below remain
 the interim contract; current feature work does not include further audit UI
 iteration or general change-payload capture.
 
-The later [ADR-0021](../engineering-decisions/0021-bounded-audit-effects.md)
+[ADR-0021](../engineering-decisions/0021-bounded-audit-effects.md)
 authorizes a bounded interim capture/presentation slice. Manage shows recorded
 states, outcomes and reasons, with current actor usernames alongside stable IDs.
 Invitation targets use invitation IDs, not recipient IDs. Session revocations do
@@ -22,7 +22,7 @@ not present account state as the session change; counts were not recorded.
 denials; `view=all` includes reads. The API default remains all. An explicit read
 action normalizes the view to all, and effective filters bind the cursor.
 Dates use the viewer's local `YYYY-MM-DD HH:mm:ss`, with a labelled UTC fallback
-without JavaScript. No existing recording/retention or authority boundary changes.
+without JavaScript.
 
 Unified web search uses `q` to match displayed actor usernames/IDs, action labels,
 target IDs, outcomes and recorded changes within the authorized feed. It accepts
@@ -40,10 +40,10 @@ appearing in navigation.
 
 ## Capabilities
 
-An explicitly authorized operator can find an account, suspend or reactivate
-it, revoke its sessions, place or release a hold on a published collection, and
-review who performed these operations and why. These are the complete initial
-capabilities. Two product capabilities apply: `service_admin` manages users
+An explicitly authorized operator can find an account, deactivate, suspend or
+reactivate it, revoke its sessions, place or release a publication hold, and
+review the recorded operations. Admins may also schedule or cancel deletion of
+non-admin accounts. Two product capabilities apply: `service_admin` manages users
 and operator invitations/access, while `service_operator` performs account and
 moderation work. Neither confers private-content access. There is no configurable
 permission builder. Operators cannot restrict another operator or admin account;
@@ -51,7 +51,7 @@ admins manage operator accounts. Admin account suspension is unavailable.
 
 | Operation | Information and authority | Boundary |
 | --- | --- | --- |
-| Find accounts | Paginated account table searchable by exact user ID or username, email and hub handle fragments (`GET /operations/accounts?q=`); name, email/verification, immutable user/hub IDs, handle, creation date, account status and session count; row quick actions (suspend/reactivate, sign out everywhere) | Email is operational personal data; no bulk export, secrets, private collection titles or browsing history; the search text is not written to the audit |
+| Find accounts | Paginated account table searchable by exact user ID or username, email and hub handle fragments (`GET /operations/accounts?q=`); name, email/verification, immutable user/hub IDs, handle, creation date, account status and session count; permitted actions are on account detail | Email is operational personal data; no bulk export, secrets, private collection titles or browsing history; the search text is not written to the audit |
 | Suspend/reactivate | Change account availability with a required reason; suspension revokes all sessions and operator access | No ownership reassignment or credential editing; admin deletion follows ADR-0023 |
 | Revoke sessions | End all cookie and bearer sessions for the target account | Does not suspend it; a fresh sign-in is allowed |
 | Hold/release publication | Find a collection by ID or pasted link through `GET /manage/collections?q=`; restrict distribution of a currently public collection; inspect/release held rows without exposing private titles | Does not confer permission to read or edit its content |
@@ -65,10 +65,10 @@ collection already readable through an operator's ordinary personal share
 remains governed by that share, not their operator capability.
 
 User reporting forms, appeals/case management, bulk actions, arbitrary profile
-editing, deleting accounts, taking over accounts, MFA, automated moderation,
-identity-provider migration and hosting/email-provider consoles are separate
-work. The initial scope does not require Clerk, nsauth or Pigfarm's authority
-model. Suspension is per existing user ID; it is not a promise to prevent a
+editing, account takeover, automated moderation, identity-provider migration
+and hosting/email-provider consoles remain outside these operations. Local
+passkeys/TOTP and protected recovery follow [passwordless security](passwordless-security.md);
+service permissions remain product-owned. Suspension is per existing user ID; it is not a promise to prevent a
 person from registering a different account.
 
 ## Sharing analytics
@@ -145,12 +145,12 @@ once with its original operation id, so it cannot double-apply. Grants are check
 on every operation; neither is embedded as durable session authority. Invitation
 metadata can be pruned 30 days after expiry independently of grants and bootstrap.
 
-Suspension or verified email handover revokes role grants, sessions and pending
+Suspension revokes role grants, sessions and pending
 incoming/authored invitations atomically. Reactivation never restores authority.
 Admin accounts cannot be suspended from these tools; operators cannot revoke
 another operator/admin's sessions. Admins can revoke operator roles; operators
-cannot remove admins. A last admin may still change their verified email, which
-removes their authority and requires explicit recovery.
+cannot remove admins. Account email is fixed for admins and operators too; no email-change action is
+available (ADR-0041).
 
 If no active admin remains, a trusted interactive deployment `admin:recover`
 command may issue a new admin invitation. It confirms the selected address,
@@ -161,11 +161,13 @@ exists. There is no hidden web recovery endpoint or perpetual seed password.
 
 ## Account suspension and recovery
 
-Account availability is app-owned state, `active` or `suspended`. Suspension:
+Account availability is app-owned state: `active`, `inactive` or `suspended`,
+with an optional deletion schedule. See [account lifecycle](#account-lifecycle-and-action-controls)
+for deactivation and deletion. Suspension:
 
 - Denies new authenticated sessions and every existing cookie/bearer session,
   including raw better-auth session reads and mutation endpoints, product
-  guards, pending code verification and email handover. Normal anonymous
+  guards and pending code verification. Normal anonymous
   public browsing remains possible; this is not an IP block.
 - Revokes sessions, operator grants and outstanding authentication/handover
   proofs. Pending mail is cancelled where possible; mail already sent cannot
@@ -247,7 +249,7 @@ Operational account lookup is an explicit cross-user metadata query, never a
 general exception to hub scoping for content queries.
 
 Use the existing auth transaction/advisory lock when coordinating suspension,
-session creation, revocation and email handover. Recheck actor authority and
+session creation, revocation and account recovery. Recheck actor authority and
 target state inside mutation transactions; lock account/collection
 rows in a consistent order with the domain services. A concurrent transfer,
 publication, resource-reference or share mutation must not escape a newly applied hold or
@@ -304,12 +306,13 @@ the reusable email-code sign-in/session journey; do not ship a separate admin
 login protocol or a dashboard of inactive controls. The web uses `/manage` and
 `/api/v1/operations/*` for the API, with immutable target IDs. The web area is
 service tabs — Accounts (`/manage`), Collections, Team (admin only, `/manage/team`),
-Invitations (admin only, `/manage/invitations`) and Audit — with listings as minimal tables and row actions that return to the same
+Invitations (admin only, `/manage/invitations`), Analytics and Audit Log — with listings as minimal tables and row actions that return to the same
 listing. Accounts, Collections, Team, Invitations and Audit keep their headings, tabs,
 filters and column headings visible on wide, tall screens while table rows
 scroll in bounded regions. Team lists current admins and operators; Invitations owns sending and tracking
-service invitations. The owner Manage workspace uses the same Invitations/Access
-presentation pattern for collection access under its own authorization rules.
+service invitations. Owner Access lists current collaborators under collection authority. Planned
+collection invitations will reuse the presentation pattern without sharing service
+invitation permissions.
 Every paginated Manage table uses Load more to append rows, preserve active
 filters and disappear at the end. Collections use a caller/filter-bound cursor ordered by creation time and ID,
 with a cutoff; the unified list includes active holds.
@@ -317,7 +320,7 @@ Failed reads retain loaded rows and offer retry; without JavaScript the link
 continues with native cursor navigation. Smaller screens use document flow.
 The other tables use a read-only server action returning rendered rows and
 rechecking current API authorization. The web-only `/manage/audit/more` adapter preserves search and resolved explicit identity filters and
-forwards session-bound reads to the same authoritative operations API.
+forwards session-bound reads to `/api/v1/manage/audit`.
 A required reason plus a clearly labelled button is the deliberate
 step (no confirmation checkbox). All operator responses are private and
 no-store; Accounts search text stays out of page URLs: the web posts it and
@@ -329,7 +332,7 @@ belong to implementation, under the existing web design documents.
 
 Acceptance must prove active user versus operator versus suspended/revoked
 operator, cookie and bearer boundaries, cross-hub privacy, no implicit grants,
-email handover/re-invitation, admin protection and invitation races, pending-code/session races, audit
+rejected email changes/re-invitation, admin protection and invitation races, pending-code/session races, audit
 rollback, stale/replayed actions, and restriction races with transfer/reference creation.
 Exercise ID/pretty/reference/resource/export routes, public/shared/saved lists,
 independent reference-target holds, owner corrections, reactivation and explicit release.
@@ -338,10 +341,10 @@ no-JavaScript sign-in/recovery, keyboard, narrow screens, freshness/history and
 CSRF through the actual web origin. Run `bun run verify` and
 `bun run test:browser` sequentially; run `bun run test:dev` if entrypoints change.
 
-Live sender/provider validation remains a public-release prerequisite. Existing
-MFA/SSO deferrals are unchanged. Operators authenticate with the decided local
-email-code flow; no identity-provider claim automatically authorizes service
-operations. Nothing in this document claims deployed operator access today.
+Live sender/provider validation remains a public-release prerequisite. Operators
+use the same local passwordless methods and enrolled factors as other accounts;
+SSO remains planned. Authentication never creates a service grant. Service-role
+acceptance always requires its invitation-bound email proof.
 
 
 Invitation notifications are informational messages directing recipients to the
@@ -349,7 +352,8 @@ emailed Review invitation button. Notification IDs never authorize acceptance.
 Invitation status routes remain readable but do not send people through another
 link-entry page. The manual emailed-link field is shown only without JavaScript,
 as an accessible fallback for fragment handling; normal email links open review
-automatically. Invite codes are deferred.
+automatically. Acceptance then requires the invitation-bound email code and any
+enrolled factor; a notification or token alone cannot grant authority.
 
 
 ## Audit identity and filtering
@@ -371,7 +375,7 @@ to the nil UUID (no matches), never to an absent filter. Responses include
 then redirects using these canonical filters. Pagination carries the search text and explicit identity IDs. Cursors bind the caller, scope, filters and snapshot
 cutoff. Invalid date ranges and short target IDs are rejected.
 
-Service collection events now capture nullable `hubId` at event time. Transfers,
+Service collection events capture nullable `hubId` at event time. Transfers,
 renames and deletion never change that context. Older events retain null: current
 ownership is not evidence of historical ownership. A hub filter only matches
 recorded hub context; account actions are not implicitly attributed to the
@@ -426,7 +430,7 @@ lift operator restrictions or cancel operator-scheduled deletion. Issued hub-han
 reservations survive final cleanup.
 `OperatorAccount` includes `deletionScheduledFor` and `availableActions`. The list
 omits verification; session count includes only unexpired sessions.
-The Action dialog continues to a reasoned, recently verified command. Restrictions
+Account detail actions continue to a reasoned, recently verified command. Restrictions
 and deletion cannot target self/admin accounts. Pending deletion blocks activation
 until cancelled. Cancellation leaves inactive. Maintenance removes due accounts
 in batches of 25 under the authority lock and records `account.deleted` atomically.
@@ -434,7 +438,7 @@ in batches of 25 under the authority lock and records `account.deleted` atomical
 `GET /api/v1/manage/collections` supplies one paginated, viewer-scoped projection
 for owners/contributors and operators. Search accepts a full UUID or collection
 URL; URL query tokens do not grant access. Foreign private held content remains
-hidden. Moderation detail uses `/operations/collections/:id`; the superseded held-only list and link-resolver routes are removed.
+hidden. Moderation detail uses `/operations/collections/:id`.
 
 Account summaries and details also expose nullable `lastLoginAt`, persisted by
 successful ordinary/invitation sign-in in the session transaction. Account detail

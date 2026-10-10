@@ -1,17 +1,35 @@
 import { passkey } from "@better-auth/passkey";
 import type { BetterAuthPlugin, GenericEndpointContext } from "better-auth";
-import { APIError, createAuthMiddleware } from "better-auth/api";
+import { APIError, createAuthEndpoint, createAuthMiddleware } from "better-auth/api";
+import { setSessionCookie } from "better-auth/cookies";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { twoFactor } from "better-auth/plugins";
 import { emailKey } from "../email/outbox";
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
-import { finishInvitation } from "../operations/recipient";
+import { completeAuthentication } from "./complete-authentication";
+import {
+  type GoogleIdentity,
+  googleConnectionCookie,
+  googleConnectionCookieOptions,
+  googleConnectionToken,
+  pendingGoogleConnection,
+} from "./google-connection";
 
 type Store = PrismaClient | Prisma.TransactionClient;
 export interface SecurityContext {
   proofOnly?: boolean;
+  /** Credential enrollment can rotate a session without completing a new login. */
+  sessionMaintenance?: boolean;
+  emailRegistration?: { email: string };
+  registrationHubName?: string;
   invitationToken?: string;
   googleLinkEmail?: string;
+  googleIdentity?: GoogleIdentity;
+  googleEmailMismatch?: boolean;
+  /** Backend validated consent and account absence under the authority lock. */
+  googleRegistration?: GoogleIdentity;
+  passkeyEmail?: string;
+  passkeyBinding?: { email: string; userId: string | null; version: number | null };
   rejected?: boolean;
 }
 const denied = () =>
@@ -24,6 +42,7 @@ export function securityPlugins(
   secret: string,
   baseURL: string,
   flow: SecurityContext = {},
+  webOrigin = new URL(baseURL).origin,
 ): BetterAuthPlugin[] {
   const reject = () => {
     flow.rejected = true;
@@ -54,6 +73,13 @@ export function securityPlugins(
             if (!data) return gate.handler(ctx);
             const user = await prisma.user.findUnique({ where: { id: data.user.id } });
             if (user?.accountState !== "active" || !user.emailVerified) throw reject();
+            if (
+              ["/sign-in/social", "/callback/:id", "/callback/google"].includes(ctx.path ?? "") &&
+              flow.googleIdentity?.email !== user.email
+            ) {
+              flow.googleEmailMismatch = true;
+              throw reject();
+            }
             if (
               !user.twoFactorEnabled &&
               !(await prisma.passkey.count({ where: { userId: user.id } }))
@@ -92,9 +118,9 @@ export function securityPlugins(
             };
             // OAuth's native endpoint redirects; a pending factor must redirect to our challenge page.
             if (ctx.path === "/callback/:id" || ctx.path === "/callback/google") {
-              result.headers.set("location", `${new URL(baseURL).origin}/sign-in/factor`);
+              result.headers.set("location", `${webOrigin}/sign-in/factor`);
               result.response = new APIError("FOUND", undefined, {
-                location: `${new URL(baseURL).origin}/sign-in/factor`,
+                location: `${webOrigin}/sign-in/factor`,
               });
             }
             return result;
@@ -104,9 +130,9 @@ export function securityPlugins(
     },
   };
   const webauthn = passkey({
-    rpID: new URL(baseURL).hostname,
+    rpID: new URL(webOrigin).hostname,
     rpName: "nslinkhub",
-    origin: new URL(baseURL).origin,
+    origin: webOrigin,
     authenticatorSelection: { residentKey: "required", userVerification: "required" },
     registration: {
       afterVerification: async ({ verification }) => {
@@ -121,8 +147,63 @@ export function securityPlugins(
   });
   const policy: BetterAuthPlugin = {
     id: "account-security-policy",
+    endpoints: {
+      registerEmailAccount: createAuthEndpoint(
+        "/email-registration/confirm",
+        { method: "POST" },
+        async (ctx) => {
+          const identity = flow.emailRegistration;
+          if (!identity) throw reject();
+          return registerVerifiedAccount(ctx, identity.email, "");
+        },
+      ),
+      registerGoogleAccount: createAuthEndpoint(
+        "/google-connection/register",
+        { method: "POST" },
+        async (ctx) => {
+          const identity = flow.googleRegistration;
+          if (!identity) throw reject();
+          return registerVerifiedAccount(ctx, identity.email, identity.name || "New member");
+        },
+      ),
+    },
     hooks: {
       before: [
+        {
+          matcher: (ctx) =>
+            ctx.path === "/passkey/generate-authenticate-options" ||
+            ctx.path === "/passkey/verify-authentication",
+          handler: createAuthMiddleware(async (ctx) => {
+            if (ctx.path === "/passkey/generate-authenticate-options" && flow.passkeyEmail) {
+              const selected = await prisma.user.findUnique({
+                where: { email: flow.passkeyEmail },
+              });
+              const binding = {
+                email: flow.passkeyEmail,
+                userId: selected?.id ?? null,
+                version: selected?.operationsVersion ?? null,
+              };
+              const create = ctx.context.internalAdapter.createVerificationValue.bind(
+                ctx.context.internalAdapter,
+              );
+              ctx.context.internalAdapter.createVerificationValue = (value) =>
+                create({
+                  ...value,
+                  value: JSON.stringify({ ...JSON.parse(value.value), signInBinding: binding }),
+                });
+            }
+            if (ctx.path === "/passkey/verify-authentication") {
+              const consume = ctx.context.internalAdapter.consumeVerificationValue.bind(
+                ctx.context.internalAdapter,
+              );
+              ctx.context.internalAdapter.consumeVerificationValue = async (token) => {
+                const record = await consume(token);
+                if (record) flow.passkeyBinding = JSON.parse(record.value).signInBinding;
+                return record;
+              };
+            }
+          }),
+        },
         {
           matcher: (ctx) => ctx.path === "/two-factor/verify-totp",
           handler: createAuthMiddleware(async (ctx) => {
@@ -160,17 +241,31 @@ export function securityPlugins(
                   ? "totp"
                   : ctx.path === "/two-factor/verify-backup-code"
                     ? "recovery"
-                    : ["/callback/:id", "/callback/google", "/sign-in/social"].includes(
-                          ctx.path ?? "",
-                        )
+                    : [
+                          "/callback/:id",
+                          "/callback/google",
+                          "/sign-in/social",
+                          "/google-connection/register",
+                        ].includes(ctx.path ?? "")
                       ? "google"
-                      : ctx.path === "/sign-in/email-otp"
+                      : ["/sign-in/email-otp", "/email-registration/confirm"].includes(
+                            ctx.path ?? "",
+                          )
                         ? "email"
                         : null;
             const session = ctx.context.newSession;
             if (!session || !method) return;
+            let invitationToken = flow.invitationToken;
             const user = await prisma.user.findUnique({ where: { id: session.user.id } });
             if (user?.accountState !== "active" || !user.emailVerified) throw reject();
+            if (
+              method === "passkey" &&
+              flow.passkeyBinding &&
+              (flow.passkeyBinding.userId !== user.id ||
+                flow.passkeyBinding.email !== user.email ||
+                flow.passkeyBinding.version !== user.operationsVersion)
+            )
+              throw reject();
             if (["passkey", "totp", "recovery"].includes(method)) {
               const challenge = await ctx.getSignedCookie(factorCookieName(baseURL), secret);
               if (challenge) {
@@ -186,12 +281,7 @@ export function securityPlugins(
                 );
                 if (pending.userId !== user.id || pending.version !== user.operationsVersion)
                   throw reject();
-                if (pending.invitationToken)
-                  await finishInvitation(
-                    prisma as Prisma.TransactionClient,
-                    pending.invitationToken,
-                    user.id,
-                  );
+                invitationToken = pending.invitationToken;
                 await prisma.verification.deleteMany({
                   where: {
                     identifier: {
@@ -208,12 +298,44 @@ export function securityPlugins(
                 });
               } else if (method === "recovery") throw reject();
             }
-            const now = new Date();
-            await prisma.session.update({
-              where: { id: session.session.id },
-              data: { verifiedAt: now, authenticationMethod: method },
-            });
-            await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: now } });
+            const connectionToken = ctx.headers && googleConnectionToken(ctx.headers, baseURL);
+            if (connectionToken && !flow.sessionMaintenance) {
+              const pending = await pendingGoogleConnection(
+                prisma,
+                secret,
+                connectionToken,
+                method === "google" && flow.googleRegistration ? user.id : undefined,
+              );
+              if (!pending || pending.user?.id !== user.id) throw reject();
+              const existing = await prisma.account.findFirst({
+                where: { providerId: "google", accountId: pending.proof.subject },
+              });
+              if (existing && existing.userId !== user.id) throw reject();
+              if (!existing) {
+                const connected = await ctx.context.internalAdapter.linkAccount({
+                  providerId: "google",
+                  accountId: pending.proof.subject,
+                  userId: user.id,
+                });
+                if (!connected) throw reject();
+              }
+              await prisma.verification.delete({ where: { id: pending.record.id } });
+              await prisma.auditLog.create({
+                data: {
+                  category: "authentication",
+                  actorKind: "user",
+                  actorUserId: user.id,
+                  targetUserId: user.id,
+                  action: "security.google.connect",
+                  outcome: "success",
+                },
+              });
+              ctx.setCookie(
+                googleConnectionCookie(baseURL),
+                "",
+                googleConnectionCookieOptions(baseURL, 0),
+              );
+            }
             if (method === "totp" && typeof ctx.body?.code === "string")
               await prisma.verification.create({
                 data: {
@@ -222,16 +344,12 @@ export function securityPlugins(
                   expiresAt: new Date(Date.now() + 90_000),
                 },
               });
-            if (method !== "email")
-              await prisma.auditLog.create({
-                data: {
-                  category: "authentication",
-                  actorKind: "user",
-                  actorUserId: user.id,
-                  targetUserId: user.id,
-                  action: `security.sign_in.${method}`,
-                  outcome: "success",
-                },
+            if (!flow.sessionMaintenance)
+              await completeAuthentication(prisma, {
+                userId: user.id,
+                sessionId: session.session.id,
+                method,
+                invitationToken,
               });
           }),
         },
@@ -239,4 +357,14 @@ export function securityPlugins(
     },
   };
   return [webauthn, gated, policy];
+
+  // Identity is supplied only after the delivery boundary validates consent and
+  // consumes the staged proof. Library lifecycle hooks invoke app onboarding.
+  async function registerVerifiedAccount(ctx: GenericEndpointContext, email: string, name: string) {
+    const user = await ctx.context.internalAdapter.createUser({ email, name, emailVerified: true });
+    const session = await ctx.context.internalAdapter.createSession(user.id);
+    if (!session) throw reject();
+    await setSessionCookie(ctx, { session, user });
+    return ctx.json({ token: session.token, user });
+  }
 }

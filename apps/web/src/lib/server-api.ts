@@ -1,7 +1,7 @@
 import "server-only";
 import { webServerConfig } from "@nslinkhub/config/web-server";
 import { headers } from "next/headers";
-import { type ApiPath, postJson, readJson, safePath, sessionCookie } from "./http";
+import { type ApiPath, authCookies, postJson, readJson, safePath, sessionCookie } from "./http";
 
 export async function serverRead<T>(path: ApiPath, shareToken?: string) {
   const incoming = await headers();
@@ -9,7 +9,15 @@ export async function serverRead<T>(path: ApiPath, shareToken?: string) {
   const source = incoming.get("x-web-read-source");
   if (!source) throw new Error("Web server source attribution is missing");
   outgoing.set("x-web-read-source", source);
-  const cookie = sessionCookie(incoming.get("cookie") ?? "");
+  const cookie = (
+    [
+      "/api/v1/auth/google-connection",
+      "/api/v1/auth/account/recovery",
+      "/api/v1/auth/email-registration",
+    ].includes(path)
+      ? authCookies
+      : sessionCookie
+  )(incoming.get("cookie") ?? "");
   if (cookie) outgoing.set("cookie", cookie);
   if (shareToken) outgoing.set("x-share-token", shareToken);
   return readJson<T>(`${webServerConfig().apiOrigin}${safePath(path)}`, {

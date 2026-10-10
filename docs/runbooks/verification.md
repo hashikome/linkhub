@@ -57,6 +57,9 @@ classes/parameters; it stays enabled for `packages/*`, `tooling/`, and
 `biome check --write`).
 
 Requirements: `bun run infra:up` (PostgreSQL + Redis) for the e2e stage.
+For shared reader/preview changes, also run `bun run test:dev`: it checks the
+development-rendered example for fictional record links, in addition to the
+production browser journey.
 
 ## Local Enforcement
 
@@ -144,8 +147,15 @@ and production browser builds concurrently in the same checkout (`.next` is shar
 
 After dev-orchestrator or web-entry changes, run `bun run test:dev`. It migrates
 a disposable database, forces capture email, starts the real dev loop on
-temporary ports, checks SSR and the API rewrite, and verifies owned listeners
+temporary ports, checks SSR, direct API CORS and the absence of a web API rewrite,
+and verifies owned listeners
 stop on shutdown. Infrastructure stays up. Port-precedence fixtures also run
 in `bun run tooling:test`. The two-client browser budget regression uses Node's
 HTTP client only for source-bound socket fixtures because Bun's client ignores
 `localAddress`; both applications and all test runners use Bun.
+
+
+`TEST_DIRECT_API=1 bun run test:browser` repeats browser scenarios with a separate
+public API port and rejects API paths on the web ingress. Runtime public-origin
+configuration allows the same production build to test either topology. The API
+owns callback/session/factor handling; tests assert callback URLs use its origin.

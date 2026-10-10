@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { publicOrigins } from "@nslinkhub/config/public-origins";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { readSecret } from "../config/secret";
 import { emailConfig } from "../email/config";
@@ -20,8 +21,9 @@ export const auth = createDeliveryAuth({
   suppressionSecret: emailConfig().suppressionSecret,
   prisma,
   secret: readSecret("BETTER_AUTH_SECRET") ?? "dev-better-auth-secret",
-  // Direct API default; the development launcher sets the public web origin.
-  baseURL: process.env.BETTER_AUTH_URL ?? "http://localhost:4000",
+  // OAuth callbacks terminate at the API; browser destinations use the web origin.
+  baseURL: publicOrigins(process.env).authOrigin,
+  webOrigin: publicOrigins(process.env).webOrigin,
   // Isolated verification shortens the gap; the web reads the same variable.
   codeResendSeconds: Number(process.env.AUTH_CODE_RESEND_SECONDS) || undefined,
 });

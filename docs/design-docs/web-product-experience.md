@@ -1,6 +1,6 @@
 # Web product experience
 
-Status: public reading, email-code sign-in, account settings, Save a link,
+Status: public reading, passwordless sign-in, account settings, Save a link,
 collection details editing, discussion, attribution/History and service
 operations are implemented. Planned journeys are listed below;
 [PRODUCT.md](../../PRODUCT.md#11-delivery) owns delivery status and order.
@@ -28,15 +28,26 @@ Signed-in visitors also have Save a link, the appearance control and an
 avatar-only account menu: Profile, Hub, Notifications, Settings, Manage when
 authorized, and Sign out. Signed-out navigation keeps **Sign in**.
 
-The landing pairs **Save your first link** with **Sign in**. Its discovery copy
-is “Someone already found your next good read.” followed by “Discover the links
-someone kept.” A labelled, noninteractive example shows a real collection's
-structure: hub context, title, description, tags, headings, external links and
-a collection reference. No control promises an unbuilt action.
+The landing hero has one action: **Save your first link**. **Sign in** stays in
+the header alongside **Discover**. The supporting message follows the hero:
+“Turn your good finds into useful guides, share what you know, and discover what
+others have brought together.” Discovery is suggested in this copy rather than repeated in
+a separate section. A labelled example uses the current reader's metadata, tags,
+sections and resource disclosures, with one item's details initially expanded.
+Section headings collapse or expand their links; resource titles open working
+external destinations. Fictional identities have no profile or hub links, and
+ordinary disclosure toggles never change the landing URL or scroll on arrival.
+Both demo and real collections offer “Copy link to this item” from the first
+render, with visible confirmation and a manual-copy fallback. Demo links reopen
+the selected item on the landing page; collection links reopen it in its collection. The
+compact preview omits the full reader's sharing and discussion controls.
+Its “A web worth keeping” collection pairs Forte Labs' bookmark-organization
+article with Maggie Appleton's digital-garden essay: a practical organizing
+method and a perspective on cultivating and sharing knowledge.
 
 | Surface | Route and data | Main action |
 | --- | --- | --- |
-| Landing | `/` | Save your first link; Sign in; Discover |
+| Landing | `/` | Save your first link; Discover in the header |
 | Discover | `/discover`; `GET /api/v1/discover` | Open a collection |
 | Hub | `/@handle` or `/h/<hubId>`; hub lookup and authorized collection list | Open a collection |
 | Collection | `/c/<id>`; collection, resources and discussion APIs | Open a resource or referenced collection |
@@ -44,16 +55,34 @@ a collection reference. No control promises an unbuilt action.
 | Item details | `?item=<id>` on either collection address; authorized single-resource API | Expand metadata and attribution inline; open the destination |
 | Capture | `/capture`, `/capture/<draftId>` | Save one or two links |
 | Section authoring | `/c/<id>/sections`, optional `?section=<id>` | Owner/contributor adds a nonempty section or edits its description |
-| Collection details | `/c/<id>/edit` | Owner edits title, description and comment settings |
+| Collection editing | `/c/<id>/edit` | Owner edits collection details; owners/contributors manage sections and reorder items |
 | History | `/c/<id>/history` | Owner/contributor reads authorized activity |
 | Account | `/settings`, `/notifications` | Edit profile/hub; read invitation notices |
 | Manage | `/manage` and its sections | Authorized account/moderation work |
 
-Sharing UI is deferred to the sharing and hub-engagement slices. Its eventual
-controls must emit immutable `/c/<id>` or `/h/<hubId>` addresses; only an explicit
+The contextual [Share page](sharing.md) serves collections, hubs, profiles and
+the site. Controls emit immutable subject addresses; only an explicit
 access-link action may include the supplied collection token. Never attach
 it to an external URL, pretty browse link or referenced collection. A failed
 optional hub lookup must not hide an otherwise authorized collection read.
+
+### Unified sign-in entry
+
+Continue with email and Continue with Google share the saved sign-in destination.
+First-link capture goes directly to email-code verification. After email entry, offer a registered passkey or an email
+code without disclosing whether an account exists. Google may lead to inline
+verification. If there is no account, show Create your account with the
+email and two choices: Create account, or Already have an account? Sign in. The
+latter cancels the pending Google association and returns to ordinary sign-in with
+the destination intact, so the person can enter their email or choose Google again.
+Creation uses Google's verified email and name; no extra inbox code. Never silently register someone who chose the wrong Google account.
+Invitations keep their own email-code acceptance journey. See
+[ADR-0039](../engineering-decisions/0039-confirmed-google-account-creation.md).
+
+Google's verified email must equal the product account email on every sign-in,
+including after linking. Mismatches roll back authentication and redirect to
+Continue with email. Product copy speaks of creating an account or signing in;
+linking is an internal implementation detail, not onboarding language.
 
 ## Discover and hubs
 
@@ -123,11 +152,13 @@ private collection in one transaction. A failed save leaves no empty hub.
 
 ## Account and appearance
 
-Settings has Profile, Hub and Notifications sections, showing one at a time.
-Profile edits username and full name; email and member-since are read-only. Hub
-edits name, **Show owner** and description, lets the owner explicitly claim one
-permanent handle, and shows its immutable ID. Claimed handles appear as plain
-label/value facts matching Hub ID, not text inputs. Usernames remain freely editable.
+Settings has Profile, Hub and Notifications sections, plus Security at
+`/settings/security`. Profile edits username, full name and bio; email and
+member-since are read-only. Hub
+edits name, **Show owner**, description and handle, and shows its immutable ID.
+Handle has availability feedback and Save handle when eligible; a 30-day
+cooldown shows a read-only value and the next eligible date. Retired handles are
+never reusable. Shared UUID links survive renaming (ADR-0043). Usernames remain freely editable.
 View your public hub sits beneath Handle. Autosave retains newer drafts and provides
 Saving/Saved or retry feedback; a noscript Save changes button preserves native
 editing. Handle availability is advisory; backend validation decides the write.
@@ -135,15 +166,22 @@ Missing hubs show a first-save action instead of empty required fields.
 Hub.showOwner controls the public ownership connection in both directions;
 profile names remain visible, and authorization is unchanged.
 
+Account access and deletion is linked from Profile. Signed-in users choose
+email-confirmed deactivation or deletion. Signed-out visitors encounter recovery
+only after proving their email during sign-in or first-link capture: self-deactivated
+accounts see Reactivate account; eligible deletion schedules see Cancel deletion.
+The backend selects one action. Cancellation leaves the account inactive, and
+recovery requires fresh sign-in. See [email verification](email-verification.md).
+
 The header avatar resolves through server-proxied Gravatar for an eligible
 account's verified email, then our generated SVG. Settings has no picture preview
 or upload field; a help question below the profile fields links to
 `/support#profile-picture`. Support explains optional Gravatar setup and updates;
 a missing image is never presented as proof that no provider account exists.
-See [the avatar contract](identity-and-handles.md#gravatar-follow-up).
+See [the avatar contract](identity-and-handles.md#profile-pictures).
 Appearance lives only in the header: System → Light → Dark → System. Signed-out
 visitors follow the system preference; saved appearance applies only with a
-valid session. The footer has copyright, “an ns series product”, Discover and
+valid session. The footer has copyright, “an ns series product”, Share nslinkhub and
 Support. Readiness is API monitoring, with no client status page.
 
 Notifications currently lists service invitations as expandable messages,
@@ -154,7 +192,7 @@ point to that email; they never authorize acceptance themselves.
 ## Manage
 
 The shared workspace at `/manage` shows Accounts, Access, Collections, Team,
-Invitations and Audit according to the viewer’s capabilities. It uses tables, filters and explicit row actions with required
+Invitations, Analytics and Audit Log according to the viewer’s capabilities. It uses tables, filters and explicit row actions with required
 reasons. It never grants private-content access or exposes private previews.
 New invitation recipients consent before account creation; every recipient
 verifies a fresh invitation-bound code before a role activates.
@@ -162,8 +200,8 @@ verifies a fresh invitation-bound code before a role activates.
 Sensitive actions require recent verification. **Confirm it's you** sends
 nothing until requested, then resumes the waiting action once for its original
 account and operation ID. The [verification contract](email-verification.md)
-and [operator contract](service-operations.md) own the details. Owner and service controls share [Manage](manage-workspace.md), with explicit
-context where both apply. API permissions remain separate.
+and [operator contract](service-operations.md) own the details. Owner and service controls share [Manage](manage-workspace.md). Collections and
+Audit Log each use one permission-scoped projection; API permissions remain separate.
 
 ## Failures and acceptance
 
@@ -193,14 +231,14 @@ acceptance remain [release requirements](../runbooks/release.md).
 | Subscriptions | People subscribe to hubs; personal home and updates |
 | Home | Separate My collections, Shared with me, Saved and Subscriptions views |
 | Dormant saves | Keep the saved-list title and date with “Currently unavailable”; suppress tags/previews, allow removal, restore opening on republish |
-| Organizing items | Sections, references, reorder and keyboard alternatives; preview cards and notes |
-| Sharing and publishing | Per-collection viewer/contributor grants, access requests and invitations; explain publication without implying reference access |
-| Manage | Hub-wide collections, comments, access, subscribers/blocking, import/export and activity |
+| Organizing items | Preview cards, notes and targeting a section from Save a link; section authoring and reordering are implemented |
+| Sharing extensions | Access requests and email invitations; direct grants, access links, publishing and the contextual Share page are implemented |
+| Manage extensions | Hub-wide comments, subscribers/blocking, reviewed import/export and richer access controls; collection management and audit are implemented |
 | Bulk import | Reviewed drafts with per-row validation, folder destinations and deliberate partial commits |
 | Downloads | Markdown/PDF/Word, optional reference expansion, zip for several collections |
 | Notifications | Broader inbox kinds and per-kind/per-hub preferences |
-| Email change | Confirm current address then verify new address; completion revokes sessions; API exists, web screens pending |
-| Account deletion | Verified proof, export/transfer opportunity and explicit retention workflow; currently disabled |
+| Account email | Fixed; profile updates cannot change it. Controlled email change is backlog for a dedicated POST action (ADR-0041) |
+| Account export | Whole-account export automation before deletion; verified deactivation, deletion and contextual recovery are implemented |
 
 Focused designs own these details; planned routes must not appear as working
 navigation before their complete journeys exist.

@@ -9,6 +9,7 @@ import {
   OperationForm,
   OperatorNav,
 } from "../../../../components/operator-ui";
+import { TimeZoneFallbackNote } from "../../../../components/time-zone";
 import { failure, queryValue } from "../../../../lib/http";
 import { operatorRead } from "../../../../lib/operator-read";
 import { serverRead } from "../../../../lib/server-api";
@@ -44,9 +45,7 @@ export default async function Page({
         <a href={`/${encodeURIComponent(a.username)}`}>{a.username}</a>
       </header>
       <FormNotice code={queryValue(query.notice)} />
-      <noscript>
-        <p className="meta">Times shown in UTC.</p>
-      </noscript>
+      <TimeZoneFallbackNote />
       <dl className="account-details">
         <dt>User ID</dt>
         <dd>{a.id}</dd>

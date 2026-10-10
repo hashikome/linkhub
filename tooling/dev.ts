@@ -35,7 +35,8 @@ const env = {
   WEB_SOURCE_SECRET: crypto.randomUUID() + crypto.randomUUID(),
   WEB_SOURCE_SECRET_FILE: "",
   WEB_TRUSTED_PROXY_CIDRS: "",
-  BETTER_AUTH_URL: `http://localhost:${webPort}`,
+  BETTER_AUTH_URL: `http://localhost:${apiPort}`,
+  WEB_ORIGIN: `http://localhost:${webPort}`,
   API_INTERNAL_ORIGIN: `http://127.0.0.1:${apiPort}`,
   API_INTERNAL_ORIGIN_FILE: "",
 };

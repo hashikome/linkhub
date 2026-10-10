@@ -98,6 +98,7 @@ for (const mode of ["development", "test"]) {
         bootstrapAdmin: "",
       });
       expect(await probe("api-parent")).toEqual({
+        authOrigin: env.BETTER_AUTH_URL,
         apiOrigin: env.API_INTERNAL_ORIGIN,
         publicOrigin: env.BETTER_AUTH_URL,
         sourceSecret: env.WEB_SOURCE_SECRET,

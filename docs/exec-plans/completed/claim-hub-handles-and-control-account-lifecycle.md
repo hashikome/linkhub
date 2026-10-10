@@ -1,5 +1,7 @@
 # Claim hub handles and control the account lifecycle
 
+> Historical milestone. Handle claiming in this milestone was superseded by [ADR-0042](../../engineering-decisions/0042-editable-hub-handles.md) and [ADR-0043](../../engineering-decisions/0043-deliberate-hub-handle-changes.md). Current recovery presentation follows [ADR-0040](../../engineering-decisions/0040-contextual-account-recovery.md).
+
 ## Purpose / Big Picture
 
 A generated hub handle is provisional. People explicitly claim a permanent hub

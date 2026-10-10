@@ -9,7 +9,7 @@ import { AuthUser } from "src/common/interfaces/auth-user.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { recordAudit } from "../../common/audit";
 import { appError } from "../../common/errors/app-exception";
-import { hasValidHandleFormat, isReservedHandle } from "./handle";
+import { handleChangeAvailableAt, hasValidHandleFormat, isReservedHandle } from "./handle";
 
 // Hub authority for the individual (Google-Drive) model: each user owns exactly
 // one hub — their personal space. Ownership is the only hub authority;
@@ -57,7 +57,7 @@ export class HubsService {
     const reserved = await this.prisma.hubHandleReservation.findUnique({ where: { handle } });
     return {
       handle,
-      status: hub?.ownerUserId === userId ? "current" : reserved ? "taken" : "available",
+      status: hub?.ownerUserId === userId ? "current" : hub || reserved ? "taken" : "available",
     };
   }
 
@@ -95,9 +95,9 @@ export class HubsService {
     });
   }
 
-  // Claim the caller's permanent hub handle. Generated handles are provisional;
-  // every issued spelling remains reserved even after deletion.
-  async updateHandle(userId: string, rawHandle: string, confirm = false) {
+  // Retired handles are never reusable. A successful rename starts a 30-day
+  // cooldown; the reservation trigger enforces both rules atomically too.
+  async updateHandle(userId: string, rawHandle: string) {
     const handle = rawHandle.trim().toLowerCase();
     if (!hasValidHandleFormat(handle)) {
       throw appError("handle_invalid");
@@ -108,27 +108,26 @@ export class HubsService {
 
     const hub = await this.prisma.hub.findUnique({
       where: { ownerUserId: userId },
-      select: { id: true, handle: true, handleClaimedAt: true },
+      select: { id: true, handle: true, handleChangedAt: true },
     });
     if (!hub) {
       throw new NotFoundException("Hub not found");
     }
 
-    if (hub.handle !== handle && hub.handleClaimedAt) throw appError("handle_claimed");
-    if (hub.handle !== handle && !confirm) throw appError("handle_confirmation_required");
-    if (hub.handle !== handle || (confirm && !hub.handleClaimedAt)) {
+    if (hub.handle !== handle) {
+      if (handleChangeAvailableAt(hub.handleChangedAt)) throw appError("handle_change_cooldown");
       const taken = await this.prisma.hubHandleReservation.findUnique({
         where: { handle },
         select: { hubId: true },
       });
-      if (taken && taken.hubId !== hub.id) {
+      if (taken) {
         throw appError("handle_unavailable");
       }
       try {
         await this.prisma.$transaction(async (tx) => {
           await tx.hub.update({
             where: { id: hub.id, ownerUserId: userId },
-            data: { handle, handleClaimedAt: new Date() },
+            data: { handle },
           });
           await recordAudit(tx, {
             hubId: hub.id,

@@ -31,9 +31,10 @@
 [Service operations](design-docs/service-operations.md) checks current account
 availability and admin/operator grants in the backend, including raw auth/session
 paths and every content
-surface. Suspension revokes sessions, proofs and service roles; email
-change removes both service roles and cancels incoming/authored invitations. Recent code authentication is required
-for operator mutations. Startup/recovery only issues the initial admin invitation. The recipient must explicitly accept using the emailed token before a UUID
+surface. Suspension revokes sessions, proofs, applicable service roles and
+pending incoming/authored invitations. Account email is fixed; no email-change
+workflow is exposed. Recent completed authentication is required for operator
+mutations, with enrolled protection enforced. Startup/recovery only issues the initial admin invitation. The recipient must explicitly accept using the emailed token before a UUID
 grant exists, then verify a fresh invitation-bound email OTP. Consent creates no
 session or role; every recipient verifies, including matching signed-in accounts.
 Proof consumption, session creation, grant and audit commit atomically. Ordinary
@@ -78,42 +79,42 @@ reads remain audited. See [ADR-0022](engineering-decisions/0022-operator-account
 - Sign-up onboarding is app-owned and auth-path-agnostic so SSO
   (`docs/design-docs/identity-sso.md`) can be added without weakening any
   invariant.
-- Account linking (SSO or otherwise) is explicit: verified-email match or an
-  authenticated linking step — never silent takeover.
+- Completed authentication uses one transaction-scoped operation for session
+  assurance, last login, bound invitation completion and an account-bound audit
+  event. Registration and login follow the same rule; pending proofs/factors and
+  credential-management session rotation are not sign-in successes (ADR-0046).
+- Google linking uses a verified authoritative same-email match or inline
+  account proof, with enrolled factors enforced. Missing accounts require explicit
+  creation consent. Future SSO linking must preserve equivalent identity proof;
+  see [passwordless security](design-docs/passwordless-security.md).
 
 ## Origins, CORS, and CSRF
 
-**There is deliberately no CORS configuration anywhere, and none is missing.**
-Recorded so a future security review doesn't read the absence as an oversight:
+The API receives browser requests directly. Local development uses web port
+3000 and API port 4000; production ingress routes `/api/*` directly to Nest on
+one public origin. Next never proxies API paths (ADR-0036).
 
-- CORS is not an access-control mechanism — it is the server *relaxing* the
-  browser's Same-Origin Policy so foreign origins may read it. Configuring
-  nothing means no relaxation was ever granted: browser scripts on any other
-  origin cannot read API responses, enforced by every browser, at full
-  default strength. The absence *is* the implementation.
-- Nothing needs the relaxation by design: the web app is same-origin with the
-  API (one public origin, Traefik path-routes `/api/*`; Next.js rewrites in
-  dev — `docs/design-docs/infra-deployment.md` § Origins), and the planned
-  extension uses with `host_permissions` + bearer tokens, outside page
-  origin rules.
-- CORS could never be the security boundary anyway: non-browser clients
-  (curl, servers, apps) do not enforce the Same-Origin Policy. Real access
-  control is authentication (sessions/bearer) + `CollectionPolicyService` —
-  per the invariant that client-side behavior is never a security rule.
-- **CSRF is a separate concern**: a cross-origin page can send simple requests
-  even when it cannot read the response; whether cookies accompany them also
-  depends on cookie/site policy. JSON preflight is not sufficient protection
-  for every route: imports accept multipart and some commands are bodyless.
-  The HTTP boundary rejects every unsafe request carrying a session cookie
-  unless its Origin exactly matches `BETTER_AUTH_URL`, including multipart,
-  bodyless actions and bearer-plus-cookie requests. Missing/null/foreign
-  origins fail closed; cookie-free bearer clients remain supported. Auth routes
-  additionally retain better-auth origin checks. Browser fixtures exercise
-  issuance, session reads and origin enforcement through the actual web origin.
-  Each future mutation UI still owes its own end-to-end acceptance.
-- Adding a second public origin later is a deliberate act: CORS with exact
-  origins + credentials + exposed headers, together with better-auth
-  `trustedOrigins` — never a wildcard.
+- `BETTER_AUTH_URL` is the public backend origin; `WEB_ORIGIN` is the web
+  destination and the sole allowed browser Origin. Exact-origin credentialed
+  CORS allows GET/HEAD/POST/PUT/PATCH/DELETE, with content-type, x-share-token
+  and idempotency-key headers. Only X-Request-Id and Retry-After are exposed.
+  Preflight is handled before auth and request budgets; no wildcard or suffix
+  origin matching is allowed. Unapproved origins get no CORS permission.
+- CORS never grants product access. Sessions/bearers and backend policy services
+  remain authoritative for every request. Cookie-free bearer clients retain
+  their contract; the extension uses host permissions outside page CORS rules.
+- CSRF remains independent: every unsafe cookie-authenticated request must
+  carry exactly WEB_ORIGIN, including multipart, bodyless and bearer-plus-cookie
+  requests. Missing/null/foreign origins fail closed. Auth handlers also reject
+  cross-site mutations and retain Better Auth origin checks/trustedOrigins.
+- Backend callbacks set host-only cookies. Local API/web addresses must use the
+  same hostname and scheme (localhost on different ports); production keeps
+  one public origin. No cross-site cookie attributes or sibling-domain cookie
+  sharing are introduced. Passkeys verify the web origin and hostname RP ID.
+- Browser config contains only the validated public API origin. Private
+  API_INTERNAL_ORIGIN, source attribution and credentials remain server-only.
+  Native web forms still accept only the exact web origin and adapt input to
+  backend requests; business rules and OAuth exchange remain backend-owned.
 
 ## Boundary Validation
 
@@ -158,17 +159,23 @@ deactivation, reactivation, deletion and cancellation (ADR-0033). Deactivation
 retains data indefinitely; deletion schedules cleanup after 14 days. Cancellation
 before the deadline leaves the account inactive. Admins can separately schedule
 non-admin deletion under the [service operations policy](design-docs/service-operations.md).
-Profile writes accept neither email nor password. Password authentication is disabled in better-auth and
+Profile writes reject user UUID, email and password, including mixed-field updates. Password authentication is disabled in better-auth and
 its public signup, login, enrollment, change and reset routes are unavailable.
-Email change revokes every session; the person must sign in with the new
-address. It never transfers the account or hub. Account-action proofs bind the
+Account email is fixed; native and former app email-change routes are unavailable
+([ADR-0041](engineering-decisions/0041-fixed-account-email.md)). A future controlled
+identity change requires a dedicated POST action, never profile PUT/PATCH. Account-action proofs bind the
 action, account and operations version, plus the initiating session for active
 account actions. Recovery requires an eligible self-deactivated account and never
 lifts operator restrictions. Successful actions revoke access and commit with
 their audit record under the authority lock; recovery requires fresh sign-in.
+Ordinary sign-in reveals eligible recovery only after a correct email code:
+[ADR-0040](engineering-decisions/0040-contextual-account-recovery.md). Discovery
+creates no usable session. The ten-minute recovery capability binds UUID, email,
+version and action; preview and consent recheck current eligibility. Anonymous
+email entry remains uniform, and recovery never lifts operator restrictions.
 Issued hub handles remain reserved after deletion. See
 [auth integration](design-docs/auth-delivery-integration.md).
-Auth security outcomes, double-verified email changes and all-session
+Auth security outcomes, account recovery and all-session
 revocation are transaction-bound. Shared identity budgets complement source
 throttles; codes expire after five minutes with three wrong attempts allowed.
 Auth audits retain 90 days; collection audit/deletion policy remains separate.
@@ -295,10 +302,28 @@ code rotation require completed authentication within ten minutes, then revoke
 other sessions and pending challenges. No trusted-device or email-only recovery
 bypass exists. Account lifecycle recovery preserves enrolled protection.
 
-Google disables implicit and requested signup. Automatic first linking requires
+Google disables provider-only implicit and requested signup. [ADR-0039](engineering-decisions/0039-confirmed-google-account-creation.md) allows explicitly confirmed creation from a staged verified Google identity. For a missing account, callback creates no account/session; consent creates and links atomically without another inbox code. Invitations always require their separate email proof. Automatic first linking to an existing account requires
 an authoritative verified Gmail/Workspace email; other Google email addresses
-require explicit same-email linking from a recent product session. Linking binds
-the callback to that session and account version. Provider subject IDs identify
+complete a first-time same-email proof within sign-in (ADR-0037). The backend
+stages the state-validated provider subject in an encrypted, ten-minute,
+browser-bound record and connects it only with completed authentication,
+including any enrolled factor. Existing-account pending proof binds user UUID, email and account
+version; new-account proof requires absence at consent and creation by that same registration transaction; stale, replayed, revoked or mismatched proof fails closed. Optional
+explicit Settings linking still binds its callback to the initiating session and
+account version. Provider subject IDs identify
 subsequent logins. OAuth secrets support `_FILE` inputs; OAuth access/refresh tokens and TOTP/recovery
 secrets are encrypted by Better Auth. Neither public profiles nor client payloads
 expose stored credentials. Tests use synthetic provider credentials only.
+
+## Explicit ordinary registration
+
+[ADR-0044](engineering-decisions/0044-explicit-auth-entry-and-optional-hub.md) separates
+entry intent while keeping backend-owned authentication. Ordinary email verification
+of an unknown identity stages encrypted browser-bound proof, not a user/session.
+Only explicit confirmation creates; optional hub creation is atomic. Better Auth
+owns OTP expiry, attempts and atomic consumption. Expired/replayed proof and an
+account appearing between verification and creation fail closed. Starting a new
+independent email, Google, passkey or invitation flow discards old creation proof.
+Previews receive per-visitor attributed read budgets. Return destinations remain
+validated web context and cannot change account identity. Capture alone supplies
+explicit creation consent in its code request; invitations use their isolated flow.

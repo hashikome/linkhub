@@ -62,9 +62,11 @@
   event and retries on the next interval. No overlapping maintenance per
   process. Monitor backlog before raising limits or public traffic.
 - Auth audit records expire after 90 days; delivery metadata expires after
-  30 days. Collection audit has no automatic expiry. Account deletion and
-  collection-audit retention require an explicit policy before public exposure;
-  account deletion is disabled until a verified workflow and that policy exist.
+  30 days. Content audit has no automatic expiry. Verified self-service and admin-scheduled
+  account deletion use a 14-day grace period, then remove owned content and
+  anonymize retained contributions; retained audit identities do not cascade.
+  Review the retention policy before public exposure; see
+  [service operations](design-docs/service-operations.md#audit-reasons-and-retention).
 
 ## Service operations
 

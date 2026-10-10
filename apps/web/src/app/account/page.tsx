@@ -1,8 +1,8 @@
 import { type AccountAction, accountActions, type Profile } from "@nslinkhub/types";
 import type { Metadata } from "next";
 import { NativeForm } from "../../components/native-form";
-import { readAccountFlow } from "../../lib/form-server";
-import { queryValue } from "../../lib/http";
+import { readAccountFlow, readFlow } from "../../lib/form-server";
+import { queryValue, safeReturn } from "../../lib/http";
 import { serverRead } from "../../lib/server-api";
 
 export const metadata: Metadata = { title: "Account access and deletion" };
@@ -38,23 +38,84 @@ export default async function Page({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const query = await searchParams;
-  const [profile, flow] = await Promise.all([
+  const [profile, flow, recovery] = await Promise.all([
     serverRead<Profile>("/api/v1/profile"),
     readAccountFlow(),
+    serverRead<{
+      action: "reactivate" | "cancel_deletion";
+      email: string;
+      deletionScheduledFor: string | null;
+    }>("/api/v1/auth/account/recovery"),
   ]);
+  const done = accountActions.find((value) => value === queryValue(query.done));
+  // Recovery proves its own identity, which can differ from the current session.
+  if (recovery.ok || !profile.ok || done === "reactivate" || done === "cancel_deletion") {
+    const signIn = await readFlow();
+    const returnTo = safeReturn(signIn?.returnTo ?? "/hub");
+    const signInHref = `/sign-in?returnTo=${encodeURIComponent(returnTo)}`;
+    const saving = returnTo.startsWith("/capture/");
+    return (
+      <section className="reader account-flow verify">
+        <h1>
+          {recovery.ok ? labels[recovery.data.action] : done ? labels[done] : "Sign in to continue"}
+        </h1>
+        {query.notice && (
+          <p role="alert" className="form-notice error">
+            {query.notice === "expired"
+              ? "This confirmation expired. Sign in again to continue."
+              : "We couldn't confirm the result. Please try again."}
+          </p>
+        )}
+        {recovery.ok ? (
+          <>
+            <p className="verify-reason">
+              {recovery.data.action === "reactivate"
+                ? `Your account is deactivated. Reactivate it before ${saving ? "saving your link" : "signing in"}.`
+                : `Your account is scheduled for deletion. Cancel deletion to keep your account${saving ? " and return to saving your link" : ""}.`}
+            </p>
+            <p className="verify-detail">{recovery.data.email}</p>
+            <p>
+              {recovery.data.action === "reactivate"
+                ? "Your profile and collections will become available again. Sign in again afterward to continue."
+                : "Cancelling keeps your data. Your account stays deactivated until you reactivate it."}
+            </p>
+            <NativeForm action="/forms/account-recover">
+              <input type="hidden" name="confirm" value="yes" />
+              <div className="verify-actions">
+                <button type="submit" className="button primary">
+                  {labels[recovery.data.action]}
+                </button>
+              </div>
+            </NativeForm>
+            <div className="verify-footer">
+              <a href={signInHref}>Back to sign in</a>
+            </div>
+          </>
+        ) : (
+          <>
+            <p role={done ? "status" : undefined}>
+              {done
+                ? completed[done]
+                : "Sign in with your email. If your account needs reactivation or a deletion needs cancelling, we'll guide you after verifying your email."}
+            </p>
+            <a className="button primary" href={signInHref}>
+              Continue to sign in
+            </a>
+          </>
+        )}
+      </section>
+    );
+  }
   const verifying = queryValue(query.step) === "verify" && flow;
   const selected = verifying
     ? flow.action
     : accountActions.find((value) => value === queryValue(query.action));
-  const done = accountActions.find((value) => value === queryValue(query.done));
-  const actions: AccountAction[] = profile.ok
-    ? ["deactivate", "delete"]
-    : ["reactivate", "cancel_deletion"];
+  const actions: AccountAction[] = ["deactivate", "delete"];
   const notice = queryValue(query.notice);
   return (
     <section className="reader account-lifecycle">
-      <a className="back-link" href={profile.ok ? "/settings" : "/sign-in"}>
-        {profile.ok ? "Back to Settings" : "Back to sign in"}
+      <a className="back-link" href="/settings">
+        Back to Settings
       </a>
       <h1>{selected ? labels[selected] : "Account access and deletion"}</h1>
       {done && (
@@ -108,21 +169,7 @@ export default async function Page({
           ) : actions.includes(selected) ? (
             <NativeForm action="/forms/account-send">
               <input type="hidden" name="accountAction" value={selected} />
-              {profile.ok ? (
-                <p>We’ll send a confirmation code to {profile.data.email}.</p>
-              ) : (
-                <>
-                  <label htmlFor="account-email">Account email</label>
-                  <input
-                    id="account-email"
-                    type="email"
-                    name="email"
-                    required
-                    maxLength={254}
-                    autoComplete="email"
-                  />
-                </>
-              )}
+              <p>We’ll send a confirmation code to {profile.data.email}.</p>
               <button type="submit" className="button">
                 Send confirmation code
               </button>
@@ -147,12 +194,6 @@ export default async function Page({
             </a>
           </section>
         ))
-      )}
-      {!profile.ok && (
-        <p>
-          Operator restrictions cannot be lifted here. <a href="/support">Contact support</a> if you
-          need help.
-        </p>
       )}
     </section>
   );

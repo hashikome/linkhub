@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import type { Profile, UsernameAvailability } from "@nslinkhub/types";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { User } from "src/generated/prisma/client";
 import { appError } from "../../common/errors/app-exception";
+import { handleChangeAvailableAt } from "../hubs/handle";
 import { HubsService } from "../hubs/hubs.service";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import {
@@ -68,7 +69,26 @@ export class UsersService {
       throw new NotFoundException("User not found");
     }
 
-    const data: { name?: string; username?: string; bio?: string | null } = {};
+    const data: {
+      name?: string;
+      username?: string;
+      bio?: string | null;
+      timeZone?: string | null;
+    } = {};
+    if (dto.timeZone !== undefined) {
+      if (dto.timeZone === null) data.timeZone = null;
+      else {
+        try {
+          // IANA names/aliases, never a fixed numeric offset that ignores DST.
+          if (!/^[A-Za-z_]+(?:\/[A-Za-z0-9_+.-]+)*$/.test(dto.timeZone)) throw new Error();
+          data.timeZone = new Intl.DateTimeFormat("en", {
+            timeZone: dto.timeZone,
+          }).resolvedOptions().timeZone;
+        } catch {
+          throw new BadRequestException("Choose a valid timezone or Automatic.");
+        }
+      }
+    }
     if (dto.username !== undefined && dto.username !== user.username) {
       const available = await this.usernameAvailability(actor, dto.username);
       if (available.status === "invalid") throw appError("username_invalid");
@@ -87,7 +107,7 @@ export class UsersService {
 
     // The handle lives on the hub; validated + uniqueness-checked there.
     if (dto.handle) {
-      await this.hubs.updateHandle(user.id, dto.handle, dto.confirmHandle === true);
+      await this.hubs.updateHandle(user.id, dto.handle);
     }
 
     if (dto.hubName !== undefined) await this.hubs.updateName(user.id, dto.hubName);
@@ -104,20 +124,21 @@ export class UsersService {
       select: {
         id: true,
         handle: true,
+        handleChangedAt: true,
         name: true,
         description: true,
         showOwner: true,
-        handleClaimedAt: true,
       },
     });
     return {
       id: user.id,
       username: user.username,
-      handleClaimedAt: hub?.handleClaimedAt?.toISOString() ?? null,
       displayName: user.name,
       bio: user.bio,
+      timeZone: user.timeZone,
       showOwner: hub?.showOwner ?? null,
       handle: hub?.handle ?? null,
+      handleChangeAvailableAt: handleChangeAvailableAt(hub?.handleChangedAt),
       hubId: hub?.id ?? null,
       hubName: hub?.name ?? null,
       email: user.email,

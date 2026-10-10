@@ -40,11 +40,11 @@ still uses private creation defaults and has no billing or quota enforcement.
 
 ## Decision Log
 
-- User follow-up (2026-10-10): Gravatar profile avatars are the first implementation
-  task after whole-diff review and commit. Richer Gravatar profile display is a
-  later paid feature; field selection, consent, refresh and entitlement rules
-  remain open. Reuse the existing own-account avatar proxy; see the
-  [identity design](../../design-docs/identity-and-handles.md#gravatar-follow-up).
+- Completed follow-up (2026-10-10): public Gravatar avatars are implemented
+  through the backend proxy under ADR-0034. Richer Gravatar profile display
+  remains a later paid feature; field selection, consent, refresh and entitlement
+  rules remain open. See the
+  [identity design](../../design-docs/identity-and-handles.md#profile-pictures).
 
 - User clarification (2026-10-10): only the redirect-review process may update
   saved URLs, never generic PUT/PATCH. Each approval requires an explanatory note.

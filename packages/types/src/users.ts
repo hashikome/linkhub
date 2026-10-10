@@ -6,12 +6,15 @@ import type { IsoTimestamp } from "./envelope.js";
 export interface Profile {
   id: string;
   username: string;
-  handleClaimedAt: IsoTimestamp | null;
   displayName: string;
   bio: string | null;
+  /** Private display preference: IANA timezone, or null for the viewer's device. */
+  timeZone: string | null;
   /** Hub setting: publish its owner connection. Null when the person has no hub. */
   showOwner: boolean | null;
   handle: string | null;
+  /** Backend-derived next eligible handle change; null when available or without a hub. */
+  handleChangeAvailableAt: IsoTimestamp | null;
   hubId: string | null;
   hubName: string | null;
   email: string;
@@ -24,12 +27,12 @@ export interface Profile {
 export interface UpdateProfileRequest {
   /** Stored lowercase, 3–20 letters/digits with single internal hyphens. */
   username?: string;
-  /** Explicitly confirm the permanent hub handle choice. */
-  confirmHandle?: boolean;
   hubName?: string;
   displayName?: string;
   /** Public plain text, at most 500 characters. Empty string clears it. */
   bio?: string;
+  /** Null restores Automatic (device timezone). */
+  timeZone?: string | null;
   showOwner?: boolean;
   handle?: string;
   hubDescription?: string;

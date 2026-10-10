@@ -52,3 +52,42 @@ it.each([
     ),
   );
 });
+
+it.each([
+  "/api/v1/auth/google-connection",
+  "/api/v1/auth/account/recovery",
+  "/api/v1/auth/email-registration",
+])("attributes %s previews per visitor without weakening callback limits", async (previewPath) => {
+  const keys: string[] = [];
+  const prisma = {
+    $queryRaw: async (_sql: unknown, key: string) => {
+      keys.push(key);
+      return [{ count: 1 }];
+    },
+  } as unknown as PrismaService;
+  const sign = (source: string) => {
+    const payload = Buffer.from(JSON.stringify([1, source, Date.now()])).toString("base64url");
+    return `${payload}.${createHmac("sha256", "source").update(`web-read-source:${payload}`).digest("base64url")}`;
+  };
+  const middleware = requestBudget(prisma, "budget", "source");
+  for (const [path, source] of [
+    [previewPath, "192.0.2.7"],
+    [previewPath, "192.0.2.8"],
+    ["/api/v1/auth/callback/google", "192.0.2.7"],
+  ])
+    await middleware(
+      {
+        method: "GET",
+        path,
+        ip: "127.0.0.1",
+        get: (name: string) => (name === "x-web-read-source" ? sign(source) : undefined),
+      } as unknown as Request,
+      {} as Response,
+      () => {},
+    );
+  expect(keys).toEqual([
+    requestBudgetKey("read", "192.0.2.7", "budget"),
+    requestBudgetKey("read", "192.0.2.8", "budget"),
+    requestBudgetKey("auth", "127.0.0.1", "budget"),
+  ]);
+});

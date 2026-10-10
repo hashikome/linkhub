@@ -1,3 +1,4 @@
+import { browserApiOrigin } from "@nslinkhub/config/web-browser";
 import type { ApiWarning, CursorMeta } from "@nslinkhub/types";
 import { isApiErrorCode, SHARE_ATTRIBUTION_KEYS } from "@nslinkhub/types";
 
@@ -23,11 +24,11 @@ export type PasskeyPath =
 export async function submitPasskey<T>(path: PasskeyPath, body: unknown = {}): Promise<Result<T>> {
   const signal = AbortSignal.timeout(10000);
   try {
-    const response = await fetch(`/api/v1/auth${path}`, {
+    const response = await fetch(`${browserApiOrigin()}/api/v1/auth${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      credentials: "same-origin",
+      credentials: "include",
       cache: "no-store",
       redirect: "error",
       signal,
@@ -92,6 +93,7 @@ export async function readJson<T>(
   url: string,
   options: {
     headers?: HeadersInit;
+    credentials?: RequestCredentials;
     timeout: number;
     signal?: AbortSignal;
     fetcher?: typeof fetch;
@@ -105,7 +107,7 @@ export async function readJson<T>(
       signal,
       redirect: "error",
       cache: "no-store",
-      credentials: "same-origin",
+      credentials: options.credentials ?? "same-origin",
     });
     const payload = await response.json();
     if (!response.ok) {
@@ -167,7 +169,7 @@ export function authCookies(raw: string): string {
     .split(";")
     .map((v) => v.trim())
     .filter((v) =>
-      /^(?:__Secure-)?better-auth(?:\.(?:session_token|two_factor|oauth_state|state|dont_remember)|-passkey)=[^;\r\n]*$/.test(
+      /^(?:__Secure-)?better-auth(?:\.(?:session_token|two_factor|google_connection|email_registration|account_recovery|oauth_state|state|dont_remember)|-passkey)=[^;\r\n]*$/.test(
         v,
       ),
     )
@@ -202,11 +204,22 @@ export async function postJson<T>(
     const payload = await response.json();
     if (!response.ok) {
       const retry = response.headers.get("retry-after");
-      return failure(
-        isApiErrorCode(payload?.error?.code) ? payload.error.code : "unavailable",
-        response.status,
-        retry && /^\d+$/.test(retry) ? Number(retry) : 0,
-      );
+      return {
+        ...failure(
+          isApiErrorCode(payload?.error?.code) ? payload.error.code : "unavailable",
+          response.status,
+          retry && /^\d+$/.test(retry) ? Number(retry) : 0,
+        ),
+        // A restart can cancel pending identity proof even when code issuance is limited.
+        // Forward only these deletions on failure, never session creation cookies.
+        setCookies: response.headers
+          .getSetCookie()
+          .filter((cookie) =>
+            /^(?:__Secure-)?better-auth\.(?:google_connection|email_registration)=;.*; Max-Age=0(?:;|$)/.test(
+              cookie,
+            ),
+          ),
+      };
     }
     if (!options.raw && (!payload || !("data" in payload))) return failure();
     return {
@@ -217,7 +230,7 @@ export async function postJson<T>(
       setCookies: response.headers
         .getSetCookie()
         .filter((v) =>
-          /^(?:__Secure-)?better-auth(?:\.(?:session_token|two_factor|oauth_state|state|dont_remember)|-passkey)=/.test(
+          /^(?:__Secure-)?better-auth(?:\.(?:session_token|two_factor|google_connection|email_registration|account_recovery|oauth_state|state|dont_remember)|-passkey)=/.test(
             v,
           ),
         ),

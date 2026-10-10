@@ -33,6 +33,16 @@ local defaults (`postgresql://postgres:postgres@127.0.0.1:5436/nslinkhub`,
 Redis on 127.0.0.1:6383, dev better-auth secret). Set `BETTER_AUTH_SECRET` to
 a real value for anything beyond local development.
 
+The workstation registry at `/home/ns/Person/stack/docs/local-port-registry.md`
+assigns this project offset +4: PostgreSQL uses 5436 and Redis uses 6383.
+It explicitly exempts API port 4000 and web port 3000 from the offset. Local
+services bind to `127.0.0.1`; the production API binds to `0.0.0.0` for container
+networking. Pigfarm also defaults to web port 3000, so use an explicit
+`WEB_PORT` when running both projects. `bun run dev` aligns WEB_ORIGIN
+with that port. The Google callback follows the API PORT, independently. Ports are
+never selected automatically. Update the workstation registry if these
+published defaults change.
+
 ## Everyday Commands
 
 Root scripts follow the `<service>:<action>` convention (`infra:*`, `api:*`,
@@ -138,17 +148,20 @@ are in [auth delivery](../design-docs/auth-delivery-integration.md).
 
 Open `http://localhost:3000` after `bun run dev` for the landing page. `/discover`
 and `/c/<id>` are available alongside public hubs, profile/settings,
-notifications, email-code sign-in, capture, collection details editing,
-discussion, History and `/manage`. Resource organization and sharing controls
-remain planned. The
-root orchestrator sets `BETTER_AUTH_URL=http://localhost:3000` (or `WEB_PORT`)
+notifications, passwordless sign-in, capture, collection editing, sections and
+reordering, contextual sharing, discussion, History and `/manage`. Reviewed
+imports, preview cards and notes remain planned. The
+root orchestrator sets `BETTER_AUTH_URL=http://localhost:4000` (or `PORT`),
+`WEB_ORIGIN=http://localhost:3000` (or `WEB_PORT`)
 and the trusted `API_INTERNAL_ORIGIN=http://127.0.0.1:4000` (or `PORT`). Use
 `localhost` for the web entry so browser origin checks match. If starting
-processes separately, give both API and web the same public `BETTER_AUTH_URL` explicitly,
+processes separately, give both API and web those same two explicit origin settings,
 and set the same random `WEB_SOURCE_SECRET` (at least 32 characters) for API and
 web. Root `bun run dev` supplies a fresh shared secret automatically.
 
-The browser has no API-origin environment setting. Server reads use
+The web renders only the validated public API origin for direct browser reads,
+passkeys and avatar URLs. The backend admits the exact web origin with
+credentialed CORS; no Next API rewrite exists. Server reads use
 `API_INTERNAL_ORIGIN` (or `_FILE`, which takes precedence); production requires
 an explicit bare HTTP(S) origin. Development defaults to the local API port.
 Only API processes load `apps/api/.env`; the orchestrator reads just its effective
@@ -163,14 +176,13 @@ on web and `TRUSTED_PROXY_CIDRS` on API to the actual ingress addresses only.
 Ingress must overwrite caller-supplied forwarding headers. Web binds loopback
 by default; `WEB_HOST` changes its bind address for deployment networking.
 Production Next.js serves the web while ingress routes `/api/*` directly to
-the API on the same public origin. The dev rewrite is development-only.
+the API on the same public origin.
 `bun run test:browser` creates that routing with disposable loopback processes;
 see [verification](verification.md) for browser prerequisites and isolation.
 
-Service operators sign in through the ordinary code flow and receive an explicit
-product grant; no development account is automatically privileged. Follow
-[service operations](service-operations.md) for the interactive grant/recovery
-command. Apply pending migrations before starting API/web; tests use
+Service operators use ordinary passwordless sign-in and receive an explicit
+product grant through email-verified invitation acceptance; no development account is automatically privileged. Follow
+[service operations](service-operations.md) for invitation setup and the interactive admin-recovery command. Apply pending migrations before starting API/web; tests use
 disposable databases rather than developer data.
 
 ## Link metadata and code resend timing
@@ -210,13 +222,18 @@ tracked files, test fixtures or container images. Verification masks both values
 and file overrides.
 
 Register the exact public callback in the Google OAuth web client's authorized
-redirect URIs: `http://localhost:3000/api/v1/auth/callback/google` for the default
-local setup; use the configured public origin for other ports/environments.
+redirect URIs: `http://localhost:4000/api/v1/auth/callback/google` for the default
+local setup; use BETTER_AUTH_URL for other API ports/environments. Google returns
+to the backend, which exchanges the code and redirects to WEB_ORIGIN. Restart
+`bun run dev` after this origin configuration changes.
 Authorized JavaScript origin, if configured, is `http://localhost:3000`. Reusing a
 client from another product does not automatically register this callback; check
-consent-screen test-user restrictions too. Google sign-in only accepts existing
-accounts. External-email Google users first connect from Account security after
-signing in with email and any required factor.
+consent-screen test-user restrictions too. Google never creates an account on its
+own. Missing accounts explicitly confirm creation from their verified Google identity;
+existing accounts may need first-time email or passkey proof. Google email must
+always match the product account email; mismatches return to email sign-in.
+No Settings step is required. See ADR-0039; existing callback/client credentials
+remain valid.
 
 Use `localhost`, not a numeric loopback address, for browser passkeys. The RP ID
 is the public hostname. Production needs HTTPS; a credential registered for

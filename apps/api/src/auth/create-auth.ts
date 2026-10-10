@@ -3,7 +3,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma";
 import { bearer } from "better-auth/plugins";
 import { emitEvent } from "../common/observability/telemetry";
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
-import { accountUsername } from "../modules/users/account-onboarding";
+import { completeSignup, prepareSignup } from "../modules/users/signup-onboarding";
 import { authoritativeGoogleEmail, type GoogleCredentials } from "./security-config";
 import { type SecurityContext, securityPlugins } from "./security-plugins";
 
@@ -11,6 +11,7 @@ export interface AuthDependencies {
   prisma: PrismaClient | Prisma.TransactionClient;
   secret: string;
   baseURL: string;
+  webOrigin?: string;
   /** Plugins and transaction-scoped persistence are supplied by the delivery composition. */
   plugins?: BetterAuthPlugin[];
   google?: GoogleCredentials;
@@ -21,6 +22,7 @@ export function createAuth({
   prisma,
   secret,
   baseURL,
+  webOrigin = new URL(baseURL).origin,
   plugins = [],
   google,
   security = {},
@@ -35,7 +37,7 @@ export function createAuth({
         ),
     },
     appName: "nslinkhub",
-    onAPIError: { errorURL: `${new URL(baseURL).origin}/sign-in?notice=google-failed` },
+    onAPIError: { errorURL: `${webOrigin}/sign-in?notice=google-failed` },
     account: {
       encryptOAuthTokens: true,
       accountLinking: {
@@ -51,18 +53,39 @@ export function createAuth({
             ...google,
             disableImplicitSignUp: true,
             disableSignUp: true,
-            mapProfileToUser: (profile) => ({
-              emailVerified:
-                authoritativeGoogleEmail(profile) ||
-                (profile.email_verified === true &&
-                  security.googleLinkEmail === profile.email.toLowerCase()),
-            }),
+            mapProfileToUser: (profile) => {
+              if (
+                profile.email_verified === true &&
+                typeof profile.sub === "string" &&
+                profile.sub.length > 0 &&
+                profile.sub.length <= 255 &&
+                typeof profile.email === "string" &&
+                profile.email.length <= 254
+              )
+                security.googleIdentity = {
+                  subject: profile.sub,
+                  email: profile.email.toLowerCase(),
+                  name: typeof profile.name === "string" ? profile.name.trim().slice(0, 255) : "",
+                };
+              if (
+                security.googleLinkEmail &&
+                security.googleLinkEmail !== profile.email?.toLowerCase()
+              )
+                security.googleEmailMismatch = true;
+              return {
+                emailVerified:
+                  authoritativeGoogleEmail(profile) ||
+                  (profile.email_verified === true &&
+                    security.googleLinkEmail === profile.email.toLowerCase()),
+              };
+            },
           },
         }
       : {},
     basePath: "/api/v1/auth",
     secret,
     baseURL,
+    trustedOrigins: [webOrigin],
     database: prismaAdapter(prisma, { provider: "postgresql" }),
     // configureApp applies shared source budgets before every HTTP auth route;
     // delivery-auth adds shared identity budgets and the library's OTP attempt
@@ -77,9 +100,14 @@ export function createAuth({
       "/request-password-reset",
       "/reset-password",
       "/forget-password",
+      "/update-user",
+      "/change-email",
+      "/email-otp/request-email-change",
+      "/email-otp/change-email",
     ],
     user: {
       deleteUser: { enabled: false },
+      changeEmail: { enabled: false },
       additionalFields: { username: { type: "string", required: false, input: false } },
     },
     advanced: {
@@ -91,12 +119,22 @@ export function createAuth({
     databaseHooks: {
       user: {
         create: {
+          after: async (user) => {
+            await completeSignup(prisma, user.id, security.registrationHubName);
+          },
           before: async (user) => ({
-            data: { ...user, username: await accountUsername(prisma, user.name) },
+            data: {
+              ...user,
+              ...(await prepareSignup(prisma, user.name, security.registrationHubName)),
+            },
           }),
         },
       },
     },
-    plugins: [...plugins, ...securityPlugins(prisma, secret, baseURL, security), bearer()],
+    plugins: [
+      ...plugins,
+      ...securityPlugins(prisma, secret, baseURL, security, webOrigin),
+      bearer(),
+    ],
   });
 }

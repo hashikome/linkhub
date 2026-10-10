@@ -10,8 +10,10 @@ export function ResourceSections({
   collectionId,
   canEdit = false,
   selectedItem,
+  preview = false,
 }: {
   items: Resource[];
+  preview?: boolean;
   section?: Resource;
   selectedItem?: Resource;
   itemBase?: string;
@@ -43,6 +45,7 @@ export function ResourceSections({
                 key={selectedItem.id}
                 item={selectedItem}
                 itemBase={itemBase}
+                preview={preview}
                 expanded={selectedId === selectedItem.id}
                 onExpandedChange={(open) => select(selectedItem.id, open)}
               />
@@ -85,6 +88,7 @@ export function ResourceSections({
                           key={item.id}
                           item={item}
                           itemBase={itemBase}
+                          preview={preview}
                           expanded={item.id === selectedId}
                           onExpandedChange={(open) => select(item.id, open)}
                         />
@@ -106,6 +110,7 @@ export function ResourceSections({
                   key={item.id}
                   item={item}
                   itemBase={itemBase}
+                  preview={preview}
                   expanded={item.id === selectedId}
                   onExpandedChange={(open) => select(item.id, open)}
                 />

@@ -89,7 +89,7 @@ sections, subject to the backend's nonempty rule. Compact relative commands carr
 source and drag-target versions; expired sessions use account-bound continuation.
 Full-order and relative moves advance versions and reject stale submissions.
 Clicking non-interactive expanded item content collapses its details; title,
-attribution and permalink anchors retain navigation, and selecting text does not
+attribution links retain navigation, copy controls remain actionable, and selecting text does not
 collapse the item. Native summaries retain keyboard/no-JavaScript toggling.
 
 Targeting a section from Save a link and bulk import folder organization remain
@@ -108,12 +108,20 @@ remove).
 ## Item details (implemented)
 
 Link and collection-reference rows expand metadata and attribution inline using
-native disclosures. There is no dialog, Close details action or heading Details
-link. Title links still open their destination. **Link to this item** preserves
-the containing collection address, token and cursor and adds `?item=<itemId>`.
-On either collection address, that URL opens authorized item context inline,
-including an item beyond the first page. These interactions work without
-JavaScript; reloading restores default section visibility and URL-selected content.
+native disclosures. Known contributors appear as **Added by [username]** followed
+by the timestamp; the username links to their public profile. The backend records
+the actual adding user for new resources. Items predating contributor tracking
+can have no recorded author; those show the timestamp alone rather than guessing
+from current ownership. Historical credit requires evidence of the original
+contributor. Inactive or deleted people are not exposed through this attribution.
+Title links open the resource destination. **Copy link to this item** copies
+the containing collection address with its token/cursor and `?item=<itemId>`,
+without navigating. Success is announced; clipboard failure shows a selectable
+URL. The copy label stays consistent before and after hydration. Without
+JavaScript, **Open item link to copy its address** is a native permalink. On either
+collection address, the URL opens authorized item context inline, including an
+item beyond the first page. Reloading restores default section visibility and
+URL-selected content. See [sharing](sharing.md) for the complete copy contract.
 
 `GET /collections/:id/resources/:resourceId` authorizes the containing collection
 first, looks up the item within that collection and hub, and uses the same
@@ -164,8 +172,9 @@ implicitly reused by intents begun before that first collection was created.
 Returning intents require a destination choice. Retry receipts recheck current
 ownership/access and resource existence; deletion never recreates content on replay.
 Receipts retain only IDs, a SHA-256 input fingerprint and creation time, with no
-URL or authored text. Retention currently follows the no-automatic-account-deletion
-boundary; future cleanup must define an explicit idempotency window.
+URL or authored text. Receipts have no scheduled expiry or cascading account foreign key. A future
+cleanup policy must define the retry/idempotency window; account deletion does
+not make a retained receipt authorize access or recreate removed content.
 
 The web retains at most three independent 30-minute AES-GCM draft cookies, each
 below browser cookie limits; a draft that would outgrow its cookie drops tags

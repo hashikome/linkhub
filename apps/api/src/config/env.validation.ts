@@ -1,3 +1,4 @@
+import { publicOrigins } from "@nslinkhub/config/public-origins";
 // Startup configuration validation (plain function — no schema dependency).
 // Every variable stays optional with in-code local defaults; validation only
 // rejects values that are present but malformed, so a bad deployment fails
@@ -21,6 +22,7 @@ export function validateEnv(config: Record<string, unknown>): Record<string, unk
   const env = config as Record<string, string | undefined>;
   telemetryConfig(env);
   googleCredentials(env);
+  publicOrigins(env);
   trustedProxies(env.TRUSTED_PROXY_CIDRS);
 
   // Zero-config is a development affordance only. In production the in-code

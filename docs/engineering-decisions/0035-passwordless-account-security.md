@@ -2,6 +2,17 @@
 
 Status: accepted (2026-10-10).
 
+First-link UX amended by [ADR-0037](0037-inline-google-connection.md): any
+additional ownership proof happens inside sign-in; Settings is not required.
+
+Google onboarding and entry presentation are amended by
+[ADR-0038](0038-email-owned-google-onboarding.md) and
+[ADR-0039](0039-confirmed-google-account-creation.md). The current policy permits
+explicitly confirmed new-account creation from verified Google identity without
+another inbox code. Existing-account first proof can use email or a registered
+passkey. The original decision below explains the earlier restriction; consult
+[passwordless security](../design-docs/passwordless-security.md) for the current contract.
+
 ## Context
 
 Email codes avoid passwords but combining them with authenticator codes adds

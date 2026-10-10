@@ -68,7 +68,7 @@ PNG, and Chromium rendered the 128px source in the public profile's 64px contain
 
 ## References
 
-- [Identity and handles](../design-docs/identity-and-handles.md#gravatar-follow-up)
+- [Identity and handles](../design-docs/identity-and-handles.md#profile-pictures)
 - [Gravatar image requests](https://docs.gravatar.com/sdk/images/)
 - [Identifier hashing](https://docs.gravatar.com/rest/hash/)
 - [Profile API](https://docs.gravatar.com/rest-api/)

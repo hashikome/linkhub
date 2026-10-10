@@ -83,7 +83,11 @@ export async function CaptureForm({
                 <option value="new">New private collection</option>
                 {collections.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.title} · updated {relativeTime(c.updatedAt)}
+                    {c.title} · updated{" "}
+                    {relativeTime(
+                      c.updatedAt,
+                      profile.ok ? (profile.data.timeZone ?? "UTC") : "UTC",
+                    )}
                     {c.published
                       ? " · Published"
                       : c.linkSharingEnabled

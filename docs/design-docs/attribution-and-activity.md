@@ -1,7 +1,8 @@
 # Attribution and activity
 
-Status: API and web contributors/History are implemented. Item `addedBy` is
-available in the API; its details presentation awaits preview cards. Manage's
+Status: API and web contributors/History are implemented. Expanded item details
+show `addedBy` as a linked username and timestamp; unknown attribution shows only
+the timestamp. Manage's
 hub audit view is implemented but provisional; notes and blocking are planned. Decision:
 [ADR-0015](../engineering-decisions/0015-attribution-from-activity-records.md).
 
@@ -10,12 +11,12 @@ fundamental operations ([ADR-0020](../engineering-decisions/0020-logging-after-c
 The existing History and attribution contract continues. Its use of audit rows
 does not settle the future relationship between activity and audit evidence.
 
-The subsequently authorized [bounded effect slice](../engineering-decisions/0021-bounded-audit-effects.md)
+The [bounded effect contract](../engineering-decisions/0021-bounded-audit-effects.md)
 captures actual changes for core management operations below.
 
 ## Activity entries
 
-content-category records in `audit_logs` is the append-only source for attribution and hub audit. Each
+Content-category records in `audit_logs` are the append-only source for attribution and hub audit. Each
 entry records the hub, actor, action, target IDs and database time in the same
 transaction as the change. It contains no names, emails, tokens or authored text.
 

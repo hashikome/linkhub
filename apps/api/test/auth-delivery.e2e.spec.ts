@@ -4,9 +4,9 @@ import { resolve } from "node:path";
 import { signInCodePurposes } from "@nslinkhub/types";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { CODE_RESEND_SECONDS, createDeliveryAuth } from "../src/auth/delivery-auth";
-import { handoverIdentifiers } from "../src/auth/handover-proofs";
 import { emailKey, unseal } from "../src/email/outbox";
 import { PrismaClient } from "../src/generated/prisma/client";
+import { expectSignIns } from "./fixtures/authentication-audit";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -56,6 +56,7 @@ async function signup(email = address()) {
     email,
     code: await code(email),
     name: "Delivery Test",
+    createAccount: true,
   });
   expect(response.status).toBe(200);
   return {
@@ -71,6 +72,7 @@ describe("transactional codes-only auth", () => {
   it("records only committed successful logins, independently of session reads and expiry", async () => {
     const started = Date.now();
     const owner = await signup();
+    await expectSignIns(prisma, owner.user.id, ["email"]);
     const read = async () =>
       (await prisma.user.findUniqueOrThrow({ where: { id: owner.user.id } })).lastLoginAt;
     expect((await read())?.getTime()).toBeGreaterThanOrEqual(started);
@@ -96,8 +98,10 @@ describe("transactional codes-only auth", () => {
     ).toBe(503);
     expect(await read()).toEqual(previous);
     expect(await prisma.session.count({ where: { userId: owner.user.id } })).toBe(1);
+    await expectSignIns(prisma, owner.user.id, ["email"]);
     expect((await call("/code/verify", { email: owner.email, code: validCode })).status).toBe(200);
     const recorded = await read();
+    await expectSignIns(prisma, owner.user.id, ["email", "email"]);
     expect(recorded?.getTime()).toBeGreaterThanOrEqual(started);
     await prisma.session.deleteMany({ where: { userId: owner.user.id } });
     expect(await read()).toEqual(recorded);
@@ -192,8 +196,13 @@ describe("transactional codes-only auth", () => {
     });
     expect(stored.value).not.toContain(otp);
     const res = await Promise.all([
-      call("/code/verify", { email, code: otp }),
-      call("/code/verify", { email, code: otp }, undefined, createDeliveryAuth(config)),
+      call("/code/verify", { email, code: otp, createAccount: true }),
+      call(
+        "/code/verify",
+        { email, code: otp, createAccount: true },
+        undefined,
+        createDeliveryAuth(config),
+      ),
     ]);
     expect(res.map((r) => r.status).sort()).toEqual([200, 400]);
     const user = await prisma.user.findUniqueOrThrow({ where: { email } });
@@ -277,252 +286,48 @@ describe("transactional codes-only auth", () => {
       expect((await call("/code/verify", { email: limited, code: wrong })).status).toBe(400);
     expect((await call("/code/verify", { email: limited, code: latest })).status).toBe(403);
   });
-  it("binds handover to initiating session and target, revokes every session atomically", async () => {
+  it("keeps email and account identity fixed across retired and native update routes", async () => {
     const owner = await signup();
-    // Adversarial dormant credential: even a pre-removal local row must not
-    // let its former holder sign in after handover. This is not a migration.
-    const context = await auth.$context;
-    const oldPassword = "DormantPassword123!";
-    await context.internalAdapter.linkAccount({
-      userId: owner.user.id,
-      accountId: owner.user.id,
-      providerId: "credential",
-      password: await context.password.hash(oldPassword),
-    });
-    // Make the capture regression deterministic: this address appears before
-    // the actual proof in the confirmation message.
-    const next = `delivery-12345678-${randomUUID()}@example.com`;
-    await call("/code/send", { email: owner.email });
-    const second = await call("/code/verify", {
-      email: owner.email,
-      code: await code(owner.email),
-    });
-    const secondToken = second.headers.get("set-auth-token") ?? "";
-    expect((await call("/email-change/start", { newEmail: next }, owner.token)).status).toBe(200);
-    const current = await code(owner.email);
-    expect(
-      (await call("/email-change/confirm-current", { code: current }, secondToken)).status,
-    ).toBe(400);
-    expect(
-      (
-        await call(
-          "/email-change/confirm-current",
-          { code: current, newEmail: address() },
-          owner.token,
-        )
-      ).status,
-    ).toBe(400);
-    expect(
-      (await call("/email-change/confirm-current", { code: current }, owner.token)).status,
-    ).toBe(200);
-    const newCode = await code(next);
-    const broken = createDeliveryAuth({
-      ...config,
-      beforeCommit: async () => {
-        throw new Error("commit failure");
-      },
-    });
-    expect(
-      (await call("/email-change/confirm-new", { code: newCode }, owner.token, broken)).status,
-    ).toBe(503);
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.user.id } })).email).toBe(
-      owner.email,
-    );
-    expect(await prisma.session.count({ where: { userId: owner.user.id } })).toBe(2);
-    expect((await call("/email-change/confirm-new", { code: newCode }, owner.token)).status).toBe(
-      200,
-    );
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.user.id } })).email).toBe(
-      next,
-    );
-    expect(await prisma.session.count({ where: { userId: owner.user.id } })).toBe(0);
-    expect((await call("/sign-in/email", { email: next, password: oldPassword })).status).toBe(404);
-    await expect(
-      auth.api.signInEmail({ body: { email: next, password: oldPassword } }),
-    ).rejects.toThrow();
-    expect(await prisma.session.count({ where: { userId: owner.user.id } })).toBe(0);
-    const recipient = await signup(next);
-    expect(recipient.user.id).toBe(owner.user.id);
-
-    expect((await call("/email-change/start", { newEmail: address() }, owner.token)).status).toBe(
-      401,
-    );
-  });
-  it("isolates colliding native handover identifiers across accounts and outbox messages", async () => {
-    const prefix = `collision-${randomUUID()}`;
-    const first = await signup(`${prefix}@first.com`);
-    const second = await signup(`${prefix}@first.com-second.com`);
-    const firstTarget = "second.com-bob@example.com";
-    const secondTarget = "bob@example.com";
-    expect(`change-email-otp-${first.email}-${firstTarget}`).toBe(
-      `change-email-otp-${second.email}-${secondTarget}`,
-    );
-    // Issue the second workflow first so the vulnerable shared identifier's
-    // newest proof is delivered to the first target, which the attacker owns.
-    for (const [owner, target] of [
-      [second, secondTarget],
-      [first, firstTarget],
-    ] as const) {
-      expect((await call("/email-change/start", { newEmail: target }, owner.token)).status).toBe(
-        200,
-      );
-      expect(
-        (
-          await call(
-            "/email-change/confirm-current",
-            { code: await code(owner.email) },
-            owner.token,
-          )
-        ).status,
-      ).toBe(200);
-    }
-    const firstCode = await code(firstTarget);
-    expect(
-      (
-        await call(
-          "/email-change/confirm-new",
-          { code: firstCode },
-          second.token,
-          createDeliveryAuth(config),
-        )
-      ).status,
-    ).toBe(400);
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: second.user.id } })).email).toBe(
-      second.email,
-    );
-    const secondCode = await code(secondTarget);
-    expect(
-      await prisma.emailOutbox.count({
-        where: {
-          state: "pending",
-          recipientKey: {
-            in: [firstTarget, secondTarget].map((to) =>
-              emailKey(suppressionSecret, "recipient", to),
-            ),
+    const next = address();
+    const before = await prisma.user.findUniqueOrThrow({ where: { id: owner.user.id } });
+    const messages = await prisma.emailOutbox.count();
+    for (const token of [undefined, owner.token]) {
+      for (const path of [
+        "/email-change/start",
+        "/email-change/confirm-current",
+        "/email-change/confirm-new",
+        "/change-email",
+        "/email-otp/request-email-change",
+        "/email-otp/change-email",
+        "/update-user",
+      ]) {
+        const response = await call(
+          path,
+          {
+            id: randomUUID(),
+            email: next,
+            newEmail: next,
+            name: "Must not change",
+            code: "12345678",
           },
-        },
-      }),
-    ).toBe(2);
-    expect(
-      (await call("/email-change/confirm-new", { code: secondCode }, second.token)).status,
-    ).toBe(200);
-    expect((await call("/email-change/confirm-new", { code: firstCode }, first.token)).status).toBe(
-      200,
-    );
-    for (const [owner, target] of [
-      [first, firstTarget],
-      [second, secondTarget],
-    ] as const) {
-      const user = await prisma.user.findUniqueOrThrow({ where: { id: owner.user.id } });
-      expect(user.email).toBe(target);
-      expect(user.emailVerified).toBe(true);
-      expect(await prisma.session.count({ where: { userId: user.id } })).toBe(0);
+          token,
+        );
+        expect(response.status).toBe(404);
+        expect(response.headers.get("set-cookie")).toBeNull();
+      }
     }
-  });
-  it("invalidates both handover proofs and pending mail on restart, including a return to the same target", async () => {
-    const owner = await signup();
-    const firstTarget = address();
-    const otherTarget = address();
-    expect((await call("/email-change/start", { newEmail: firstTarget }, owner.token)).status).toBe(
-      200,
-    );
-    const firstCurrent = await code(owner.email);
+    expect(await prisma.user.findUniqueOrThrow({ where: { id: owner.user.id } })).toEqual(before);
+    expect(await prisma.user.findUnique({ where: { email: next } })).toBeNull();
+    expect(await prisma.emailChangeIntent.count({ where: { userId: owner.user.id } })).toBe(0);
+    expect(await prisma.emailOutbox.count()).toBe(messages);
     expect(
-      (await call("/email-change/confirm-current", { code: firstCurrent }, owner.token)).status,
-    ).toBe(200);
-    const firstNew = await code(firstTarget);
-    // Return to the same account/session/address tuple: prior proof rows must
-    // be invalidated, not merely hidden while another target is selected.
-    expect((await call("/email-change/start", { newEmail: otherTarget }, owner.token)).status).toBe(
-      200,
-    );
-    const otherCurrent = await code(owner.email);
-    expect((await call("/email-change/start", { newEmail: firstTarget }, owner.token)).status).toBe(
-      200,
-    );
-    expect(
-      (await call("/email-change/confirm-current", { code: firstCurrent }, owner.token)).status,
-    ).toBe(400);
-    expect(
-      (await call("/email-change/confirm-current", { code: otherCurrent }, owner.token)).status,
-    ).toBe(400);
-    expect(
-      (await call("/email-change/confirm-current", { code: await code(owner.email) }, owner.token))
-        .status,
-    ).toBe(200);
-    expect((await call("/email-change/confirm-new", { code: firstNew }, owner.token)).status).toBe(
-      400,
-    );
-    const freshNew = await code(firstTarget);
-    const wrong = freshNew === "00000000" ? "11111111" : "00000000";
-    for (let i = 0; i < 2; i++)
-      expect((await call("/email-change/confirm-new", { code: wrong }, owner.token)).status).toBe(
-        400,
-      );
-    expect((await call("/email-change/confirm-new", { code: freshNew }, owner.token)).status).toBe(
-      403,
-    );
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.user.id } })).email).toBe(
-      owner.email,
-    );
-    expect(
-      await prisma.emailOutbox.count({
-        where: {
-          recipientKey: emailKey(suppressionSecret, "recipient", firstTarget),
-          state: "cancelled",
-          payload: null,
-        },
+      await auth.api.getSession({
+        headers: new Headers({ authorization: `Bearer ${owner.token}` }),
       }),
-    ).toBe(1);
-    // Another restart creates a usable fresh challenge after exhaustion.
-    expect((await call("/email-change/start", { newEmail: firstTarget }, owner.token)).status).toBe(
-      200,
-    );
-    expect(
-      (await call("/email-change/confirm-current", { code: await code(owner.email) }, owner.token))
-        .status,
-    ).toBe(200);
-    expect(
-      (await call("/email-change/confirm-new", { code: await code(firstTarget) }, owner.token))
-        .status,
-    ).toBe(200);
+    ).not.toBeNull();
   });
-  it("never falls back to legacy native handover proof rows", async () => {
+  it("does not expose native proof bypasses or accept cross-origin issuance", async () => {
     const owner = await signup();
-    const target = address();
-    await call("/email-change/start", { newEmail: target }, owner.token);
-    const current = await code(owner.email);
-    await call("/email-change/confirm-current", { code: current }, owner.token);
-    const proof = await code(target);
-    // Simulate a still-live row from the previous implementation by moving
-    // the library-issued proof to its old identifier without changing it.
-    const intent = await prisma.emailChangeIntent.findUniqueOrThrow({
-      where: { userId: owner.user.id },
-    });
-    const identifiers = handoverIdentifiers(secret, intent);
-    expect(
-      (
-        await prisma.verification.updateMany({
-          where: { identifier: identifiers.next },
-          data: { identifier: `change-email-otp-${owner.email}-${target}` },
-        })
-      ).count,
-    ).toBe(1);
-    expect((await call("/email-change/confirm-new", { code: proof }, owner.token)).status).toBe(
-      400,
-    );
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.user.id } })).email).toBe(
-      owner.email,
-    );
-  });
-  it("does not accept generic sign-in proof for current-address confirmation or expose native bypasses", async () => {
-    const owner = await signup();
-    await call("/code/send", { email: owner.email });
-    const signInCode = await code(owner.email);
-    await call("/email-change/start", { newEmail: address() }, owner.token);
-    expect(
-      (await call("/email-change/confirm-current", { code: signInCode }, owner.token)).status,
-    ).toBe(400);
     for (const path of [
       "/email-otp/send-verification-otp",
       "/email-otp/change-email",

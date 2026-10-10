@@ -10,6 +10,7 @@ import { PrismaService } from "../src/database/prisma.service";
 import { emailConfig } from "../src/email/config";
 import { emailKey, unseal } from "../src/email/outbox";
 import { prepareAdminInvitation } from "../src/operations/invitations";
+import { expectSignIns } from "./fixtures/authentication-audit";
 import { signInWithCode } from "./fixtures/sign-in";
 
 describe("email-entry service invitations (HTTP)", () => {
@@ -336,6 +337,7 @@ describe("email-entry service invitations (HTTP)", () => {
         .send({ token: i.token, code: loginCode })
         .expect(400);
     const user = await p.user.findUniqueOrThrow({ where: { email: i.email } });
+    await expectSignIns(p, user.id, []);
     await p.$executeRawUnsafe(
       "CREATE FUNCTION fail_verify() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'test'; END $$",
     );
@@ -348,6 +350,7 @@ describe("email-entry service invitations (HTTP)", () => {
         .expect(503);
       expect(await p.operatorGrant.findUnique({ where: { userId: user.id } })).toBeNull();
       expect(await p.session.count({ where: { userId: user.id } })).toBe(0);
+      await expectSignIns(p, user.id, []);
       expect((await p.user.findUniqueOrThrow({ where: { id: user.id } })).emailVerified).toBe(
         false,
       );
@@ -360,6 +363,7 @@ describe("email-entry service invitations (HTTP)", () => {
     }
     await as("post", "/api/v1/auth/invitations/verify").send({ token: i.token, code }).expect(200);
     await as("post", "/api/v1/auth/invitations/verify").send({ token: i.token, code }).expect(409);
+    await expectSignIns(p, user.id, ["email"]);
   });
   it("keeps operator administration admin-only and role authority separate from private content", async () => {
     await as("post", "/api/v1/operations/operator-invitations", operator)

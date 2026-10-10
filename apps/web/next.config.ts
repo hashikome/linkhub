@@ -1,8 +1,6 @@
-import { webServerConfig } from "@nslinkhub/config/web-server";
 import type { NextConfig } from "next";
-import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 
-export default function config(phase: string): NextConfig {
+export default function config(): NextConfig {
   return {
     poweredByHeader: false,
     agentRules: false,
@@ -16,11 +14,6 @@ export default function config(phase: string): NextConfig {
     },
     logging: { incomingRequests: false },
     experimental: { serverComponentsHmrCache: false },
-    async rewrites() {
-      return phase === PHASE_DEVELOPMENT_SERVER
-        ? [{ source: "/api/:path*", destination: `${webServerConfig().apiOrigin}/api/:path*` }]
-        : [];
-    },
     async headers() {
       return [
         {

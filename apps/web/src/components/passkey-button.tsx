@@ -19,10 +19,14 @@ export function PasskeyButton({
   register = false,
   returnTo = "/hub",
   pending = false,
+  email,
+  googleConnection = false,
 }: {
   register?: boolean;
   returnTo?: string;
   pending?: boolean;
+  email?: string;
+  googleConnection?: boolean;
 }) {
   const [supported, setSupported] = useState<boolean | null>(null),
     [busy, setBusy] = useState(false),
@@ -65,7 +69,7 @@ export function PasskeyButton({
               if (result.backupCodes) setCodes(result.backupCodes);
               else window.location.assign("/settings/security?notice=security-saved");
             } else {
-              if (!pending) {
+              if (!pending && !email && !googleConnection) {
                 const started = await submitForm(
                   "/forms/auth-start",
                   new URLSearchParams({ returnTo }),
@@ -75,7 +79,11 @@ export function PasskeyButton({
               }
               const optionsJSON = await post<
                 Parameters<typeof startAuthentication>[0]["optionsJSON"]
-              >("/passkey/generate-authenticate-options");
+              >("/passkey/generate-authenticate-options", {
+                continueSignIn: pending,
+                ...(email ? { email } : {}),
+                ...(googleConnection ? { googleConnection: true } : {}),
+              });
               const response = await startAuthentication({ optionsJSON });
               await post("/passkey/verify-authentication", { response });
               finish.current?.requestSubmit();

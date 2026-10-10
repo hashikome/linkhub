@@ -9,6 +9,156 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Fixed authenticator enrollment after an abandoned Google connection: session
+  maintenance skips pending Google sign-in completion and preserves session assurance.
+- Fixed account recovery while signed in as another account: verified recovery
+  takes precedence over session account controls and retains its return destination.
+- Added all completed sign-in methods to audit filters, search labels and account
+  target presentation; code-verification attempts remain a separate action.
+
+- Unified successful authentication completion across email registration/sign-in,
+  Google, passkeys, TOTP and recovery. Session assurance, last login, bound invitation
+  completion and one account-bound success event now share the transaction; removed
+  duplicate email writers. Credential enrollment no longer counts session rotation
+  as a new sign-in. Signup identity/optional-hub policy lives behind app-owned hooks.
+
+- Added an account timezone preference in Profile settings, stored on User in the
+  database. Automatic follows the device; explicit choices apply across devices,
+  initial rendering, relative dates and audit calendar filters, including DST.
+- Fixed the landing demo to use stable fictional sample timestamps, so relative
+  ages progress naturally instead of resetting on each page load.
+
+- Show exact timestamps in the reader's local time without timezone suffixes.
+  Automatic waits for device formatting instead of flashing UTC; without
+  JavaScript, Automatic retains an explicitly labelled UTC fallback.
+- Strengthened resource typography in collections and the landing demo: 18px
+  semibold titles lead 16px regular descriptions, with smaller attribution metadata.
+- Restored the header appearance toggle for signed-out readers, defaulting to System.
+  Readers toggle between Light and Dark; signed-in users retain an explicit System
+  choice. Temporary reader choices stay separate from saved signed-in preferences.
+- Removed the Google completion screen: successful sign-in returns automatically
+  to its destination; interrupted writes retain checked POST completion.
+- Unified demo and collection item copying, including the initial-render label.
+  Demo links reopen the exact example item instead of navigating to fictional collections.
+
+- Added separate, centered Sign in to nslinkhub and Create your account pages with
+  shared email-first authentication and Google as the secondary option. Unknown
+  ordinary accounts require explicit creation after verification, reusing proof
+  without another code. Return destinations and focused capture/invitation flows
+  are preserved; obsolete entry controls and copy were removed.
+- Added optional Start with a hub during account creation. A chosen hub name creates
+  the hub atomically with the account; its initial handle matches the generated
+  username and avoids current/retired handles. Hub creation stays off by default.
+
+- Isolated Save handle from ordinary profile autosave, including native forms.
+  Invalid handle drafts no longer block other edits; pending renames lock only
+  the handle and preserve newer profile drafts. Changing the sign-in email keeps
+  the original destination, including collection item links and interrupted actions.
+
+- Fixed public-view navigation silently saving draft hub handles; only explicit
+  saves rename a handle. Recovery previews use per-visitor read budgets, and the
+  dev-loop check follows the email-first sign-in entry. Added regression coverage.
+
+- Reconciled current documentation with implemented authentication, account lifecycle,
+  handle cooldown/retirement, sharing, attribution and management behavior. Updated
+  product summaries, onboarding and active plans; corrected ADR amendment chains
+  and marked superseded milestone evidence without rewriting its history.
+
+- Handle changes now require 30 days between successful renames. Retired handles
+  can never be reused, even by the same owner. Backend and SQL enforce the policy;
+  Settings explains it and shows the next eligible date. Existing rename history
+  initializes cooldowns; unchanged-handle saves and other profile edits still work.
+
+- Hub handles can change with the hub's purpose. Removed permanent claiming,
+  its API/UI fields and database claim metadata; Settings keeps the handle editable
+  with Save handle. Shared UUID links stay stable. ADR-0042 supersedes ADR-0033's permanence
+  rule; ADR-0043 subsequently tightens reuse and rename cadence.
+
+- Fixed account email as an identity policy: ordinary profile updates reject
+  user UUID and email, while names and bios remain editable. Retired the old
+  email-change API and native profile-update route. Controlled email change is
+  backlog for a dedicated POST action with proof, notifications and audit (ADR-0041).
+
+- Replaced the generic sign-in recovery link with state-specific recovery after
+  email proof. Deactivated users see Reactivate account; users within the deletion
+  grace period see Cancel deletion. The backend binds and rechecks recovery proof,
+  creates no session, preserves restrictions, and retains the saved-link destination.
+
+- Confirmed Google account creation now uses the provider's verified email and
+  name without an additional inbox code. The backend atomically creates the user,
+  Google connection and session only after Create account consent, with expiry,
+  cancellation, replay, collision and rollback protection. Gravatar uses the
+  existing backend email-based lookup; Google profile photos are not imported.
+
+- Simplified missing-account Google onboarding to Create account or Already have
+  an account? Sign in. Returning clears the pending Google association and preserves
+  the original destination. First-link capture now uses email codes directly;
+  ordinary sign-in retains email/Google and automatic same-email association.
+
+- Unified sign-in entry around email and Google, with passkeys offered after email
+  entry or Google. New Google users explicitly confirm account creation from their
+  verified provider identity; the callback alone creates nothing. Invitation and
+  confirmation flows discard abandoned Google state and forward cancellation
+  cookies. Selected-email passkeys remain bound to the backend challenge. Google email must
+  match on every sign-in; mismatches return to email entry. New-user screens
+  clearly offer account creation without exposing linking mechanics.
+
+
+- Clear abandoned Google associations when starting ordinary email or standalone
+  passkey sign-in, allowing account switching immediately. Preserve bound Google
+  verification and factor continuation, with transactional cancellation and
+  regression coverage for the backend and browser flows.
+
+- Verify expanded items credit the actual adding contributor before the date,
+  with a profile link. Document unknown historical attribution and restore the
+  confirmed contributor on 17 legacy local items without changing added dates.
+
+- Make expanded collection items visibly grouped with a persistent neutral
+  background, fine boundary and separation from neighboring rows, including
+  when the pointer moves away and when JavaScript is disabled.
+
+- Replace the expanded collection item's self-navigation action with “Copy link
+  to this item”, so readers can point someone to an exact resource in a guide.
+  Confirm successful copying, offer manual copying when the clipboard fails,
+  and retain native item links without JavaScript.
+
+- Keep the landing example's “Link to this item” affordance and point it directly
+  to the same external resource as its title. Eliminate fictional collection and
+  profile routes; check development and production rendering.
+- Use “A web worth keeping” for the example, with verified resources about
+  organizing bookmarks and cultivating a digital garden. Lead the supporting
+  message with useful guides, shared knowledge and discovery.
+
+- Fold the homepage discovery invitation into the hero's supporting message and
+  remove the separate discovery section. Keep the interactive example and one
+  primary action, with Discover available in the header. Balance the invitation
+  beside the example with closer columns, a stable vertically centered message
+  and a larger primary CTA.
+
+- Refresh the homepage example with the current collection reader components:
+  collapsible sections, working resource titles, item tags and expandable
+  details. Keep fictional identities off real routes and preserve the homepage
+  URL and initial scroll position. Expanding the example leaves the desktop
+  headline and action in place.
+
+- Move “Share nslinkhub” from the homepage discovery section into the shared
+  footer alongside Support.
+- Keep “Save your first link” as the sole homepage hero action; retain Sign in
+  and Discover in the header.
+
+- Connect Google automatically within sign-in for existing same-email accounts.
+  External-email Google users complete a first-time email check inline, followed
+  by any enrolled factor; no Settings detour is required. Pending connections
+  expire, reject changed accounts and commit atomically with authentication.
+
+- Route browser API requests and Google callbacks directly to the backend,
+  following Pigfarm: remove the Next rewrite, add exact-origin credentialed CORS,
+  and separate web redirects/passkeys/public links from the backend auth URL.
+  Avatar lookup and fallback remain backend-owned; the browser displays API images.
+
+- Bind the development API to loopback to match the workstation port registry;
+  document the API/web port exceptions and concurrent Pigfarm configuration.
+
 - Add passwordless account security: user-verified passkeys, existing-account
   Google sign-in, optional authenticator apps and single-use recovery codes.
   Protected email/Google sign-ins require another enrolled proof; email cannot

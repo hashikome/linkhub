@@ -1,7 +1,7 @@
 # ns-series identity and single sign-on
 
 Status: accepted direction; integration is not built. Local email codes,
-user-verified passkeys, existing-account Google and optional TOTP/recovery are
+user-verified passkeys, Google sign-in and confirmed account creation and optional TOTP/recovery are
 implemented. [ADR-0035](../engineering-decisions/0035-passwordless-account-security.md)
 explicitly amends delivery order to ship these methods before nsauth. Delivery order is in
 [PRODUCT.md](../../PRODUCT.md#11-delivery).
@@ -56,11 +56,13 @@ stay in the product.
    `AuthUser` through `resolveSessionUser`; better-auth types stay behind that
    boundary. Onboarding is callable from any supported authentication path.
 
-Account disable/delete, email change and identity-wide logout are low-frequency
+Account disable/delete and identity-wide logout are low-frequency
 identity signals delivered through authenticated HTTP callbacks. The ns-series
 direction does not require a message broker; product background jobs use their
 own BullMQ/Redis queues. Callback authentication, replay protection and failure
-recovery must be specified and tested in the integration plan.
+recovery must be specified and tested in the integration plan. Product email
+remains fixed (ADR-0041); an IdP callback cannot silently change it. Any future
+email-change signal requires the dedicated identity-change policy first.
 
 ## Implementation and acceptance
 
@@ -81,6 +83,6 @@ uses the [ns-series platform](infra-deployment.md).
 [Service operations](service-operations.md) is implemented independently of
 nsauth. The initial admin accepts a startup invitation; admins invite operators;
 every recipient explicitly consents and verifies a fresh invitation-bound code.
-Grants use immutable local IDs. A verified email change revokes service grants,
-sessions and pending invitations. Recovery requires a fresh invitation; an IdP
+Grants use immutable local IDs. Account email is fixed; suspension revokes
+applicable grants, sessions and pending invitations. Recovery requires a fresh invitation; an IdP
 claim never restores authority or grants private-content access.

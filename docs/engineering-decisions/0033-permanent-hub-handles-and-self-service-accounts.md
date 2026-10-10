@@ -1,6 +1,14 @@
 # ADR-0033: Permanent hub handles and self-service account lifecycle
 
-Status: Accepted (2026-10-10).
+Status: **Superseded for hub-handle permanence** by
+[ADR-0042](0042-editable-hub-handles.md) (2026-10-10). Account lifecycle and
+historical spelling reservations remain accepted. [ADR-0043](0043-deliberate-hub-handle-changes.md)
+sets the current 30-day cadence and forbids retired-spelling reuse by anyone.
+Recovery presentation is refined
+by [ADR-0040](0040-contextual-account-recovery.md).
+
+The decision below records the original policy; permanent claims, their UI/API
+fields and the exceptional claim-reset procedure are no longer implemented.
 Amends ADR-0002/0018's mutable hub handles and ADR-0023's operator-only lifecycle.
 Username rules in ADR-0026 remain unchanged.
 

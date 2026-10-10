@@ -7,9 +7,11 @@ export function ItemDisclosure({
   itemId,
   collectionId,
   onExpandedChange,
+  preview = false,
 }: {
   children: ReactNode;
   expanded: boolean;
+  preview?: boolean;
   itemId: string;
   collectionId: string;
   onExpandedChange?: (open: boolean) => void;
@@ -18,7 +20,7 @@ export function ItemDisclosure({
   // Only a directly opened/mounted selection scrolls; ordinary clicks stay put.
   // biome-ignore lint/correctness/useExhaustiveDependencies: This is initial document selection, not every user toggle.
   useEffect(() => {
-    if (expanded) element.current?.scrollIntoView({ block: "start" });
+    if (expanded && !preview) element.current?.scrollIntoView({ block: "start" });
   }, []);
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: The native summary provides Enter/Space toggling; body clicks extend its pointer target.
@@ -29,6 +31,7 @@ export function ItemDisclosure({
       open={expanded}
       onToggle={(event) => {
         onExpandedChange?.(event.currentTarget.open);
+        if (preview) return;
         const url = new URL(window.location.href);
         if (event.currentTarget.open) url.searchParams.set("item", itemId);
         else if (url.searchParams.get("item") === itemId) url.searchParams.delete("item");
@@ -42,7 +45,7 @@ export function ItemDisclosure({
         // text inside the body must remain usable without closing the item.
         if (
           !(target instanceof Element) ||
-          target.closest("summary, a, button, input, select, textarea, [contenteditable]") ||
+          target.closest("summary, a, button, label, input, select, textarea, [contenteditable]") ||
           window.getSelection()?.toString()
         )
           return;

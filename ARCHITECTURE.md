@@ -17,7 +17,8 @@ User (1:0..1) Hub → Collections → Resources (links, references, headings)
 ```
 
 People have usernames and profiles; hubs have independent handles and names.
-Signup creates an account. First link/collection creation or receipt of a
+Signup creates an account and, when explicitly selected, a named hub with a matching
+initial username/handle. Otherwise first link/collection creation or receipt of a
 transferred collection creates its hub in the same transaction. See
 [people and hubs](docs/design-docs/people-and-hubs.md).
 
@@ -32,7 +33,11 @@ backed by PostgreSQL 18 (Prisma 7 with the pg driver adapter); BullMQ on Redis
 delivers email from a PostgreSQL outbox through a separate worker. Auth is
 self-hosted better-auth (database sessions, bearer plugin, email codes only)
 mounted as raw middleware ahead of body parsing. The Next.js web app is an
-HTTP-only client; an MV3 browser extension is planned.
+HTTP-only client; an MV3 browser extension is planned. Browser API requests and
+OAuth callbacks reach Nest directly: distinct local ports with exact-origin CORS,
+production ingress path routing. BETTER_AUTH_URL addresses the backend and
+WEB_ORIGIN addresses web destinations. Native forms/SSR remain delivery adapters
+(ADR-0036); Gravatar and all authentication/business rules stay in the API.
 
 ```txt
 apps/
@@ -65,7 +70,7 @@ ref/               disposable, git-ignored implementation context
 
 | Area | Owns |
 | --- | --- |
-| `auth` (`apps/api/src/auth`) | better-auth instance + account-username onboarding hook; handler mounted in `app.setup.ts` |
+| `auth` (`apps/api/src/auth`) | better-auth adapter + app-owned signup hooks and shared transactional authentication completion; handler mounted in `app.setup.ts` |
 | `common/guards` | `AuthGuard`/`OptionalAuthGuard` via `resolveSessionUser` |
 | `hubs` | one-hub-per-user ownership + handle management (`HubsService`), collection access policy — owner → direct share → link → published independently for each collection (`CollectionPolicyService`) |
 | `email` (`apps/api/src/email`) | encrypted PostgreSQL outbox, BullMQ relay/worker, capture/Resend providers, signed delivery webhooks and cleanup |
@@ -84,9 +89,13 @@ ref/               disposable, git-ignored implementation context
 
 ```txt
 User            — global identity (better-auth). userId immutable; name (the
-                  full name), username, email, image mutable. No role column.
+                  full name), username and bio editable; account email fixed (ADR-0041).
+                  Private timeZone preference is nullable (Automatic/device); explicit
+                  IANA choices persist across devices (ADR-0045).
+                  Avatars use the backend Gravatar/generated projection; stored vendor
+                  image URLs do not select the displayed picture. No role column.
 Hub             — the user's optional publishing space. hubId immutable; ownerUserId
-                  (unique FK, at most one per user); handle (unique, permanent once claimed) — the public
+                  (unique FK, at most one per user); handle (unique, editable every 30 days; no reuse, ADR-0043) — the public
                   identity; name and description.
 HubHandleReservation — issued handle and originating hub ID; survives hub deletion.
 Collection      — belongs to a hub (hubId = owner). creatorUserId immutable
@@ -99,8 +108,8 @@ Resource        — an item in a collection; the smallest unit of content.
                   title), added_by_user_id (who added it), tags (ItemTag relation),
                   position, version. What belongs to
                   an item (address, page title, target, section text) is
-                  fixed; only what people add (tags, position; notes planned)
-                  is editable.
+                  fixed; tags, position and heading descriptions are editable
+                  context; per-item notes remain planned.
 Tag             — UUIDv7 identity with a unique normalized name.
 ItemTag         — item/tag association, retaining the item's tag order.
 CollectionTag   — stored collection/tag association with an internal item count;
@@ -218,9 +227,10 @@ explicit shared boundary.
 7. **Auth boundary.** better-auth owns credentials, sessions, and verification
    primitives; the product owns identity, authorization, and workflows. Session
    resolution goes through `resolveSessionUser`; services consume `AuthUser`.
-   Sign-up onboarding (account username creation) is an app-owned service callable
-   from any auth path, so the later SSO integration is an integration, not a
-   rewrite.
+   Sign-up onboarding (generated identity and optional hub) is app-owned and
+   callable from any auth path. Shared transactional completion owns session
+   assurance and successful authentication evidence (ADR-0046), so later SSO
+   integrates with these boundaries rather than duplicating their rules.
 8. **Stable envelopes.** Success `{ data, meta? }`; failure
    `{ error: { code, message, requestId, details } }`; every response carries a
    server-generated PII-free `X-Request-Id`. Growth-prone lists paginate by

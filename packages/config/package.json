@@ -7,6 +7,7 @@
   "exports": {
     "./tsconfig.base.json": "./tsconfig.base.json",
     "./web-browser": "./src/web-browser.ts",
-    "./web-server": "./src/web-server.ts"
+    "./web-server": "./src/web-server.ts",
+    "./public-origins": "./src/public-origins.ts"
   }
 }

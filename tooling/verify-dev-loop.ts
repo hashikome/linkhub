@@ -38,6 +38,8 @@ await withTestDatabase(async ({ url }) => {
     stderr: "ignore",
   });
   if (await migration.exited) throw new Error("Dev fixture migration failed");
+  await Bun.write("/tmp/w3-dev-loop.log", "");
+  await Bun.write("/tmp/w3-dev-loop-errors.log", "");
   child = Bun.spawn(["bun", "tooling/dev.ts"], {
     cwd: root,
     env,
@@ -45,11 +47,12 @@ await withTestDatabase(async ({ url }) => {
     stderr: Bun.file("/tmp/w3-dev-loop-errors.log"),
   });
   let ready = false;
-  for (let i = 0; i < 90; i++) {
+  const deadline = Date.now() + 90000;
+  while (Date.now() < deadline) {
     if (child.exitCode !== null) throw new Error("Dev orchestrator exited early");
     try {
-      const response = await fetch(`http://127.0.0.1:${webPort}`, {
-        signal: AbortSignal.timeout(2000),
+      const response = await fetch(`http://localhost:${webPort}/discover`, {
+        signal: AbortSignal.timeout(10000),
       });
       if (response.ok && (await response.text()).includes("No published collections yet.")) {
         ready = true;
@@ -59,15 +62,50 @@ await withTestDatabase(async ({ url }) => {
     await Bun.sleep(250);
   }
   if (!ready) throw new Error("Dev web did not become ready");
+  const landing = await fetch(`http://localhost:${webPort}/`);
+  const example = (await landing.text()).match(
+    /<figure\b[^>]*aria-label="Example collection"[^>]*>([\s\S]*?)<\/figure>/,
+  )?.[1];
+  const exampleLinks = [...(example ?? "").matchAll(/<a\b[^>]*href="([^"]+)"/g)].map(
+    (match) => match[1],
+  );
+  const resourceLinks = exampleLinks.filter((href) => href.startsWith("https://"));
+  const itemLinks = exampleLinks.filter((href) => href.startsWith("/?item="));
+  const copyButtons = [
+    ...(example ?? "").matchAll(/<button\b[^>]*>Copy link to this item<\/button>/g),
+  ];
+  if (
+    !landing.ok ||
+    !example ||
+    exampleLinks.length !== 4 ||
+    resourceLinks.length !== 2 ||
+    itemLinks.length !== 2 ||
+    copyButtons.length !== 2 ||
+    itemLinks.some((href) => {
+      const link = new URL(href, "http://localhost");
+      return link.hash !== `#item-${link.searchParams.get("item")}`;
+    })
+  )
+    throw new Error(
+      "Dev example must show resource titles, copy buttons and demo-only native item links",
+    );
   const signIn = await fetch(`http://127.0.0.1:${webPort}/sign-in`);
-  if (!signIn.ok || !(await signIn.text()).includes("Sign in to nslinkhub"))
+  if (!signIn.ok || !(await signIn.text()).includes('action="/forms/email-start"'))
     throw new Error("Dev sign-in page did not render");
   const output = await Bun.file("/tmp/w3-dev-loop.log").text();
   if (!output.includes(`[web] Ready at http://localhost:${webPort}`))
     throw new Error("Dev web did not announce its ready URL");
-  const proxied = await fetch(`http://127.0.0.1:${webPort}/api/v1/discover`);
-  if (!proxied.ok || (await proxied.json()).data.length !== 0)
-    throw new Error("Dev rewrite failed");
+  const direct = await fetch(`http://localhost:${apiPort}/api/v1/discover`, {
+    headers: { Origin: `http://localhost:${webPort}` },
+  });
+  if (
+    !direct.ok ||
+    (await direct.json()).data.length !== 0 ||
+    direct.headers.get("access-control-allow-origin") !== `http://localhost:${webPort}`
+  )
+    throw new Error("Direct API read or exact-origin CORS failed");
+  const removed = await fetch(`http://localhost:${webPort}/api/v1/discover`);
+  if (removed.status !== 404) throw new Error("Web still handles API paths");
   await stop();
   for (const port of [apiPort, webPort]) {
     try {
@@ -77,5 +115,7 @@ await withTestDatabase(async ({ url }) => {
       if (e instanceof Error && e.message.startsWith("Owned dev")) throw e;
     }
   }
-  console.log("Dev loop passed: API/worker/web scripts, ready URL, sign-in, rewrite and shutdown.");
+  console.log(
+    "Dev loop passed: API/worker/web scripts, ready URL, example links, sign-in, direct API, CORS, absent rewrite and shutdown.",
+  );
 }, stop);

@@ -1,11 +1,16 @@
 import { Toast } from "./toast";
 
 const messages: Record<string, string> = {
+  "registration-expired":
+    "This account creation step expired. Start again to verify your identity.",
+  "registration-invalid":
+    "Enter a hub name of up to 255 characters, or leave Start with a hub unchecked.",
   "security-saved": "Your security settings have been updated.",
   "security-reconfirm": "Sign in again before changing your security settings.",
   "google-linked": "Google is connected to your account.",
-  "google-failed":
-    "Google sign-in could not be completed. Sign in with email, then connect Google in Security settings. Google cannot create an account here.",
+  "google-email-mismatch":
+    "Your Google email must match your account email. Continue with email to sign in.",
+  "google-failed": "Google sign-in could not be completed. Try again or continue with email.",
   "order-saved": "Order saved.",
   "section-saved": "Section saved.",
   "link-saved": "Link saved.",
@@ -22,8 +27,8 @@ const messages: Record<string, string> = {
   "profile-invalid": "Check your profile fields, then try again.",
   "username-unavailable": "That username is already in use. Choose another.",
   "username-invalid": "Choose a different username using lowercase letters, numbers and hyphens.",
-  "handle-claimed": "Your hub handle is permanent. Reload Settings to see the saved handle.",
-  "handle-confirmation-required": "Confirm your permanent hub handle choice before saving.",
+  "handle-cooldown":
+    "You can change your hub handle once every 30 days. Reload Settings to see when.",
   "handle-unavailable": "That hub handle is already in use. Choose another.",
   "handle-invalid": "Choose a different hub handle using lowercase letters, numbers and hyphens.",
   "invitation-accepted":

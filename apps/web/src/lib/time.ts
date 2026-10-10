@@ -38,7 +38,8 @@ export function shortTime(at: string, timeZone?: string, now = Date.now()) {
   if (minutes < 60) return `${minutes}m`;
   if (minutes < 1440) return `${Math.floor(minutes / 60)}h`;
   if (minutes < 10080) return `${Math.floor(minutes / 1440)}d`;
-  const sameYear = date.getFullYear() === new Date(now).getFullYear();
+  const year = new Intl.DateTimeFormat("en", { year: "numeric", timeZone });
+  const sameYear = year.format(date) === year.format(new Date(now));
   return date.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
@@ -61,4 +62,36 @@ export function internationalTime(at: string, timeZone?: string) {
   const value = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value ?? "";
   return `${value("year")}-${value("month")}-${value("day")} ${value("hour")}:${value("minute")}:${value("second")}`;
+}
+
+// Calendar dates and filter boundaries use the same zone as displayed rows.
+export function calendarDate(at: string, timeZone: string) {
+  const date = new Date(at);
+  if (!Number.isFinite(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-GB-u-ca-iso8601-nu-latn", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+export function dayBoundary(value: string, end: boolean, timeZone: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
+  const noon = Date.parse(`${value}T12:00:00Z`);
+  if (!Number.isFinite(noon) || new Date(noon).toISOString().slice(0, 10) !== value) return "";
+  const target = end ? new Date(noon + 86_400_000).toISOString().slice(0, 10) : value;
+  // Find the first instant in this calendar day, instead of assuming a day is
+  // 24 hours or that midnight exists during a DST transition.
+  let low = noon - 2 * 86_400_000;
+  let high = noon + 2 * 86_400_000;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (calendarDate(new Date(middle).toISOString(), timeZone) < target) low = middle + 1;
+    else high = middle;
+  }
+  return new Date(low - (end ? 1 : 0)).toISOString();
 }

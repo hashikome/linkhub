@@ -8,6 +8,7 @@ import { AuditEffect, AuditOutcome } from "./audit-effect";
 import { AuditIdValue } from "./audit-identity";
 import { Retry } from "./feedback";
 import { LocalTime } from "./local-time";
+import { TimeZoneFallbackNote } from "./time-zone";
 
 export function AuditEvents({
   initial,
@@ -88,9 +89,7 @@ export function AuditEvents({
   return (
     // biome-ignore lint/a11y/noNoninteractiveTabindex: The scrollable event region needs keyboard focus for Page Up/Down and End.
     <section className="ops-table-scroll" aria-label="Audit events" tabIndex={0}>
-      <noscript>
-        <p className="meta">Times shown in UTC.</p>
-      </noscript>
+      <TimeZoneFallbackNote />
       {items.length ? (
         <table className="ops-table" ref={table} tabIndex={-1} aria-busy={pending}>
           <caption className="sr-only">Audit Log, newest first</caption>

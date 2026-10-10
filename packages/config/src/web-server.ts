@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { isIP } from "node:net";
+import { publicOrigins } from "./public-origins";
 
 export function webServerConfig(env: Record<string, string | undefined> = process.env) {
   const value = env.API_INTERNAL_ORIGIN_FILE
@@ -41,22 +42,7 @@ export function webServerConfig(env: Record<string, string | undefined> = proces
     )
       throw new Error("WEB_TRUSTED_PROXY_CIDRS requires explicit IP addresses or CIDRs");
   }
-  let publicUrl: URL;
-  try {
-    publicUrl = new URL(env.BETTER_AUTH_URL ?? "http://localhost:3000");
-  } catch {
-    throw new Error("Invalid public web origin");
-  }
-  if (
-    !/^https?:$/.test(publicUrl.protocol) ||
-    publicUrl.username ||
-    publicUrl.password ||
-    publicUrl.pathname !== "/" ||
-    publicUrl.search ||
-    publicUrl.hash
-  )
-    throw new Error("Public web origin must be an HTTP(S) origin");
-  const publicOrigin = publicUrl.origin;
+  const { webOrigin: publicOrigin, authOrigin } = publicOrigins(env);
   // Mirrors the API's sign-in code resend gap (apps/api/src/auth/delivery-auth.ts).
   const codeResendSeconds = Number(env.AUTH_CODE_RESEND_SECONDS) || 30;
   // Shown on /support, which every email footer links to.
@@ -65,6 +51,7 @@ export function webServerConfig(env: Record<string, string | undefined> = proces
     throw new Error("SUPPORT_EMAIL must be an email address");
   return {
     publicOrigin,
+    authOrigin,
     apiOrigin: url.origin,
     sourceSecret,
     trustedProxies,

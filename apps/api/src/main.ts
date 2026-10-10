@@ -28,7 +28,9 @@ export async function bootstrap() {
   SwaggerModule.setup("/api/docs", app, document);
 
   // 4000 by default: 3000 belongs to the web app (Next.js dev default). The
-  // web fronts the API same-origin (path-routed /api/*), so there is no CORS.
-  await app.listen(process.env.PORT ?? 4000);
+  // browser calls the API directly in dev; production ingress path-routes /api/*.
+  // Local services stay on loopback; containers need a reachable interface.
+  const host = process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1";
+  await app.listen(process.env.PORT ?? 4000, host);
   return app;
 }

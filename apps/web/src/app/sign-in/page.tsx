@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { NativeForm } from "../../components/native-form";
-import { SignInOptions } from "../../components/sign-in-options";
+import { AuthEntry } from "../../components/auth-entry";
 import { VerifyStart } from "../../components/verification";
 import { readDraft } from "../../lib/capture-server";
 import { queryValue, safeReturn } from "../../lib/http";
@@ -29,12 +28,25 @@ export default async function Page({
       : queryValue(query.returnTo)
         ? "continue"
         : "sign-in";
+  if (!draft)
+    return (
+      <AuthEntry
+        intent="sign-in"
+        returnTo={returnTo}
+        notice={queryValue(query.notice)}
+        reason={
+          purpose === "sign-in"
+            ? undefined
+            : verificationCopy(purpose, { returnTo, action: pending?.label }).reason
+        }
+      />
+    );
   return (
     <VerifyStart
-      alternatives={<SignInOptions returnTo={returnTo} />}
       copy={verificationCopy(purpose, { returnTo, action: pending?.label })}
       purpose={purpose}
       sendAction="/forms/code-send"
+      sendLabel="Send code"
       returnTo={returnTo}
       notice={queryValue(query.notice)}
       footer={
@@ -42,14 +54,6 @@ export default async function Page({
           <a href={draft ? `/capture/${draft.id}` : "/discover"}>
             {draft ? "Back to your link" : "Back to Discover"}
           </a>
-          <a href="/account">Reactivate an account or cancel deletion</a>
-          {query.notice === "signout-failed" && (
-            <NativeForm action="/forms/sign-out">
-              <button type="submit" className="button">
-                Try signing out again
-              </button>
-            </NativeForm>
-          )}
         </>
       }
     />

@@ -1,5 +1,7 @@
 # Deliver passwordless account security
 
+> Historical milestone. Google entry and creation policy were subsequently amended by [ADR-0037](../../engineering-decisions/0037-inline-google-connection.md), [ADR-0038](../../engineering-decisions/0038-email-owned-google-onboarding.md) and [ADR-0039](../../engineering-decisions/0039-confirmed-google-account-creation.md).
+
 ## Purpose / Big Picture
 
 People can sign in using a passkey (device unlock), Google for an existing

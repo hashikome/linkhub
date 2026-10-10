@@ -42,10 +42,12 @@ export function CollectionMeta({
   item,
   handle,
   compact = false,
+  preview = false,
 }: {
   item: Collection;
   handle?: string;
   compact?: boolean;
+  preview?: boolean;
 }) {
   const owner = item.hub;
   const creator =
@@ -55,7 +57,9 @@ export function CollectionMeta({
       : null;
   return (
     <div className="row-meta">
-      {owner ? (
+      {preview && (owner || handle) ? (
+        <span className="person-handle">@{owner?.handle ?? handle}</span>
+      ) : owner ? (
         <a className="person" href={`/h/${encodeURIComponent(owner.id)}`}>
           <span className="person-handle">@{owner.handle}</span>
         </a>
@@ -67,9 +71,7 @@ export function CollectionMeta({
         )
       )}
       {creator && (
-        <span>
-          Created by <Person person={creator} />
-        </span>
+        <span>Created by {preview ? creator.username : <Person person={creator} />}</span>
       )}
 
       <span>
@@ -92,13 +94,19 @@ export function ResourceRow({
   itemBase,
   expanded = false,
   onExpandedChange,
+  preview = false,
 }: {
   item: Resource;
   itemBase?: string;
   expanded?: boolean;
+  preview?: boolean;
   onExpandedChange?: (open: boolean) => void;
 }) {
-  const detailsUrl = new URL(itemBase ?? permalink(item.collectionId), "http://local.invalid");
+  // The demo links back to its own selectable example, never a fictional record.
+  const detailsUrl = new URL(
+    preview ? "/" : (itemBase ?? permalink(item.collectionId)),
+    "http://local.invalid",
+  );
   detailsUrl.searchParams.set("item", item.id);
   detailsUrl.hash = `item-${item.id}`;
   if (item.kind === "heading")
@@ -127,13 +135,14 @@ export function ResourceRow({
     >
       <ItemDisclosure
         expanded={expanded}
+        preview={preview}
         itemId={item.id}
         collectionId={item.collectionId}
         onExpandedChange={onExpandedChange}
       >
         <summary aria-label={`Details: ${title}`}>
           <h2>
-            {destination ? (
+            {destination && !(preview && reference) ? (
               <a href={destination} rel="noreferrer" referrerPolicy="no-referrer">
                 {title}
               </a>
@@ -163,6 +172,7 @@ export function ResourceRow({
           </div>
         </summary>
         <ItemDetails
+          preview={preview}
           item={item}
           permalink={detailsUrl.pathname + detailsUrl.search + detailsUrl.hash}
         />

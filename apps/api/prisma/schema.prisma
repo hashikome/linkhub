@@ -21,6 +21,7 @@ model User {
   selfDeactivated        Boolean   @default(false) @map("self_deactivated")
   name                   String    @db.VarChar(255)
   bio                    String?   @db.VarChar(500)
+  timeZone               String?   @map("time_zone") @db.VarChar(100)
   email                  String    @unique @db.VarChar(255)
   twoFactorEnabled       Boolean   @default(false) @map("two_factor_enabled")
   emailVerified          Boolean   @default(false) @map("email_verified")
@@ -59,7 +60,7 @@ model User {
 }
 
 model Hub {
-  handleClaimedAt DateTime? @map("handle_claimed_at") @db.Timestamptz(6)
+  handleChangedAt DateTime? @map("handle_changed_at") @db.Timestamptz(6)
   showOwner   Boolean  @default(true) @map("show_owner")
   id          String   @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
   ownerUserId String   @unique @map("owner_user_id") @db.Uuid

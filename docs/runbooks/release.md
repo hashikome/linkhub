@@ -10,10 +10,11 @@ retains milestone evidence.
 GHCR publication, Swarm/Dokploy promotion, off-host restore, live email/webhooks
 and Sentry/Alloy rollout remain unverified. Browser Origin enforcement is
 implemented and tested locally; each new browser workflow needs its own
-acceptance. Self-service account lifecycle and permanent hub-handle claims are
-implemented ([ADR-0033](../engineering-decisions/0033-permanent-hub-handles-and-self-service-accounts.md));
+acceptance. Self-service account lifecycle and editable hub handles are
+implemented ([ADR-0033](../engineering-decisions/0033-permanent-hub-handles-and-self-service-accounts.md),
+[ADR-0043](../engineering-decisions/0043-deliberate-hub-handle-changes.md));
 include email confirmation, recovery restrictions, 14-day deletion/cancellation
-and retained handle reservations in release acceptance. Generic vendor deletion
+and the 30-day handle cooldown with non-reusable retired reservations in release acceptance. Generic vendor deletion
 remains disabled.
 
 ## Deployment preparation checks
@@ -156,9 +157,9 @@ without secret values. Validate resource limits against measured load.
 
 Follow one deliberate synthetic sanitized API failure by request ID through
 Sentry issue/trace/log and Alloy/Loki; confirm dependency metrics and alert
-delivery, telemetry-outage behavior, and operator access/retention. Hub audit data
-has no automatic purge; choose the account-deletion and audit
-retention policy before that endpoint is publicly available. Auth events and
+delivery, telemetry-outage behavior, and operator access/retention. Content audit data has no automatic purge. Review retained audit/receipt
+identifiers and validate the implemented account-deletion cascades and contribution
+anonymization before public exposure. Auth events and
 shared address/source challenge budgets are implemented. Worker/browser spans
 and live sender proof remain separate acceptance work. Review endpoint abuse
 limits against real traffic and the public status shape (what readiness

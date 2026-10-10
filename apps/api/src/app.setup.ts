@@ -1,4 +1,5 @@
 import { INestApplication, ValidationPipe } from "@nestjs/common";
+import { publicOrigins } from "@nslinkhub/config/public-origins";
 import { toNodeHandler } from "better-auth/node";
 import type { Express } from "express";
 import { json, raw, urlencoded } from "express";
@@ -6,6 +7,7 @@ import { auth } from "./auth/auth";
 import { validationException } from "./common/errors/validation";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { browserBoundary } from "./common/middleware/browser-boundary";
+import { browserCors } from "./common/middleware/browser-cors";
 import { requestBudget, trustedProxies } from "./common/middleware/request-budget";
 import { requestIdMiddleware } from "./common/middleware/request-id";
 import { httpTelemetry } from "./common/observability/http-telemetry";
@@ -23,10 +25,8 @@ export function configureApp(app: INestApplication): void {
   expressApp.set("trust proxy", trustedProxies(process.env.TRUSTED_PROXY_CIDRS));
   expressApp.use(requestIdMiddleware);
   expressApp.use(httpTelemetry);
-  expressApp.use(
-    "/api/v1",
-    browserBoundary(new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:4000").origin),
-  );
+  const { webOrigin } = publicOrigins(process.env);
+  expressApp.use("/api/v1", browserCors(webOrigin), browserBoundary(webOrigin));
   expressApp.use(requestBudget(app.get(PrismaService)));
   expressApp.all("/api/v1/auth/{*any}", toNodeHandler(auth));
 

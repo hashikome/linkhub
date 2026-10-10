@@ -20,8 +20,7 @@ sharing requirements. Current development code does not yet enforce this boundar
 
 [People and hubs](people-and-hubs.md) implements optional hubs and separate
 person usernames. Collection grants use `viewer` / `contributor`, with **Can
-view** / **Can contribute** labels. The role rename preserves the same capabilities.
-[Manage](manage-workspace.md) is the shared owner/operator/admin workspace at
+view** / **Can contribute** labels. [Manage](manage-workspace.md) is the shared owner/operator/admin workspace at
 `/manage`. Its context-aware navigation does not alter the policy order or grant
 operators private-content access.
 
@@ -55,7 +54,7 @@ Roles come in two separate scopes ([ADR-0013](../engineering-decisions/0013-perm
 
 | Role | Scope | Comes from | Can |
 | --- | --- | --- | --- |
-| `owner` | Every collection in the hub | Owning the hub (`hub.ownerUserId`); moves with a collection transfer | Read, write content, manage; planned hub-wide management and blocking in [Manage](manage-workspace.md) |
+| `owner` | Every collection in the hub | Owning the hub (`hub.ownerUserId`); moves with a collection transfer | Read, write content, manage; hub-wide management in [Manage](manage-workspace.md); blocking is planned |
 | `contributor` | One collection | A direct share (`CollectionShare`) | Read, write content |
 | `viewer` | One collection | A direct share, or a recorded link share | Read |
 | `operator`, `admin` | The service, site-wide | An accepted, verified invitation (`OperatorGrant`, `AdminGrant`) | Run service operations; never read private collections ([service-operations.md](service-operations.md)) |
@@ -65,7 +64,7 @@ kept through transfers, shown only as attribution, never consulted for access.
 
 Role names are stable identifiers in the API and database; each surface picks
 its own label: the discussion badges replies from the owner or a contributor as
-**Contributor**, the planned sharing surface reads **Can view** / **Can contribute**, operations reads
+**Contributor**, the sharing surface reads **Can view** / **Can contribute**, operations reads
 "service operator" / "service admin". Changing a label never renames a role.
 
 ## Service operations
@@ -106,12 +105,12 @@ contribute. No date-range filter until there is a concrete use for one.
   shares on this collection are removed, the previous owner receives contributor
   access, and the immutable creator is untouched. Self-transfer and destination
   slug collisions are rejected.
-- **Account/hub transfer** is not a model — see [identity-and-handles.md](identity-and-handles.md) (email
-  change).
+- **Account/hub transfer** is not a model. Account email is fixed; see
+  [identity and handles](identity-and-handles.md).
 
 ## Publication and discovery
 
-- **Publish** puts a collection on the product-wide **explore** surface
+- **Publish** puts a collection on the product-wide **Discover** surface
   (`GET /discover`, public, cursor-paginated, recency-ordered initially). Anyone
   can view; account holders **save** into their **saved/** surface. Saving
   requires publication; a save goes dormant on unpublish and revives on
@@ -119,13 +118,14 @@ contribute. No date-range filter until there is a concrete use for one.
 - **Publication is independent.** Only explicitly published collections appear
   in public lists. A published source does not expose any referenced collection.
   Its unreadable references remain neutral unavailable entries.
-- **Discovery is tags + text — not handles.** In explore, the true north is
-  searching by **tags and text**; the handle is *not* a global search facet.
+- **Planned discovery search uses tags and text.** The current feed is ordered
+  by recency; text/tag search and in-hub search are not implemented. The handle
+  is not a global search facet.
   If you already know the hub you want, you go to it directly (`/@handle`) and
-  search *within* that hub's publications. When you open a published
+  browse that hub's publications. When you open a published
   collection, you can see **which hub published it** and follow that to explore
   more of their collections. So the handle serves direct navigation and
-  attribution/click-through, while explore serves open discovery by tag/text.
+  attribution/click-through, while Discover lists published collections.
 - **shared/ vs saved/** — never mixed. shared/ is access *granted to you*
   (`CollectionShare`); saved/ is what *you chose to keep* from the public
   surface (`CollectionSave`). A share grants access; a save grants nothing.

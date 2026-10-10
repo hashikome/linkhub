@@ -92,6 +92,44 @@ describe("people and optional hubs", () => {
     }
     expect(await db.hub.count({ where: { ownerUserId: person.id } })).toBe(0);
   });
+  it("persists a private account timezone, validates it and restores Automatic", async () => {
+    const person = await account();
+    const other = await account();
+    const patch = (body: object, token = person.token) =>
+      api().patch("/api/v1/profile").auth(token, { type: "bearer" }).send(body);
+    expect((await db.user.findUniqueOrThrow({ where: { id: person.id } })).timeZone).toBeNull();
+    await api().patch("/api/v1/profile").send({ timeZone: "UTC" }).expect(401);
+    const saved = await patch({ timeZone: "Africa/Dar_es_Salaam" }).expect(200);
+    expect(saved.body.data.timeZone).toBe("Africa/Dar_es_Salaam");
+    expect((await db.user.findUniqueOrThrow({ where: { id: person.id } })).timeZone).toBe(
+      "Africa/Dar_es_Salaam",
+    );
+    expect((await patch({ bio: "Reader" }).expect(200)).body.data.timeZone).toBe(
+      "Africa/Dar_es_Salaam",
+    );
+    for (const timeZone of ["", "automatic", "Mars/Olympus", "+03:00", 3, {}, "x".repeat(101)])
+      await patch({ timeZone }).expect(400);
+    expect((await db.user.findUniqueOrThrow({ where: { id: person.id } })).timeZone).toBe(
+      "Africa/Dar_es_Salaam",
+    );
+    await patch({ id: person.id, timeZone: "UTC" }, other.token).expect(400);
+    await patch({ timeZone: "UTC" }, other.token).expect(200);
+    expect((await db.user.findUniqueOrThrow({ where: { id: person.id } })).timeZone).toBe(
+      "Africa/Dar_es_Salaam",
+    );
+    const publicView = await api().get(`/api/v1/people/by-username/${person.username}`).expect(200);
+    expect(JSON.stringify(publicView.body)).not.toContain("timeZone");
+    const alias = (await patch({ timeZone: "US/Eastern" }).expect(200)).body.data.timeZone;
+    expect((await db.user.findUniqueOrThrow({ where: { id: person.id } })).timeZone).toBe(alias);
+    expect(
+      new Intl.DateTimeFormat("en-GB", { timeZone: alias, hour: "2-digit" }).format(
+        new Date("2026-01-01T12:00:00Z"),
+      ),
+    ).toBe("07");
+    expect((await patch({ timeZone: null }).expect(200)).body.data.timeZone).toBeNull();
+    expect((await db.user.findUniqueOrThrow({ where: { id: person.id } })).timeZone).toBeNull();
+    expect(await db.hub.count({ where: { ownerUserId: person.id } })).toBe(0);
+  });
   it("keeps public bios independent of hubs and validates, preserves and clears them", async () => {
     const person = await account();
     const patch = (body: object) =>

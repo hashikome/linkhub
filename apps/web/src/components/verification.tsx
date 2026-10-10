@@ -20,8 +20,10 @@ export function VerifyStart({
   cancelAction,
   footer,
   alternatives,
+  sendLabel = "Send code",
 }: {
   alternatives?: ReactNode;
+  sendLabel?: string;
   copy: VerificationCopy;
   purpose: VerificationPurpose;
   email?: string;
@@ -61,7 +63,7 @@ export function VerifyStart({
         {!email && <p className="verify-detail">{copy.after}</p>}
         <div className="verify-actions">
           <button type="submit" className="button primary">
-            Send code
+            {sendLabel}
           </button>
           {cancelAction && (
             <button type="submit" formAction={cancelAction} className="button" formNoValidate>

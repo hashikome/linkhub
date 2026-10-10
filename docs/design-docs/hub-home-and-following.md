@@ -6,21 +6,21 @@ subscriber counts and the home tabs below are planned. Identity follows
 
 ## Public hub page
 
-At `/@handle` and `/h/<id>`, the planned public page shows the hub name, handle,
-owner attribution, description, **Subscribe** (signed-in visitors), and
-the hub’s published collections. Planned hub counts prioritize **subscribers** and **total collection saves**.
+At `/@handle` and `/h/<id>`, the public page shows the hub name, handle, optional
+owner attribution, description and published collections. **Subscribe** for
+signed-in visitors is planned. Planned hub counts prioritize **subscribers** and **total collection saves**.
 Collection saves measure readers keeping curated collections to return to;
 individual resource copies through Add to my collection are separate and must
 not be combined with this count. Show counts only from authoritative data once
 the relevant slice implements them. Define aggregation and visibility rules in
 that slice; public counts must not reveal private or unavailable collections.
 
-Sharing controls on hubs, collections and the footer are deferred. Redesign
-them alongside sharing and hub engagement; no placement or social-network
-list is settled. The [backlog](../exec-plans/tech-debt-tracker.md#sharing-and-hub-engagement)
+Profiles, hubs, collections and the site use the implemented contextual
+[Share page](sharing.md); site sharing lives in the footer. Social destinations
+and hub subscriptions remain planned. The [backlog](../exec-plans/tech-debt-tracker.md#sharing-and-hub-engagement)
 records the scope.
 
-## Your home
+## Your home (planned)
 
 What the owner sees at their own hub, Google-Drive style, switching between:
 
@@ -35,7 +35,7 @@ What the owner sees at their own hub, Google-Drive style, switching between:
 Settings’ "View your public hub" link shows the page as visitors see it. Managing the
 hub happens in [Manage](manage-workspace.md), not here.
 
-## Subscriptions
+## Subscriptions (planned)
 
 Subscribing to a hub is like subscribing to a YouTube channel: it adds the hub to
 your Subscriptions list, its new published collections to your feed, and sends you

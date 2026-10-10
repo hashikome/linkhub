@@ -25,7 +25,7 @@ describe("Hub handles (e2e)", () => {
     await app.close();
   });
 
-  it("claims a handle once, retains reservations after deletion, and leaves usernames mutable", async () => {
+  it("enforces a 30-day cooldown and permanently retires every previous spelling", async () => {
     const login = await signInHubOwner(app.getHttpServer(), {
       email: `claim-${crypto.randomUUID()}@example.com`,
     });
@@ -36,16 +36,99 @@ describe("Hub handles (e2e)", () => {
         .auth(token, { type: "bearer" })
         .send(body);
     const handle = `claimed-${crypto.randomUUID().slice(0, 8)}`;
-    await patch({ handle }).expect(400);
-    const claimed = await patch({ handle, confirmHandle: true }).expect(200);
-    expect(claimed.body.data.handleClaimedAt).toBeString();
-    await patch({ handle: `${handle}-new`, confirmHandle: true }).expect(409);
+    const prisma = app.get(PrismaService);
+    const original = await prisma.hub.findUniqueOrThrow({
+      where: { ownerUserId: login.body.user.id },
+    });
+    const saved = await patch({ handle }).expect(200);
+    expect(saved.body.data.hubId).toBe(original.id);
+    expect(saved.body.data).not.toHaveProperty("handleClaimedAt");
+    expect(Date.parse(saved.body.data.handleChangeAvailableAt)).toBeGreaterThan(
+      Date.now() + 29 * 86400000,
+    );
+    for (const field of ["handleChangedAt", "handleChangeAvailableAt"]) {
+      await patch({ handle: `${handle}-bypass`, [field]: null }).expect(400);
+    }
+    const changed = await prisma.hub.findUniqueOrThrow({ where: { id: original.id } });
+    const early = await patch({ handle: `${handle}-early`, hubName: "Must not change" }).expect(
+      409,
+    );
+    expect(early.body.error.code).toBe("handle_change_cooldown");
+    expect((await prisma.hub.findUniqueOrThrow({ where: { id: original.id } })).name).toBe(
+      original.name,
+    );
+    await expect(
+      Promise.resolve(
+        prisma.hub.update({ where: { id: original.id }, data: { handle: `${handle}-raw` } }),
+      ),
+    ).rejects.toThrow();
+    expect(
+      await prisma.hubHandleReservation.findUnique({ where: { handle: `${handle}-raw` } }),
+    ).toBeNull();
+    await patch({ handle, hubName: "An evolving purpose" }).expect(200);
+    expect(
+      (await prisma.hub.findUniqueOrThrow({ where: { id: original.id } })).handleChangedAt,
+    ).toEqual(changed.handleChangedAt);
+    // Advance only this synthetic hub's clock to just before and after eligibility.
+    await prisma.hub.update({
+      where: { id: original.id },
+      data: { handleChangedAt: new Date(Date.now() - 30 * 86400000 + 60000) },
+    });
+    await patch({ handle: `${handle}-new` }).expect(409);
+    await prisma.hub.update({
+      where: { id: original.id },
+      data: { handleChangedAt: new Date(Date.now() - 30 * 86400000 - 60000) },
+    });
+    await patch({ handle: `${handle}-new` }).expect(200);
+    const hub = await request(app.getHttpServer()).get(`/api/v1/hubs/${original.id}`).expect(200);
+    expect(hub.body.data.hub).toMatchObject({
+      id: original.id,
+      handle: `${handle}-new`,
+      name: "An evolving purpose",
+    });
+    await prisma.hub.update({
+      where: { id: original.id },
+      data: { handleChangedAt: new Date(Date.now() - 31 * 86400000) },
+    });
+    const eligible = await prisma.hub.findUniqueOrThrow({ where: { id: original.id } });
+    for (const retired of [original.handle, handle]) {
+      const available = await request(app.getHttpServer())
+        .get(`/api/v1/profile/handle-availability?handle=${retired}`)
+        .auth(token, { type: "bearer" })
+        .expect(200);
+      expect(available.body.data.status).toBe("taken");
+      const result = await patch({ handle: retired }).expect(400);
+      expect(result.body.error.code).toBe("handle_unavailable");
+      await expect(
+        Promise.resolve(
+          prisma.hub.update({ where: { id: original.id }, data: { handle: retired } }),
+        ),
+      ).rejects.toThrow();
+    }
+    expect(
+      (await prisma.hub.findUniqueOrThrow({ where: { id: original.id } })).handleChangedAt,
+    ).toEqual(eligible.handleChangedAt);
+    const audits = await prisma.auditLog.count({
+      where: { hubId: original.id, action: "hub.handle_changed" },
+    });
+    await patch({ handle: `${handle}-new` }).expect(200);
+    expect(
+      await prisma.auditLog.count({ where: { hubId: original.id, action: "hub.handle_changed" } }),
+    ).toBe(audits);
+    expect(audits).toBe(2);
+    const competing = await Promise.all([
+      patch({ handle: `${handle}-race-a` }),
+      patch({ handle: `${handle}-race-b` }),
+    ]);
+    expect(competing.map((result) => result.status).sort()).toEqual([200, 409]);
+    expect(competing.find((result) => result.status === 409)?.body.error.code).toBe(
+      "handle_change_cooldown",
+    );
     await patch({ username: `free-${crypto.randomUUID().slice(0, 8)}` }).expect(200);
     await patch({
       username: `again-${crypto.randomUUID().slice(0, 8)}`,
       hubName: "A new display name",
     }).expect(200);
-    const prisma = app.get(PrismaService);
     await prisma.user.delete({ where: { id: login.body.user.id } });
     const other = await signInHubOwner(app.getHttpServer(), {
       email: `claim-other-${crypto.randomUUID()}@example.com`,
@@ -58,7 +141,7 @@ describe("Hub handles (e2e)", () => {
     await request(app.getHttpServer())
       .patch("/api/v1/profile")
       .auth(other.headers["set-auth-token"], { type: "bearer" })
-      .send({ handle, confirmHandle: true })
+      .send({ handle })
       .expect(400);
     await expect(
       Promise.resolve(
@@ -175,7 +258,7 @@ describe("Hub handles (e2e)", () => {
         request(app.getHttpServer())
           .patch("/api/v1/profile")
           .auth(token, { type: "bearer" })
-          .send({ handle, confirmHandle: true }),
+          .send({ handle }),
       ),
     );
     expect(claims.map((r) => r.status).sort()).toEqual([200, 400]);
@@ -234,7 +317,6 @@ describe("Hub handles (e2e)", () => {
       .patch("/api/v1/profile")
       .auth(token, { type: "bearer" })
       .send({
-        confirmHandle: true,
         hubName: "Field Notes",
         hubDescription: " A home for curious readers. ",
         handle,

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { BadRequestException, HttpException, Injectable } from "@nestjs/common";
+import { publicOrigins } from "@nslinkhub/config/public-origins";
 import type {
   ApiWarning,
   CreatedShareEntry,
@@ -444,7 +445,7 @@ export class SharingService {
       name,
       message: message?.trim() || `Share ${query.kind}`,
       path,
-      url: new URL(path, process.env.BETTER_AUTH_URL ?? "http://localhost:3000").href,
+      url: new URL(path, publicOrigins(process.env).webOrigin).href,
       access,
       capabilities: { canManageAccess },
     };

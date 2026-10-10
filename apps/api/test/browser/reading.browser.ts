@@ -7,6 +7,7 @@ import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { type Browser, expect as browserExpect, chromium, type Page } from "@playwright/test";
 import request from "supertest";
+import { googleConnectionCookie, stageGoogleConnection } from "../../src/auth/google-connection";
 import { requestBudgetKey } from "../../src/common/middleware/request-budget";
 import type { PrismaService } from "../../src/database/prisma.service";
 import { emailConfig } from "../../src/email/config";
@@ -14,9 +15,16 @@ import { emailKey, unseal } from "../../src/email/outbox";
 import type { AvatarImage } from "../../src/modules/avatars/gravatar.service";
 import { ensurePersonalHub } from "../../src/modules/hubs/hub-onboarding";
 import { itemTags } from "../../src/modules/resources/item-tags";
+import { expectSignIns } from "../fixtures/authentication-audit";
 import { signInHubOwner, signInWithCode } from "../fixtures/sign-in";
 
 const root = resolve(__dirname, "../../../..");
+// Synthetic API responses must preserve the same CORS contract as real responses.
+const apiResponseHeaders = () => ({
+  "access-control-allow-origin": origin,
+  "access-control-allow-credentials": "true",
+  "access-control-expose-headers": "retry-after, x-request-id",
+});
 const gravatarImages = new Map<string, AvatarImage>();
 let app: INestApplication;
 let prisma: PrismaService;
@@ -26,6 +34,8 @@ let ingress: ReturnType<typeof Bun.serve>;
 let directory: string;
 let origin: string;
 let apiOrigin: string;
+let publicApiOrigin: string;
+let directApi: ReturnType<typeof Bun.serve> | undefined;
 let webOrigin = "";
 let owner: string;
 let cookie: string;
@@ -148,6 +158,8 @@ beforeAll(async () => {
         delayed.started();
         await delayed.released;
       }
+      if (process.env.TEST_DIRECT_API === "1" && url.pathname.startsWith("/api/"))
+        return new Response("API belongs to backend", { status: 404 });
       const upstream = url.pathname.startsWith("/api/") ? apiOrigin : webOrigin;
       if (!upstream) return new Response("Starting", { status: 503 });
       try {
@@ -170,7 +182,25 @@ beforeAll(async () => {
     },
   });
   origin = `http://localhost:${ingress.port}`;
-  process.env.BETTER_AUTH_URL = origin;
+  publicApiOrigin = origin;
+  if (process.env.TEST_DIRECT_API === "1") {
+    directApi = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url);
+        return fetch(apiOrigin + url.pathname + url.search, {
+          method: req.method,
+          headers: req.headers,
+          redirect: "manual",
+          body: ["GET", "HEAD"].includes(req.method) ? undefined : await req.arrayBuffer(),
+        });
+      },
+    });
+    publicApiOrigin = `http://localhost:${directApi.port}`;
+  }
+  process.env.BETTER_AUTH_URL = publicApiOrigin;
+  process.env.WEB_ORIGIN = origin;
   // Synthetic identity-only credentials: the browser intercepts Google navigation.
   process.env.GOOGLE_CLIENT_ID = "browser-fixture-client";
   process.env.GOOGLE_CLIENT_SECRET = "browser-fixture-secret";
@@ -258,7 +288,7 @@ beforeAll(async () => {
   await request(app.getHttpServer())
     .patch("/api/v1/profile")
     .auth(otherToken, { type: "bearer" })
-    .send({ handle: emptyHandle, confirmHandle: true })
+    .send({ handle: emptyHandle })
     .expect(200);
   await request(app.getHttpServer())
     .post("/api/v1/collections")
@@ -375,6 +405,7 @@ afterAll(async () => {
     clearTimeout(timer);
   }
   await ingress?.stop(true);
+  await directApi?.stop(true);
   await capture?.stop(true);
   // The fixture owns this listener. Native-form fetches can leave pooled HTTP
   // connections after the web child stops; close them before Nest awaits shutdown.
@@ -398,11 +429,13 @@ describe("explore to resource: production browser journey", () => {
           await browserExpect(page).toHaveTitle("nslinkhub · Useful links, collected and shared");
           await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "system");
           await browserExpect(page.getByRole("figure")).toContainText("Example");
-          for (const width of [320, 390, 768, 1280]) {
+          for (const width of [320, 390, 768, 1280, 1440]) {
             await page.setViewportSize({ width, height: 900 });
             expect(
               await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
             ).toBe(true);
+            if (js)
+              await page.screenshot({ path: `/tmp/landing-${theme}-${width}.png`, fullPage: true });
           }
           const logo = await page.locator(".wordmark").boundingBox();
           const nav = await page.locator(".primary-nav").boundingBox();
@@ -426,7 +459,8 @@ describe("explore to resource: production browser journey", () => {
           });
         }
         await page
-          .getByRole("link", { name: "Discover the links someone kept", exact: true })
+          .getByRole("navigation", { name: "Main navigation" })
+          .getByRole("link", { name: "Discover", exact: true })
           .click();
         await browserExpect(page).toHaveURL(`${origin}/discover`);
         await browserExpect(page.locator("h1")).toHaveText(
@@ -435,10 +469,128 @@ describe("explore to resource: production browser journey", () => {
         await page.locator(".wordmark").click();
         await browserExpect(page).toHaveURL(`${origin}/`);
         await page
-          .locator(".landing-actions")
+          .getByRole("navigation", { name: "Main navigation" })
           .getByRole("link", { name: "Sign in", exact: true })
           .click();
         await browserExpect(page).toHaveURL(`${origin}/sign-in`);
+      } finally {
+        await close();
+      }
+    }
+  }, 30000);
+
+  it("lets visitors explore the collection example, copy item links and open resource titles", async () => {
+    for (const js of [true, false]) {
+      const { page, close } = await freshPage(js);
+      try {
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await ready(page, "/?notice=signed-out");
+        const address = page.url();
+        const leftPosition = async () => {
+          const box = await page.locator(".landing-intro").boundingBox();
+          // Keyboard focus may scroll the viewport; compare the layout position.
+          return box ? { ...box, y: box.y + (await page.evaluate(() => window.scrollY)) } : null;
+        };
+        const initialLeftPosition = await leftPosition();
+        const example = page.getByRole("figure", { name: "Example collection" });
+        const section = example.locator(".section-disclosure");
+        const items = example.locator(".resource-disclosure");
+        await browserExpect(items.first()).toHaveAttribute("open", "");
+        expect(await page.evaluate(() => window.scrollY)).toBe(0);
+        await browserExpect(example).not.toContainText("Published by");
+        await browserExpect(
+          example.getByRole("button", { name: "Copy link to this item", includeHidden: true }),
+        ).toHaveCount(2);
+        await browserExpect(
+          example.getByRole("link", { name: "Link to this item", exact: true }),
+        ).toHaveCount(0);
+        await browserExpect(
+          example.getByRole("link", {
+            name: "Organize Your Bookmarks with the PARA Method for Lightning Fast Web Browsing",
+            exact: true,
+          }),
+        ).toHaveAttribute(
+          "href",
+          "https://fortelabs.com/blog/organize-your-bookmarks-with-the-para-method-for-lightning-fast-web-browsing/",
+        );
+        await browserExpect(
+          example.getByRole("link", {
+            name: "A Brief History & Ethos of the Digital Garden",
+            exact: true,
+          }),
+        ).toHaveAttribute("href", "https://maggieappleton.com/garden-history");
+        const secondSummary = items.nth(1).locator("summary");
+        await secondSummary.focus();
+        await page.keyboard.press("Enter");
+        await browserExpect(items.nth(1)).toHaveAttribute("open", "");
+        await browserExpect(items.first()).not.toHaveAttribute("open", "");
+        await browserExpect(
+          example.getByText(
+            "Explore how a personal collection of knowledge can grow, connect ideas, and be shared with others.",
+          ),
+        ).toBeVisible();
+        await section.locator(":scope > summary").click();
+        await browserExpect(section).not.toHaveAttribute("open", "");
+        expect(await leftPosition()).toEqual(initialLeftPosition);
+        await browserExpect(example.getByText("Show items", { exact: true })).toBeVisible();
+        await page.screenshot({ path: `/tmp/landing-example-collapsed-${js}.png`, fullPage: true });
+        await section.locator(":scope > summary").focus();
+        await page.keyboard.press("Space");
+        await browserExpect(section).toHaveAttribute("open", "");
+        await browserExpect(
+          example.getByRole("link", {
+            name: "Organize Your Bookmarks with the PARA Method for Lightning Fast Web Browsing",
+            exact: true,
+          }),
+        ).toBeVisible();
+        expect(page.url()).toBe(address);
+        expect(await leftPosition()).toEqual(initialLeftPosition);
+        if ((await items.nth(1).getAttribute("open")) === null)
+          await items.nth(1).locator("summary").click();
+        let copied: string;
+        if (js) {
+          await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+          const beforeCopy = page.url();
+          await items.nth(1).getByRole("button", { name: "Copy link to this item" }).click();
+          await browserExpect(items.nth(1).getByRole("status")).toHaveText("Link copied.");
+          expect(page.url()).toBe(beforeCopy);
+          await browserExpect(items.nth(1)).toHaveAttribute("open", "");
+          copied = await page.evaluate(() => navigator.clipboard.readText());
+        } else {
+          await browserExpect(
+            items.nth(1).getByRole("button", { name: "Copy link to this item" }),
+          ).toBeDisabled();
+          copied = new URL(
+            (await items
+              .nth(1)
+              .getByRole("link", { name: "Open item link to copy its address" })
+              .getAttribute("href")) ?? "",
+            origin,
+          ).href;
+        }
+        const selected = new URL(copied);
+        expect(selected.origin).toBe(origin);
+        expect(selected.pathname).toBe("/");
+        expect(selected.searchParams.get("item")).toBe("019a0000-0000-7000-8000-000000000006");
+        await page.goto(copied);
+        await browserExpect(items.nth(1)).toHaveAttribute("open", "");
+        await browserExpect(items.first()).not.toHaveAttribute("open", "");
+        await ready(page, "/");
+        // Title clicks navigate; clicking the surrounding summary expands details.
+        await page.route(
+          "https://fortelabs.com/blog/organize-your-bookmarks-with-the-para-method-for-lightning-fast-web-browsing/",
+          (route) =>
+            route.fulfill({ contentType: "text/html", body: "<h1>External resource</h1>" }),
+        );
+        await example
+          .getByRole("link", {
+            name: "Organize Your Bookmarks with the PARA Method for Lightning Fast Web Browsing",
+            exact: true,
+          })
+          .click();
+        await browserExpect(page).toHaveURL(
+          "https://fortelabs.com/blog/organize-your-bookmarks-with-the-para-method-for-lightning-fast-web-browsing/",
+        );
       } finally {
         await close();
       }
@@ -780,7 +932,7 @@ describe("explore to resource: production browser journey", () => {
         (route) =>
           route.fulfill({
             status: 429,
-            headers: { "Retry-After": "1" },
+            headers: { ...apiResponseHeaders(), "Retry-After": "1" },
             json: { error: { code: "too_many_requests", message: "PRIVATE RAW ERROR" } },
           }),
         { times: 1 },
@@ -819,7 +971,12 @@ describe("explore to resource: production browser journey", () => {
       await ready(page, `/@${handle}`);
       await page.route(
         pattern,
-        (route) => route.fulfill({ status: 400, json: { error: { code: "invalid_cursor" } } }),
+        (route) =>
+          route.fulfill({
+            headers: apiResponseHeaders(),
+            status: 400,
+            json: { error: { code: "invalid_cursor" } },
+          }),
         { times: 1 },
       );
       await page.getByRole("link", { name: "More collections", exact: true }).click();
@@ -857,7 +1014,7 @@ describe("explore to resource: production browser journey", () => {
       await request(app.getHttpServer())
         .patch("/api/v1/profile")
         .auth(owner, { type: "bearer" })
-        .send({ handle: renamed, confirmHandle: true })
+        .send({ handle: renamed })
         .expect(200);
       await renameSlug("renamed-guide");
       await ready(page, `/@${renamed}/renamed-guide`);
@@ -872,8 +1029,9 @@ describe("explore to resource: production browser journey", () => {
         await browserExpect(page.locator("h1")).toHaveText("This collection isn't available.");
       }
     } finally {
-      // Restore this shared synthetic fixture; product clients cannot unclaim handles.
-      await prisma.hub.update({ where: { id: hubId }, data: { handleClaimedAt: null } });
+      // Reset only shared synthetic fixture state; public workflows can never do this.
+      await prisma.hubHandleReservation.delete({ where: { handle } });
+      await prisma.hub.update({ where: { id: hubId }, data: { handleChangedAt: null } });
       await prisma.hub.update({ where: { id: hubId }, data: { handle } });
       await renameSlug("reading-guide");
       await close();
@@ -1185,7 +1343,11 @@ describe("explore to resource: production browser journey", () => {
         (route) =>
           route.fulfill({
             status: 429,
-            headers: { "Retry-After": "1", "content-type": "application/json" },
+            headers: {
+              ...apiResponseHeaders(),
+              "Retry-After": "1",
+              "content-type": "application/json",
+            },
             body: JSON.stringify({
               error: { code: "too_many_requests", message: "PRIVATE RAW ERROR" },
             }),
@@ -1363,7 +1525,8 @@ describe("explore to resource: production browser journey", () => {
         await page.evaluate(
           async (value) =>
             (
-              await fetch("/api/v1/auth/code/send", {
+              await fetch(`${document.documentElement.dataset.apiOrigin}/api/v1/auth/code/send`, {
+                credentials: "include",
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ email: value }),
@@ -1386,7 +1549,8 @@ describe("explore to resource: production browser journey", () => {
         await page.evaluate(
           async (body) =>
             (
-              await fetch("/api/v1/auth/code/verify", {
+              await fetch(`${document.documentElement.dataset.apiOrigin}/api/v1/auth/code/verify`, {
+                credentials: "include",
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(body),
@@ -1508,8 +1672,13 @@ async function browserOwnerSettings(page: Page, email: string) {
 }
 
 async function browserSignIn(page: Page, email: string, returnTo = "/manage") {
-  await ready(page, `/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
+  const creating = !(await prisma.user.findUnique({ where: { email } }));
+  await ready(
+    page,
+    `/${creating ? "sign-up" : "sign-in"}?returnTo=${encodeURIComponent(returnTo)}`,
+  );
   await page.getByLabel("Email address").fill(email);
+  await page.getByRole("button", { name: "Continue with email", exact: true }).click();
   const sent = page.waitForResponse((response) => response.url().endsWith("/forms/code-send"));
   await page.getByRole("button", { name: "Send code", exact: true }).click();
   const response = await sent;
@@ -1520,6 +1689,7 @@ async function browserSignIn(page: Page, email: string, returnTo = "/manage") {
   expect(page.url()).not.toContain(email);
   await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
   await page.getByRole("button", { name: "Verify and continue" }).click();
+  if (creating) await page.getByRole("button", { name: "Create account", exact: true }).click();
 }
 async function operatorFixture(name: string) {
   const email = `${name}-${crypto.randomUUID()}@example.com`;
@@ -1784,7 +1954,7 @@ describe("management: production browser journey", () => {
             .getByRole("link", { name: "Sign in", exact: true }),
         ).toBeVisible();
         await ready(page, "/manage");
-        await browserExpect(page.locator("h1")).toHaveText("Sign in");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
       } finally {
         await close();
       }
@@ -1797,6 +1967,7 @@ describe("management: production browser journey", () => {
     try {
       await ready(page, "/sign-in?returnTo=https://untrusted.example/");
       await page.getByLabel("Email address").fill(op.email);
+      await page.getByRole("button", { name: "Continue with email", exact: true }).click();
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
       await page.getByLabel("Eight-digit code").fill("00000000");
@@ -1833,7 +2004,26 @@ describe("management: production browser journey", () => {
       expect(await prisma.emailOutbox.count()).toBe(mailsBefore);
       await submitOperation(page, "End all sessions", "owner_request");
       await browserExpect(page.locator("h1")).toHaveText("Confirm it's you");
+      const pendingGoogle = await stageGoogleConnection(
+        prisma,
+        process.env.BETTER_AUTH_SECRET ?? "",
+        { email: op.email, subject: crypto.randomUUID() },
+      );
+      await page.context().addCookies([
+        {
+          name: googleConnectionCookie(publicApiOrigin),
+          value: pendingGoogle ?? "",
+          url: origin,
+          httpOnly: true,
+          sameSite: "Lax",
+        },
+      ]);
       await page.getByRole("button", { name: "Send code", exact: true }).click();
+      expect(
+        (await page.context().cookies(origin)).some((cookie) =>
+          cookie.name.includes("google_connection"),
+        ),
+      ).toBe(false);
       // Having chosen to send it, the code screen offers a new code, not a cancel.
       await browserExpect(page.getByRole("button", { name: "Cancel", exact: true })).toHaveCount(0);
       await browserExpect(page.locator(".resend-row")).toContainText("Didn't receive the code?");
@@ -2021,8 +2211,29 @@ describe("email invitation onboarding", () => {
           ).toBe(true);
         }
         await page.screenshot({ path: `/tmp/w3-email-invitation-${js}.png`, fullPage: true });
+        const abandonedEmail = `abandoned-invitation-${crypto.randomUUID()}@example.com`;
+        await signInWithCode(app.getHttpServer(), { email: abandonedEmail });
+        const pendingGoogle = await stageGoogleConnection(
+          prisma,
+          process.env.BETTER_AUTH_SECRET ?? "",
+          { email: abandonedEmail, subject: crypto.randomUUID() },
+        );
+        await page.context().addCookies([
+          {
+            name: googleConnectionCookie(publicApiOrigin),
+            value: pendingGoogle ?? "",
+            url: origin,
+            httpOnly: true,
+            sameSite: "Lax",
+          },
+        ]);
         await consent(page);
         await browserExpect(page.locator("h1")).toHaveText("Check your email");
+        expect(
+          (await page.context().cookies(origin)).some((cookie) =>
+            cookie.name.includes("google_connection"),
+          ),
+        ).toBe(false);
         const account = await prisma.user.findUniqueOrThrow({ where: { email: adminEmail } });
         expect(account.name).toBe("Browser admin");
         expect(account.emailVerified).toBe(false);
@@ -2167,7 +2378,10 @@ describe("account shell and appearance", () => {
         async (route) => {
           checking();
           await heldCheck;
-          await route.fulfill({ json: { data: { handle: oldHandle, status: "available" } } });
+          await route.fulfill({
+            headers: apiResponseHeaders(),
+            json: { data: { handle: oldHandle, status: "available" } },
+          });
         },
       );
       await settingsSection(page, "Hub");
@@ -2270,6 +2484,122 @@ describe("account shell and appearance", () => {
     }
   }, 60000);
 
+  it("saves handles independently and keeps other drafts autosaving through cooldown", async () => {
+    await prisma.requestBudget.deleteMany();
+    const email = `independent-handle-${crypto.randomUUID()}@example.com`;
+    const { page, close } = await freshPage();
+    let release = () => {};
+    try {
+      await browserOwnerSettings(page, email);
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { email },
+        include: { hub: true },
+      });
+      if (!user.hub) throw new Error("Expected hub");
+      await settingsSection(page, "Hub");
+      const handle = page.getByLabel("Handle", { exact: true });
+      await handle.fill("ab");
+      await page.getByLabel("Hub name", { exact: true }).fill("Saved with invalid handle draft");
+      await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
+      await browserExpect(handle).toHaveValue("ab");
+      expect((await prisma.hub.findUniqueOrThrow({ where: { id: user.hub.id } })).handle).toBe(
+        user.hub.handle,
+      );
+      // Handle validation is independent of an invalid ordinary profile field.
+      await page.getByLabel("Hub name", { exact: true }).fill("");
+      const chosen = `chosen-${crypto.randomUUID().slice(0, 8)}`;
+      await handle.fill(chosen);
+      await browserExpect(page.locator("#handle-status")).toHaveText("Available");
+      let started = () => {};
+      const waiting = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await page.route("**/forms/profile-save", async (route) => {
+        const data = new URLSearchParams(route.request().postData() ?? "");
+        if (data.get("savePart") === "handle") {
+          expect([...data.keys()].sort()).toEqual(["handle", "savePart"]);
+          const response = await route.fetch();
+          started();
+          await held;
+          await route.fulfill({ response });
+        } else {
+          expect(data.has("handle")).toBe(false);
+          await route.continue();
+        }
+      });
+      await page.getByRole("button", { name: "Save handle", exact: true }).click();
+      await waiting;
+      await browserExpect(handle).toHaveAttribute("readonly", "");
+      await page.getByLabel("Hub name", { exact: true }).fill("Edited during handle save");
+      await page.getByLabel("Description", { exact: true }).fill("Keep this newer draft.");
+      release();
+      await browserExpect(handle).toHaveValue(chosen);
+      await browserExpect(page.locator("#handle-cooldown")).toBeVisible();
+      await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
+      const saved = await prisma.hub.findUniqueOrThrow({ where: { id: user.hub.id } });
+      expect(saved.name).toBe("Edited during handle save");
+      expect(saved.description).toBe("Keep this newer draft.");
+      expect(saved.handle).toBe(chosen);
+      await page.getByLabel("Description", { exact: true }).fill("Still editable during cooldown.");
+      await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
+      expect((await prisma.hub.findUniqueOrThrow({ where: { id: user.hub.id } })).description).toBe(
+        "Still editable during cooldown.",
+      );
+    } finally {
+      release();
+      await close();
+    }
+  }, 30000);
+
+  it("keeps draft handles unsaved when opening public hub and profile views", async () => {
+    await prisma.requestBudget.deleteMany();
+    const email = `handle-navigation-${crypto.randomUUID()}@example.com`;
+    const { page, close } = await freshPage();
+    try {
+      await browserOwnerSettings(page, email);
+      const user = await prisma.user.findUniqueOrThrow({
+        where: { email },
+        include: { hub: true },
+      });
+      const hub = user.hub;
+      if (!hub) throw new Error("Expected personal hub");
+      const draftHandle = `draft-${crypto.randomUUID().slice(0, 8)}`;
+      for (const target of ["hub", "profile"] as const) {
+        await ready(page, "/settings?section=hub");
+        await page.getByLabel("Handle", { exact: true }).fill(draftHandle);
+        await browserExpect(page.locator("#handle-status")).toHaveText("Available");
+        await page.getByLabel("Hub name", { exact: true }).fill(`Saved ${target} name`);
+        if (target === "profile") await settingsSection(page, "Profile");
+        await page.getByRole("link", { name: `View your public ${target}`, exact: true }).click();
+        await browserExpect(page).toHaveURL(
+          target === "hub" ? `${origin}/h/${hub.id}?view=public` : `${origin}/${user.username}`,
+        );
+        const updated = await prisma.hub.findUniqueOrThrow({ where: { id: hub.id } });
+        expect(updated.name).toBe(`Saved ${target} name`);
+        expect(updated.handle).toBe(hub.handle);
+        expect(updated.handleChangedAt).toEqual(hub.handleChangedAt);
+        expect(await prisma.hubHandleReservation.count({ where: { handle: draftHandle } })).toBe(0);
+      }
+      await ready(page, "/settings?section=hub");
+      await page.getByLabel("Handle", { exact: true }).fill(draftHandle);
+      await browserExpect(page.locator("#handle-status")).toHaveText("Available");
+      await page.getByRole("button", { name: "Save handle", exact: true }).click();
+      await browserExpect(page.getByLabel("Handle", { exact: true })).toHaveAttribute(
+        "readonly",
+        "",
+      );
+      await browserExpect(page.locator("#handle-cooldown")).toBeVisible();
+      const updated = await prisma.hub.findUniqueOrThrow({ where: { id: hub.id } });
+      expect(updated.handle).toBe(draftHandle);
+      expect(updated.handleChangedAt).not.toBeNull();
+    } finally {
+      await close();
+    }
+  }, 30000);
+
   it("autosaves an independent hub name before opening its stable public link", async () => {
     await prisma.requestBudget.deleteMany();
     const email = `hub-autosave-${crypto.randomUUID()}@example.com`;
@@ -2349,12 +2679,12 @@ describe("account shell and appearance", () => {
     }
   }, 30000);
 
-  it("serves generated avatars through the same-origin API as valid SVG images", async () => {
+  it("serves generated avatars through the backend API as valid SVG images", async () => {
     const { page, close } = await freshPage();
     try {
       await ready(page);
       for (const seed of ["user-1", "user-2", "3f1c9a2e-0000-4000-8000-000000000000"]) {
-        const response = await page.request.get(`${origin}/api/v1/avatars/${seed}.svg`);
+        const response = await page.request.get(`${publicApiOrigin}/api/v1/avatars/${seed}.svg`);
         expect(response.status()).toBe(200);
         const svg = await response.text();
         const parsed = await page.evaluate((xml) => {
@@ -2421,14 +2751,15 @@ describe("account shell and appearance", () => {
         await page.getByLabel("Full name", { exact: true }).fill("Mina Reader");
         if (!js) await page.getByRole("button", { name: "Save changes", exact: true }).click();
         await settingsSection(page, "Hub");
-        const handle = `mina-${crypto.randomUUID().slice(0, 8)}`;
-        await page.getByLabel("Handle", { exact: true }).fill(handle);
-        if (js) await browserExpect(page.locator("#handle-status")).toHaveText("Available");
         await page
           .getByLabel("Description", { exact: true })
           .fill("A small library of useful references.");
-        await page.getByLabel("I choose this permanent hub handle.").check();
-        await page.getByRole("button", { name: "Claim handle", exact: true }).click();
+        if (!js) await page.getByRole("button", { name: "Save changes", exact: true }).click();
+        await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
+        const handle = `mina-${crypto.randomUUID().slice(0, 8)}`;
+        await page.getByLabel("Handle", { exact: true }).fill(handle);
+        if (js) await browserExpect(page.locator("#handle-status")).toHaveText("Available");
+        await page.getByRole("button", { name: "Save handle", exact: true }).click();
         await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
         await browserExpect(page.locator("#handle-status")).toBeHidden();
         await page.screenshot({ path: `/tmp/profile-saved-${js}.png`, fullPage: true });
@@ -2493,14 +2824,14 @@ describe("account shell and appearance", () => {
             .locator("fieldset")
             .filter({ has: page.locator("legend", { hasText: /^Profile$/ }) }),
         ).toContainText(email);
-        expect(originalAvatar).toBe(`/api/v1/users/${account.id}/avatar`);
+        expect(originalAvatar).toBe(`${publicApiOrigin}/api/v1/users/${account.id}/avatar`);
         await browserExpect(page.locator("header .avatar")).toHaveAttribute(
           "src",
-          `/api/v1/users/${account.id}/avatar`,
+          `${publicApiOrigin}/api/v1/users/${account.id}/avatar`,
         );
         await browserExpect(page.locator("summary img")).toHaveAttribute(
           "src",
-          `/api/v1/users/${account.id}/avatar`,
+          `${publicApiOrigin}/api/v1/users/${account.id}/avatar`,
         );
         await browserExpect
           .poll(() =>
@@ -2509,16 +2840,10 @@ describe("account shell and appearance", () => {
               .evaluate((image) => (image as HTMLImageElement).naturalWidth),
           )
           .toBe(64);
-        await browserExpect(page.getByLabel("Handle", { exact: true })).toHaveCount(0);
+        await browserExpect(page.getByLabel("Handle", { exact: true })).toHaveValue(handle);
         await browserExpect(
-          page
-            .locator(".account-facts > div")
-            .filter({ has: page.locator("dt", { hasText: /^Handle$/ }) })
-            .locator("dd"),
-        ).toHaveText(handle);
-        await browserExpect(
-          page.getByRole("button", { name: "Claim handle", exact: true }),
-        ).toHaveCount(0);
+          page.getByRole("button", { name: "Save handle", exact: true }),
+        ).toBeVisible();
         expect(
           (await prisma.hub.findUniqueOrThrow({ where: { id: account.hub?.id } })).handle,
         ).toBe(handle);
@@ -2655,20 +2980,134 @@ describe("account shell and appearance", () => {
         ).toBeVisible();
         await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "system");
         await ready(page, "/settings");
-        await browserExpect(page.locator("h1")).toHaveText("Sign in");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
       } finally {
         await close();
       }
     }
   }, 60000);
-  it("always follows system appearance without a session, even with a saved preference", async () => {
+  it("persists account timezone across devices and renders saved dates before hydration", async () => {
+    const profile = (
+      await request(app.getHttpServer())
+        .get("/api/v1/profile")
+        .auth(owner, { type: "bearer" })
+        .expect(200)
+    ).body.data;
+    const at = "2026-10-08T10:00:00.000Z";
+    const demoTime = `.item-context time[datetime="${at}"]`;
+    const [name, ...value] = cookie.split("=");
+    const savedCookie = { name, value: value.join("="), url: origin };
+    try {
+      for (const js of [true, false]) {
+        await request(app.getHttpServer())
+          .patch("/api/v1/profile")
+          .auth(owner, { type: "bearer" })
+          .send({ timeZone: null })
+          .expect(200);
+        const context = await browser.newContext({
+          javaScriptEnabled: js,
+          timezoneId: "America/Los_Angeles",
+          locale: "en-GB",
+        });
+        try {
+          await context.addCookies([savedCookie]);
+          const page = await context.newPage();
+          await ready(page, "/settings");
+          await browserExpect(page.getByLabel("Timezone", { exact: true })).toHaveValue("");
+          await page.getByLabel("Timezone", { exact: true }).selectOption("Africa/Dar_es_Salaam");
+          if (!js) await page.getByRole("button", { name: "Save changes", exact: true }).click();
+          await browserExpect
+            .poll(
+              async () =>
+                (await prisma.user.findUniqueOrThrow({ where: { id: profile.id } })).timeZone,
+            )
+            .toBe("Africa/Dar_es_Salaam");
+          if (js) {
+            for (const colorScheme of ["light", "dark"] as const) {
+              await page.emulateMedia({ colorScheme });
+              for (const width of [390, 768, 1280, 1440]) {
+                await page.setViewportSize({ width, height: 1000 });
+                await page.screenshot({
+                  path: `/tmp/timezone-settings-${colorScheme}-${width}.png`,
+                  fullPage: true,
+                });
+                expect(
+                  await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+                ).toBe(true);
+              }
+            }
+          }
+          await ready(page, "/");
+          await browserExpect(page.locator(demoTime).first()).toHaveText("8 Oct 2026, 13:00");
+          // A second device with no JS proves the preference arrives in SSR,
+          // independent of both device timezone and browser-local storage.
+          const second = await browser.newContext({
+            javaScriptEnabled: false,
+            timezoneId: "Asia/Tokyo",
+          });
+          try {
+            await second.addCookies([savedCookie]);
+            const other = await second.newPage();
+            await ready(other, "/");
+            await browserExpect(other.locator(demoTime).first()).toHaveText("8 Oct 2026, 13:00");
+          } finally {
+            await second.close();
+          }
+          await ready(page, "/settings");
+          await browserExpect(page.getByLabel("Timezone", { exact: true })).toHaveValue(
+            "Africa/Dar_es_Salaam",
+          );
+          await page.getByLabel("Timezone", { exact: true }).selectOption("");
+          if (!js) await page.getByRole("button", { name: "Save changes", exact: true }).click();
+          await browserExpect
+            .poll(
+              async () =>
+                (await prisma.user.findUniqueOrThrow({ where: { id: profile.id } })).timeZone,
+            )
+            .toBeNull();
+          await ready(page, "/");
+          if (js)
+            await browserExpect(page.locator(demoTime).first()).toHaveText("8 Oct 2026, 03:00");
+          else
+            await browserExpect(page.locator(".item-context noscript time").first()).toContainText(
+              "10:00 UTC",
+            );
+          // A guest still follows the device even if the account prefers elsewhere.
+          await request(app.getHttpServer())
+            .patch("/api/v1/profile")
+            .auth(owner, { type: "bearer" })
+            .send({ timeZone: "Asia/Tokyo" })
+            .expect(200);
+          await context.clearCookies();
+          await ready(page, "/");
+          if (js)
+            await browserExpect(page.locator(demoTime).first()).toHaveText("8 Oct 2026, 03:00");
+        } finally {
+          await context.close();
+        }
+      }
+    } finally {
+      await request(app.getHttpServer())
+        .patch("/api/v1/profile")
+        .auth(owner, { type: "bearer" })
+        .send({ timeZone: profile.timeZone })
+        .expect(200);
+    }
+  }, 60000);
+  it("lets signed-out visitors change appearance without overwriting saved account preferences", async () => {
     for (const js of [true, false]) {
       const { page, close } = await freshPage(js);
       try {
-        await page.context().addCookies([{ name: "appearance", value: "light", url: origin }]);
+        await page.context().addCookies([{ name: "appearance", value: "dark", url: origin }]);
         await page.emulateMedia({ colorScheme: "dark" });
-        await ready(page);
+        await ready(page, "/?item=019a0000-0000-7000-8000-000000000006");
+        const address = page.url();
         await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "system");
+        const toggle = page.locator("header .theme-toggle");
+        await browserExpect(toggle.getByRole("button")).toHaveCount(1);
+        await browserExpect(toggle.getByRole("button")).toHaveAccessibleName(
+          "Switch to light theme",
+        );
         const dark = await page
           .locator("body")
           .evaluate((el) => getComputedStyle(el).backgroundColor);
@@ -2677,15 +3116,34 @@ describe("account shell and appearance", () => {
           .locator("body")
           .evaluate((el) => getComputedStyle(el).backgroundColor);
         expect(dark).not.toBe(light);
+        await browserExpect(toggle.getByRole("button")).toHaveCount(1);
+        await browserExpect(toggle.getByRole("button")).toHaveAccessibleName(
+          "Switch to dark theme",
+        );
+        for (const next of ["dark", "light"]) {
+          await toggle
+            .getByRole("button", { name: `Switch to ${next} theme`, exact: true })
+            .click();
+          await browserExpect(page).toHaveURL(address);
+          await browserExpect(page.locator("html")).toHaveAttribute("data-theme", next);
+        }
+        await browserExpect(toggle.getByRole("button", { name: /system/i })).toHaveCount(0);
+        for (const width of [390, 768, 1280, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.screenshot({ path: `/tmp/reader-theme-${js}-${width}.png`, fullPage: true });
+        }
+        await page.emulateMedia({ colorScheme: "dark" });
+        await page.reload();
+        await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "light");
+        await ready(page, "/sign-in");
+        await browserExpect(toggle.getByRole("button")).toBeVisible();
+        await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "light");
         await browserExpect(page.getByRole("contentinfo").locator(".theme-picker")).toHaveCount(0);
-        const denied = await page.request.post(`${origin}/forms/theme`, {
-          headers: { Origin: origin },
-          form: { theme: "dark", returnTo: "/settings" },
-          maxRedirects: 0,
-        });
-        expect(denied.status()).toBe(303);
-        expect(denied.headers().location).toContain("/sign-in");
-        expect(denied.headers()["set-cookie"]).toBeUndefined();
+        expect(
+          (await page.context().cookies()).find((cookie) => cookie.name === "appearance")?.value,
+        ).toBe("dark");
+        await browserSignIn(page, `reader-theme-${crypto.randomUUID()}@example.com`, "/settings");
+        await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "dark");
         const rejected = await page.request.post(`${origin}/forms/theme`, {
           headers: { Origin: "https://untrusted.example" },
           form: { theme: "light" },
@@ -2716,6 +3174,12 @@ it("saves a first private link through email, preserves retries, then adds and r
       await page.getByRole("button", { name: "Save link", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Verify your email to save this link");
       expect(page.url()).not.toContain("fixture-links.dev");
+      await browserExpect(
+        page.getByRole("button", { name: "Continue with Google", exact: true }),
+      ).toHaveCount(0);
+      await browserExpect(
+        page.getByRole("button", { name: "Sign in with a passkey", exact: true }),
+      ).toHaveCount(0);
       await page.getByLabel("Email address").fill(email);
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
@@ -3070,11 +3534,6 @@ it("shows collection descriptions and hub attribution without repeated separator
     await ready(page, "/");
     expect(
       await page
-        .locator(".landing-discovery")
-        .evaluate((el) => getComputedStyle(el).borderTopWidth),
-    ).toBe("1px");
-    expect(
-      await page
         .locator(".collection-example .resource-row")
         .first()
         .evaluate((el) => getComputedStyle(el).borderTopWidth),
@@ -3160,6 +3619,7 @@ describe("collection discussion", () => {
         await browserExpect(page.locator("h1")).toHaveText("Sign in to continue");
         await browserExpect(page.locator(".verify-reason")).toContainText("post your comment");
         await page.getByLabel("Email address").fill(discussant);
+        await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
         await page.getByLabel("Eight-digit code").fill(await capturedCode(discussant));
         await page.getByRole("button", { name: "Verify and continue" }).click();
@@ -3179,6 +3639,7 @@ describe("collection discussion", () => {
         await browserExpect(page.locator("h1")).toHaveText("Sign in to continue");
         const stranger = `stranger-${crypto.randomUUID()}@example.com`;
         await page.getByLabel("Email address").fill(stranger);
+        await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
         await page.getByLabel("Eight-digit code").fill(await capturedCode(stranger));
         await page.getByRole("button", { name: "Verify and continue" }).click();
@@ -3316,6 +3777,7 @@ it("preserves a throttled resend journey beyond the normal resend interval", asy
     try {
       await ready(page, "/sign-in?returnTo=%2Fhub");
       await page.getByLabel("Email address").fill(`cooldown-${crypto.randomUUID()}@example.com`);
+      await page.getByRole("button", { name: "Continue with email", exact: true }).click();
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
       await waitForResend(page);
@@ -3595,6 +4057,14 @@ describe("activity and attribution", () => {
         await browserExpect(person.locator("img")).toBeVisible();
         await browserExpect(person).toHaveText(username);
       }
+      const addedItem = page.locator(`#item-${firstItem.body.data.id}`);
+      await addedItem.locator(".resource-meta").click();
+      const attribution = addedItem.locator(".item-context > .meta").last();
+      await browserExpect(attribution).toContainText("Added by eli-editor");
+      await browserExpect(
+        attribution.getByRole("link", { name: "eli-editor", exact: true }),
+      ).toHaveAttribute("href", "/eli-editor");
+      await browserExpect(attribution.locator("time")).toBeVisible();
       await page.screenshot({ path: "/tmp/attribution-header-desktop.png" });
       await page.setViewportSize({ width: 390, height: 844 });
       await page.screenshot({ path: "/tmp/attribution-header-mobile.png" });
@@ -4287,6 +4757,36 @@ it("normalizes hub and service audit identities with full ID copying and stable 
     }
   }
 }, 30000);
+
+it("filters audit calendar days in the saved timezone with native and enhanced forms", async () => {
+  const op = await operatorFixture("timezone-audit");
+  await request(app.getHttpServer())
+    .patch("/api/v1/profile")
+    .auth(op.token, { type: "bearer" })
+    .send({ timeZone: "America/New_York" })
+    .expect(200);
+  for (const js of [true, false]) {
+    const { page, close } = await freshPage(js, "Asia/Tokyo");
+    try {
+      await browserSignIn(page, op.email, "/manage/audit");
+      await ready(
+        page,
+        "/manage/audit?from=2026-03-07T05%3A00%3A00.000Z&to=2026-03-08T04%3A59%3A59.999Z",
+      );
+      await browserExpect(page.getByLabel("From", { exact: true })).toHaveValue("2026-03-07");
+      await page.getByLabel("From", { exact: true }).fill("2026-03-08");
+      await page.getByLabel("To", { exact: true }).fill("2026-03-08");
+      await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+      await browserExpect(page.getByLabel("From", { exact: true })).toHaveValue("2026-03-08");
+      const query = new URL(page.url()).searchParams;
+      expect(query.get("from")).toBe("2026-03-08T05:00:00.000Z");
+      expect(query.get("to")).toBe("2026-03-09T03:59:59.999Z");
+      await browserExpect(page.getByText("Times shown in UTC.")).toBeHidden();
+    } finally {
+      await close();
+    }
+  }
+}, 60000);
 
 it("shows recorded audit effects, honest legacy gaps, international dates and optional reads", async () => {
   const op = await operatorFixture("audit-effects");
@@ -5120,9 +5620,62 @@ describe("item details routes", () => {
               .poll(() => new URL(page.url()).searchParams.get("item"))
               .toBe(link.id);
           else expect(new URL(page.url()).searchParams.has("item")).toBe(false);
-          const destination = await details
-            .getByRole("link", { name: "Link to this item" })
-            .getAttribute("href");
+          let destination: string | null;
+          if (js) {
+            await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+            const beforeCopy = page.url();
+            const copy = details.getByRole("button", { name: "Copy link to this item" });
+            await copy.focus();
+            await page.keyboard.press("Enter");
+            await browserExpect(details.getByRole("status")).toHaveText("Link copied.");
+            await browserExpect(details).toBeVisible();
+            expect(page.url()).toBe(beforeCopy);
+            destination = await page.evaluate(() => navigator.clipboard.readText());
+            // Clipboard refusal leaves a selectable URL and keeps the item open.
+            await page.evaluate(() => {
+              Object.defineProperty(navigator.clipboard, "writeText", {
+                configurable: true,
+                value: () =>
+                  Promise.reject(new DOMException("Clipboard denied", "NotAllowedError")),
+              });
+            });
+            await copy.click();
+            await browserExpect(details.getByRole("status")).toHaveText(
+              "Select the link below and copy it.",
+            );
+            const manualLink = details.getByRole("textbox", { name: "Link to this item" });
+            await browserExpect(manualLink).toHaveValue(destination);
+            await details.getByText("Link to this item", { exact: true }).click();
+            await browserExpect(manualLink).toBeFocused();
+            expect(
+              await manualLink.evaluate((element) => {
+                const input = element as HTMLInputElement;
+                return input.selectionStart === 0 && input.selectionEnd === input.value.length;
+              }),
+            ).toBe(true);
+            await page.setViewportSize({ width: 390, height: 800 });
+            await page.screenshot({
+              path: "/tmp/item-copy-fallback-390.png",
+              fullPage: true,
+              animations: "disabled",
+            });
+            expect(
+              await details.evaluate((element) => element.scrollWidth <= element.clientWidth),
+            ).toBe(true);
+            await page.evaluate(() => Reflect.deleteProperty(navigator.clipboard, "writeText"));
+            await copy.click();
+            await browserExpect(details.getByRole("status")).toHaveText("Link copied.");
+            await browserExpect(manualLink).toHaveCount(0);
+            await page.screenshot({
+              path: "/tmp/item-copy-success-390.png",
+              animations: "disabled",
+            });
+            await page.setViewportSize({ width: 1280, height: 800 });
+          } else {
+            destination = await details
+              .getByRole("link", { name: "Open item link to copy its address" })
+              .getAttribute("href");
+          }
           const selected = new URL(destination ?? "", origin);
           expect(decodeURIComponent(selected.pathname)).toBe(base);
           expect(selected.searchParams.get("item")).toBe(link.id);
@@ -5151,7 +5704,10 @@ describe("item details routes", () => {
               .toBe((await another.getAttribute("id"))?.replace("item-", ""));
           await row.locator(".resource-meta").click();
           await browserExpect(another.locator(".item-context")).not.toBeVisible();
-          await details.getByRole("link", { name: "Link to this item" }).click();
+          // A recipient opening the copied address sees the selected item.
+          if (js) await page.goto(selected.href);
+          else
+            await details.getByRole("link", { name: "Open item link to copy its address" }).click();
           await browserExpect(details).toBeVisible();
           await page.reload();
           await browserExpect(details).toBeVisible();
@@ -5172,7 +5728,9 @@ describe("item details routes", () => {
           await browserExpect(
             row.getByRole("link", { name: "A useful resource", exact: true }),
           ).toHaveAttribute("referrerpolicy", "no-referrer");
-          for (const width of [1280, 390]) {
+          // Expanded grouping remains visible without hover or keyboard focus.
+          await page.mouse.move(0, 0);
+          for (const width of [1280, 390, 768, 1440]) {
             await page.setViewportSize({ width, height: 800 });
             await page.emulateMedia({ colorScheme: width === 390 ? "dark" : "light" });
             await page.screenshot({
@@ -5268,6 +5826,7 @@ it("preserves private sharing destinations and resumes access, link and transfer
     const { page, close } = await freshPage(js);
     const verify = async () => {
       await page.getByLabel("Email address").fill(email);
+      await page.getByRole("button", { name: "Continue with email", exact: true }).click();
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
       await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
@@ -5402,6 +5961,7 @@ it("binds resumed collection commands to their account and rechecks current auth
         });
         const verifyingEmail = switchAccount ? nextEmail : email;
         await page.getByLabel("Email address").fill(verifyingEmail);
+        await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
         await browserExpect(page.locator("h1")).toHaveText("Check your email");
         await page.getByLabel("Eight-digit code").fill(await capturedCode(verifyingEmail));
@@ -5492,6 +6052,7 @@ it("offers checked shorter usernames without replacing a draft until chosen", as
       started();
       await held;
       await request.fulfill({
+        headers: apiResponseHeaders(),
         json: { data: { username: stale, status: "invalid", suggestion: "stale-name-a7k2" } },
       });
     });
@@ -5878,6 +6439,7 @@ describe("reorder", () => {
           .click();
         await browserExpect(page.locator(".verify-reason")).toContainText("move this item");
         await page.getByLabel("Email address").fill(email);
+        await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
         await browserExpect(page.locator("h1")).toHaveText("Check your email");
         await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
@@ -5912,7 +6474,7 @@ describe("reorder", () => {
   }
 });
 
-it("claims a permanent hub handle and deactivates/reactivates through native account forms", async () => {
+it("shows handle cooldown and retirement rules and recovers accounts through native forms", async () => {
   for (const js of [true, false]) {
     await prisma.requestBudget.deleteMany();
     const email = `self-service-browser-${crypto.randomUUID()}@example.com`;
@@ -5920,34 +6482,52 @@ it("claims a permanent hub handle and deactivates/reactivates through native acc
     try {
       await browserOwnerSettings(page, email);
       await settingsSection(page, "Hub");
-      const chosen = `permanent-${crypto.randomUUID().slice(0, 8)}`;
+      const chosen = `evolving-${crypto.randomUUID().slice(0, 8)}`;
       await page.getByLabel("Handle", { exact: true }).fill(chosen);
       if (js) await browserExpect(page.locator("#handle-status")).toHaveText("Available");
-      await page.getByLabel("I choose this permanent hub handle.").check();
       if (js)
         for (const width of [390, 768, 1280, 1440]) {
           await page.setViewportSize({ width, height: 900 });
-          await page.screenshot({ path: `/tmp/handle-claim-${width}.png`, fullPage: true });
+          await page.screenshot({ path: `/tmp/handle-edit-${width}.png`, fullPage: true });
         }
-      await page.getByRole("button", { name: "Claim handle", exact: true }).click();
-      await browserExpect(page.getByLabel("Handle", { exact: true })).toHaveCount(0);
-      const claimedHandle = page
-        .locator(".account-facts > div")
-        .filter({ has: page.locator("dt", { hasText: /^Handle$/ }) })
-        .locator("dd");
-      await browserExpect(claimedHandle).toHaveText(chosen);
-      await browserExpect(page.locator("main")).toContainText(
-        "This is your claimed permanent hub handle.",
+      await page.getByRole("button", { name: "Save handle", exact: true }).click();
+      await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
+      const handleField = page.getByLabel("Handle", { exact: true });
+      await browserExpect(handleField).toHaveValue(chosen);
+      const first = await prisma.hub.findFirstOrThrow({ where: { owner: { email } } });
+      await browserExpect(handleField).toHaveAttribute("readonly", "");
+      await browserExpect(
+        page.getByRole("button", { name: "Save handle", exact: true }),
+      ).toBeDisabled();
+      await browserExpect(page.locator("#handle-cooldown")).toContainText(
+        "You can change your handle again on",
       );
-      // The immutable display must still let other hub fields save correctly.
-      await page.getByLabel("Hub name", { exact: true }).fill("A renamed hub after claiming");
+      await browserExpect(page.locator("main")).toContainText(
+        "your previous handle can never be used again",
+      );
+      await prisma.hub.update({
+        where: { id: first.id },
+        data: { handleChangedAt: new Date(Date.now() - 31 * 86400000) },
+      });
+      await page.reload();
+      await browserExpect(handleField).not.toHaveAttribute("readonly", "");
+      const next = `${chosen}-new`;
+      await handleField.fill(next);
+      if (js) await browserExpect(page.locator("#handle-status")).toHaveText("Available");
+      await page.getByRole("button", { name: "Save handle", exact: true }).click();
+      await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
+      await page.reload();
+      await browserExpect(handleField).toHaveValue(next);
+      await browserExpect(handleField).toHaveAttribute("readonly", "");
+      expect((await prisma.hub.findUniqueOrThrow({ where: { id: first.id } })).handle).toBe(next);
+      await page.getByLabel("Hub name", { exact: true }).fill("A new purpose for this hub");
       if (!js) await page.getByRole("button", { name: "Save changes", exact: true }).click();
       await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
       await page.reload();
       await browserExpect(page.getByLabel("Hub name", { exact: true })).toHaveValue(
-        "A renamed hub after claiming",
+        "A new purpose for this hub",
       );
-      await browserExpect(claimedHandle).toHaveText(chosen);
+      await browserExpect(handleField).toHaveValue(next);
       if (js)
         for (const width of [390, 768, 1280, 1440]) {
           await page.setViewportSize({ width, height: 900 });
@@ -5957,7 +6537,7 @@ it("claims a permanent hub handle and deactivates/reactivates through native acc
               await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
             ).toBe(true);
             await page.screenshot({
-              path: `/tmp/handle-claimed-${width}-${colorScheme}.png`,
+              path: `/tmp/handle-edited-${width}-${colorScheme}.png`,
               fullPage: true,
               animations: "disabled",
             });
@@ -5980,11 +6560,12 @@ it("claims a permanent hub handle and deactivates/reactivates through native acc
       expect(person.accountState).toBe("inactive");
       // Advance only this fixture's resend gap.
       await prisma.$executeRaw`UPDATE request_budgets SET expires_at = clock_timestamp() WHERE key = ${emailKey(emailConfig().secret, "issue-gap", email)}`;
-      await page.getByRole("link", { name: "Reactivate account", exact: true }).click();
-      await page.getByLabel("Account email").fill(email);
-      await page.getByRole("button", { name: "Send confirmation code" }).click();
-      await page.getByLabel("Verification code").fill(await capturedCode(email));
-      await page.getByRole("button", { name: "Confirm: reactivate account" }).click();
+      await browserSignIn(page, email, "/hub");
+      await browserExpect(page.locator("h1")).toHaveText("Reactivate account");
+      await browserExpect(
+        page.getByRole("button", { name: "Cancel deletion", exact: true }),
+      ).toHaveCount(0);
+      await page.getByRole("button", { name: "Reactivate account", exact: true }).click();
       await browserExpect(page.getByRole("status")).toContainText("active again");
       expect((await prisma.user.findUniqueOrThrow({ where: { email } })).accountState).toBe(
         "active",
@@ -6046,14 +6627,20 @@ it("shows public Gravatar pictures and links Settings to Support with native fal
     const { page, close } = await freshPage(js);
     const loaded = async (selector: string, width: number) => {
       const picture = page.locator(selector);
-      await browserExpect(picture).toHaveAttribute("src", `/api/v1/users/${id}/avatar`);
+      await browserExpect(picture).toHaveAttribute(
+        "src",
+        `${publicApiOrigin}/api/v1/users/${id}/avatar`,
+      );
       await browserExpect
         .poll(() => picture.evaluate((element: HTMLImageElement) => element.naturalWidth))
         .toBe(width);
     };
     const externalImages: string[] = [];
     page.on("request", (request) => {
-      if (request.resourceType() === "image" && !request.url().startsWith(origin))
+      if (
+        request.resourceType() === "image" &&
+        ![origin, publicApiOrigin].includes(new URL(request.url()).origin)
+      )
         externalImages.push(request.url());
     });
     try {
@@ -6179,6 +6766,8 @@ it("protects passwordless sign-in with passkeys and native authenticator recover
       page.getByRole("heading", { name: "Account security", exact: true }),
     ).toBeVisible();
     const cdp = await page.context().newCDPSession(page);
+    const person = await prisma.user.findUniqueOrThrow({ where: { email } });
+    await expectSignIns(prisma, person.id, ["email"]);
     await cdp.send("WebAuthn.enable");
     const { authenticatorId } = await cdp.send("WebAuthn.addVirtualAuthenticator", {
       options: {
@@ -6204,7 +6793,9 @@ it("protects passwordless sign-in with passkeys and native authenticator recover
         status: response.status,
         headers: {
           "content-type": "application/json",
-          "set-cookie": response.headers.getSetCookie()[0],
+          "set-cookie": response.headers.getSetCookie().join("\n"),
+          "access-control-allow-origin": origin,
+          "access-control-allow-credentials": "true",
         },
         body: JSON.stringify(options),
       });
@@ -6216,6 +6807,9 @@ it("protects passwordless sign-in with passkeys and native authenticator recover
     );
     expect(await prisma.passkey.count({ where: { user: { email } } })).toBe(0);
     await page.unroute("**/api/v1/auth/security/passkey/options");
+    // The virtual device retained the credential from rejected enrollment.
+    // Remove that unregistered credential before testing a successful login.
+    await cdp.send("WebAuthn.clearCredentials", { authenticatorId });
     await cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId, isBadUV: false });
     await page.getByRole("button", { name: "Add a passkey", exact: true }).click();
     await browserExpect(
@@ -6242,6 +6836,44 @@ it("protects passwordless sign-in with passkeys and native authenticator recover
       await fetch("/forms/sign-out", { method: "POST", body: new URLSearchParams() });
     });
     await ready(page, "/sign-in?returnTo=/settings/security");
+    const abandonedEmail = `abandoned-google-${crypto.randomUUID()}@example.com`;
+    await signInWithCode(app.getHttpServer(), { email: abandonedEmail });
+    const abandonedToken = await stageGoogleConnection(
+      prisma,
+      process.env.BETTER_AUTH_SECRET ?? "",
+      {
+        email: abandonedEmail,
+        subject: crypto.randomUUID(),
+      },
+    );
+    await page.context().addCookies([
+      {
+        name: googleConnectionCookie(publicApiOrigin),
+        value: abandonedToken ?? "",
+        url: origin,
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+    // A valid device credential for this user cannot authenticate a different
+    // selected email. No account methods or credential IDs are disclosed.
+    const wrongEmail = `wrong-passkey-${crypto.randomUUID()}@example.com`;
+    await page.getByLabel("Email address").fill(wrongEmail);
+    await page.getByRole("button", { name: "Continue with email", exact: true }).click();
+    const wrongOptions = page.waitForResponse((response) =>
+      response.url().endsWith("/passkey/generate-authenticate-options"),
+    );
+    await page.getByRole("button", { name: "Sign in with a passkey", exact: true }).click();
+    expect((await (await wrongOptions).json()).allowCredentials ?? []).toEqual([]);
+    await browserExpect(page.locator(".security-passkey [role=alert]")).toContainText(
+      "couldn't verify",
+    );
+    expect(await prisma.user.findUnique({ where: { email: wrongEmail } })).toBeNull();
+    expect((await page.request.get(`${publicApiOrigin}/api/v1/profile`)).status()).toBe(401);
+    await ready(page, "/sign-in?returnTo=/settings/security");
+    await page.getByLabel("Email address").fill(email);
+    await page.getByRole("button", { name: "Continue with email", exact: true }).click();
+    const mailsBeforePasskey = await prisma.emailOutbox.count();
     await cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId, isBadUV: true });
     await page.route("**/api/v1/auth/passkey/generate-authenticate-options", async (route) => {
       const response = await fetch(route.request().url(), {
@@ -6253,7 +6885,9 @@ it("protects passwordless sign-in with passkeys and native authenticator recover
         status: response.status,
         headers: {
           "content-type": "application/json",
-          "set-cookie": response.headers.getSetCookie()[0],
+          "set-cookie": response.headers.getSetCookie().join("\n"),
+          "access-control-allow-origin": origin,
+          "access-control-allow-credentials": "true",
         },
         body: JSON.stringify({ ...(await response.json()), userVerification: "discouraged" }),
       });
@@ -6262,8 +6896,13 @@ it("protects passwordless sign-in with passkeys and native authenticator recover
     await browserExpect(page.locator(".security-passkey [role=alert]")).toContainText(
       "couldn't verify",
     );
-    expect((await page.request.get(`${origin}/api/v1/profile`)).status()).toBe(401);
+    expect((await page.request.get(`${publicApiOrigin}/api/v1/profile`)).status()).toBe(401);
     await page.unroute("**/api/v1/auth/passkey/generate-authenticate-options");
+    expect(
+      (await page.context().cookies(origin)).some((cookie) =>
+        cookie.name.includes("google_connection"),
+      ),
+    ).toBe(false);
     await cdp.send("WebAuthn.setResponseOverrideBits", { authenticatorId, isBadUV: false });
     await page.route("**/api/v1/auth/passkey/verify-authentication", async (route) => {
       const payload = route.request().postDataJSON();
@@ -6280,21 +6919,65 @@ it("protects passwordless sign-in with passkeys and native authenticator recover
     await browserExpect(page.locator(".security-passkey [role=alert]")).toContainText(
       "couldn't verify",
     );
-    expect((await page.request.get(`${origin}/api/v1/profile`)).status()).toBe(401);
+    expect((await page.request.get(`${publicApiOrigin}/api/v1/profile`)).status()).toBe(401);
     await page.unroute("**/api/v1/auth/passkey/verify-authentication");
     // Start the independent successful ceremony with a fresh source-budget window.
     await prisma.requestBudget.deleteMany();
-    const assertionRequest = page.waitForRequest((request) =>
-      request.url().endsWith("/passkey/verify-authentication"),
+    const assertionRequest = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" && request.url().endsWith("/passkey/verify-authentication"),
     );
     await page.getByRole("button", { name: "Sign in with a passkey", exact: true }).click();
-    const assertion = (await assertionRequest).postDataJSON();
+    const assertionCall = await assertionRequest;
+    const assertion = assertionCall.postDataJSON();
+    const assertionResponse = await assertionCall.response();
+    expect(assertionResponse?.status()).toBe(200);
+    await expectSignIns(prisma, person.id, ["email", "passkey"]);
     await browserExpect(
       page.getByRole("heading", { name: "Account security", exact: true }),
     ).toBeVisible();
     expect(
       await prisma.session.count({ where: { user: { email }, authenticationMethod: "passkey" } }),
     ).toBeGreaterThan(0);
+    expect(await prisma.emailOutbox.count()).toBe(mailsBeforePasskey);
+    await page.evaluate(async () => {
+      await fetch("/forms/sign-out", { method: "POST", body: new URLSearchParams() });
+    });
+    // An existing external-email Google identity can prove this same account
+    // with its registered passkey, without an email code or TOTP first.
+    const startStatus = await page.evaluate(async () => {
+      const response = await fetch("/forms/auth-start", {
+        method: "POST",
+        body: new URLSearchParams({ returnTo: "/settings/security" }),
+      });
+      return response.status;
+    });
+    expect(startStatus).toBe(200);
+    const inlineSubject = crypto.randomUUID();
+    const inlineToken = await stageGoogleConnection(prisma, process.env.BETTER_AUTH_SECRET ?? "", {
+      email,
+      subject: inlineSubject,
+    });
+    await page.context().addCookies([
+      {
+        name: googleConnectionCookie(publicApiOrigin),
+        value: inlineToken ?? "",
+        url: origin,
+        httpOnly: true,
+        sameSite: "Lax",
+      },
+    ]);
+    await ready(page, "/sign-in/google");
+    await page.getByRole("button", { name: "Sign in with a passkey", exact: true }).click();
+    await browserExpect(
+      page.getByRole("heading", { name: "Account security", exact: true }),
+    ).toBeVisible();
+    expect(
+      await prisma.account.count({
+        where: { providerId: "google", accountId: inlineSubject, user: { email } },
+      }),
+    ).toBe(1);
+    expect(await prisma.emailOutbox.count()).toBe(mailsBeforePasskey);
     await page.evaluate(async () => {
       await fetch("/forms/sign-out", { method: "POST", body: new URLSearchParams() });
     });
@@ -6303,7 +6986,7 @@ it("protects passwordless sign-in with passkeys and native authenticator recover
       page.getByRole("heading", { name: "Confirm your sign-in", exact: true }),
     ).toBeVisible();
     await securityScreens(page, "factor");
-    const guarded = await page.request.get(`${origin}/api/v1/profile`);
+    const guarded = await page.request.get(`${publicApiOrigin}/api/v1/profile`);
     expect(guarded.status()).toBe(401);
     await page.getByRole("link", { name: "Use a recovery code", exact: true }).click();
     await page.getByLabel("Recovery code", { exact: true }).fill(recovery);
@@ -6311,11 +6994,15 @@ it("protects passwordless sign-in with passkeys and native authenticator recover
     await browserExpect(
       page.getByRole("heading", { name: "Account security", exact: true }),
     ).toBeVisible();
-    const replay = await page.request.post(`${origin}/api/v1/auth/passkey/verify-authentication`, {
-      data: assertion,
-      headers: { origin },
-    });
+    const replay = await page.request.post(
+      `${publicApiOrigin}/api/v1/auth/passkey/verify-authentication`,
+      {
+        data: assertion,
+        headers: { origin },
+      },
+    );
     expect(replay.ok()).toBe(false);
+    await expectSignIns(prisma, person.id, ["email", "passkey", "passkey", "recovery"]);
     await cdp.send("WebAuthn.removeVirtualAuthenticator", { authenticatorId });
   } finally {
     await close();
@@ -6372,7 +7059,7 @@ it("sets up an authenticator and uses recovery without JavaScript", async () => 
   }
 }, 30000);
 
-it("starts existing-account Google sign-in through a native form", async () => {
+it("starts Google sign-in through a native form", async () => {
   const { page, close } = await freshPage(false);
   try {
     let providerURL = "";
@@ -6397,8 +7084,11 @@ it("starts existing-account Google sign-in through a native form", async () => {
     });
     await ready(page, "/sign-in?returnTo=/settings/security");
     await browserExpect(
-      page.getByText("For existing accounts. Use email below to create an account."),
+      page.getByRole("button", { name: "Continue with email", exact: true }),
     ).toBeVisible();
+    await browserExpect(
+      page.getByRole("button", { name: "Sign in with a passkey", exact: true }),
+    ).toHaveCount(0);
     await securityScreens(page, "signin");
     await page.getByRole("button", { name: "Continue with Google", exact: true }).click();
     await browserExpect(
@@ -6406,7 +7096,9 @@ it("starts existing-account Google sign-in through a native form", async () => {
     ).toBeVisible();
     const target = new URL(providerURL);
     expect(target.origin).toBe("https://accounts.google.com");
-    expect(target.searchParams.get("redirect_uri")).toBe(`${origin}/api/v1/auth/callback/google`);
+    expect(target.searchParams.get("redirect_uri")).toBe(
+      `${publicApiOrigin}/api/v1/auth/callback/google`,
+    );
     expect(target.searchParams.get("code_challenge_method")).toBe("S256");
     expect(target.searchParams.get("state")).toBeTruthy();
     const cookies = await page.context().cookies(origin);
@@ -6417,3 +7109,426 @@ it("starts existing-account Google sign-in through a native form", async () => {
     await close();
   }
 }, 30000);
+
+for (const registration of [false, true]) {
+  it(`completes ${registration ? "new-account" : "existing-account"} Google inline through native verification without Settings`, async () => {
+    const { page, close } = await freshPage(false);
+    const email = `inline-google-${crypto.randomUUID()}@example.com`;
+    const subject = crypto.randomUUID();
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = Object.assign(
+      async (input: string | URL | Request, init?: RequestInit) => {
+        const url =
+          typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+        if (url !== "https://oauth2.googleapis.com/token") return originalFetch(input, init);
+        const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+        return Response.json({
+          access_token: "synthetic-access",
+          token_type: "Bearer",
+          expires_in: 3600,
+          id_token: `${part({ alg: "none" })}.${part({ sub: subject, email, email_verified: true, name: "Google fixture" })}.synthetic`,
+        });
+      },
+      { preconnect: originalFetch.preconnect },
+    ) as typeof fetch;
+    try {
+      if (!registration) {
+        await browserSignIn(page, email, "/settings");
+        await browserExpect(
+          page.getByRole("heading", { name: "Settings", exact: true }),
+        ).toBeVisible();
+        await page.locator(".account-menu summary").click();
+        await page.getByRole("button", { name: "Sign out", exact: true }).click();
+      }
+      const googleCount = () =>
+        prisma.account.count({ where: { user: { email }, providerId: "google" } });
+      await page.route("**/forms/google-start", async (route) => {
+        const response = await fetch(route.request().url(), {
+          method: "POST",
+          body: route.request().postData(),
+          headers: await route.request().allHeaders(),
+          redirect: "manual",
+        });
+        expect(response.status).toBe(303);
+        const provider = new URL(response.headers.get("location") ?? "");
+        const callback = new URL(provider.searchParams.get("redirect_uri") ?? "");
+        callback.searchParams.set("state", provider.searchParams.get("state") ?? "");
+        callback.searchParams.set("code", "synthetic-code");
+        // Substitute provider consent only; retain real state cookies and backend callback.
+        await route.fulfill({
+          status: 303,
+          headers: {
+            location: callback.href,
+            "set-cookie": response.headers.getSetCookie().join("\n"),
+          },
+          body: "",
+        });
+      });
+      await ready(page, "/sign-in?returnTo=/notifications");
+      await page.getByRole("button", { name: "Continue with Google", exact: true }).click();
+      await browserExpect(page).toHaveURL(
+        `${origin}${registration ? "/sign-up/confirm?method=google" : "/sign-in/google"}`,
+      );
+      await browserExpect(
+        page.getByRole("heading", {
+          name: registration ? "Create your account" : "Verify your email",
+        }),
+      ).toBeVisible();
+      await browserExpect(
+        page.locator(registration ? ".verify-reason" : ".verify-detail"),
+      ).toContainText(email);
+      expect(await googleCount()).toBe(0);
+      if (registration) {
+        expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
+        await browserExpect(
+          page.getByRole("button", { name: "Create account", exact: true }),
+        ).toBeVisible();
+        await browserExpect(
+          page.getByText("There isn’t an nslinkhub account for", {
+            exact: false,
+          }),
+        ).toBeVisible();
+      }
+      await securityScreens(page, registration ? "google-create" : "google-connect");
+      if (registration) {
+        await browserExpect(page.locator(".verify-footer")).toContainText("Use a different email");
+        await browserExpect(page.locator("main button")).toHaveCount(2);
+      }
+      await page
+        .getByRole("button", {
+          name: registration ? "Use a different email" : "Cancel",
+          exact: true,
+        })
+        .click();
+      await browserExpect(page).toHaveURL(`${origin}/sign-in?returnTo=%2Fnotifications`);
+      expect(
+        (await page.context().cookies(origin)).some((cookie) =>
+          cookie.name.includes("google_connection"),
+        ),
+      ).toBe(false);
+      await browserExpect(
+        page.getByRole("button", { name: "Continue with email", exact: true }),
+      ).toBeVisible();
+      await browserExpect(
+        page.getByRole("button", { name: "Continue with Google", exact: true }),
+      ).toBeVisible();
+      expect(await googleCount()).toBe(0);
+      const switchEmail = `google-switch-${crypto.randomUUID()}@example.com`;
+      await signInWithCode(app.getHttpServer(), { email: switchEmail });
+      await page.getByRole("button", { name: "Continue with Google", exact: true }).click();
+      await browserExpect(page).toHaveURL(
+        `${origin}${registration ? "/sign-up/confirm?method=google" : "/sign-in/google"}`,
+      );
+      // Leave without Cancel and start ordinary email sign-in for another account.
+      await ready(page, "/sign-in");
+      await browserSignIn(page, switchEmail, "/settings");
+      await browserExpect(
+        page.getByRole("heading", { name: "Settings", exact: true }),
+      ).toBeVisible();
+      expect(await googleCount()).toBe(0);
+      expect(
+        (await page.context().cookies(origin)).some((cookie) =>
+          cookie.name.includes("google_connection"),
+        ),
+      ).toBe(false);
+      if (registration) expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
+      await page.locator(".account-menu summary").click();
+      await page.getByRole("button", { name: "Sign out", exact: true }).click();
+      await ready(page, "/sign-in?returnTo=/notifications");
+      await page.getByRole("button", { name: "Continue with Google", exact: true }).click();
+      await page
+        .getByRole("button", {
+          name: registration ? "Create account" : "Send code",
+          exact: true,
+        })
+        .click();
+      if (!registration) {
+        await browserExpect(
+          page.getByRole("heading", { name: "Verify your email", exact: true }),
+        ).toBeVisible();
+        await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+        await page.getByRole("button", { name: "Verify and continue", exact: true }).click();
+      }
+      await browserExpect(page).toHaveURL(`${origin}/notifications`);
+      expect(await googleCount()).toBe(1);
+      if (registration) {
+        const created = await prisma.user.findUniqueOrThrow({ where: { email } });
+        expect(created.name).toBe("Google fixture");
+        expect(created.emailVerified).toBe(true);
+        expect(
+          await prisma.emailOutbox.count({
+            where: {
+              recipientKey: emailKey(
+                process.env.EMAIL_SUPPRESSION_SECRET ?? "",
+                "recipient",
+                email,
+              ),
+            },
+          }),
+        ).toBe(0);
+      }
+      expect(
+        (await page.context().cookies(origin)).some((cookie) =>
+          cookie.name.includes("google_connection"),
+        ),
+      ).toBe(false);
+      await page.locator(".account-menu summary").click();
+      await page.getByRole("button", { name: "Sign out", exact: true }).click();
+      await ready(page, "/sign-in?returnTo=/notifications");
+      await page.getByRole("button", { name: "Continue with Google", exact: true }).click();
+      await browserExpect(page).toHaveURL(`${origin}/notifications`);
+      expect(await googleCount()).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+      await close();
+    }
+  }, 60000);
+}
+
+it("offers only cancel deletion after email proof during first-link capture", async () => {
+  for (const js of [true, false]) {
+    await prisma.requestBudget.deleteMany();
+    const email = `recover-capture-${crypto.randomUUID()}@example.com`;
+    await signInWithCode(app.getHttpServer(), { email });
+    const user = await prisma.user.update({
+      where: { email },
+      data: {
+        accountState: "inactive",
+        selfDeactivated: true,
+        deletionScheduledFor: new Date(Date.now() + 86400000),
+        operationsVersion: { increment: 1 },
+      },
+    });
+    await prisma.session.deleteMany({ where: { userId: user.id } });
+    await prisma.$executeRaw`UPDATE request_budgets SET expires_at = clock_timestamp() WHERE key = ${emailKey(emailConfig().secret, "issue-gap", email)}`;
+    const { page, close } = await freshPage(js);
+    try {
+      await ready(page, "/sign-in");
+      await browserExpect(
+        page.getByRole("link", { name: "Reactivate an account or cancel deletion" }),
+      ).toHaveCount(0);
+      await ready(page, "/account");
+      await browserExpect(
+        page.getByRole("button", { name: /Reactivate account|Cancel deletion/ }),
+      ).toHaveCount(0);
+      await ready(page, "/capture");
+      await page.getByLabel("Link URL", { exact: true }).fill("https://fixture-links.dev/recovery");
+      await page.getByRole("button", { name: "Save link", exact: true }).click();
+      const destination = new URL(page.url()).searchParams.get("returnTo");
+      await page.getByLabel("Email address").fill(email);
+      await page.getByRole("button", { name: "Send code", exact: true }).click();
+      await browserExpect(page.locator("h1")).toHaveText("Check your email");
+      await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+      await page.getByRole("button", { name: "Verify and save", exact: true }).click();
+      await browserExpect(page.locator("h1")).toHaveText("Cancel deletion");
+      await browserExpect(page.locator("main")).toContainText("scheduled for deletion");
+      await browserExpect(page.locator("main")).toContainText("saving your link");
+      await browserExpect(
+        page.getByRole("button", { name: "Reactivate account", exact: true }),
+      ).toHaveCount(0);
+      await page.setViewportSize({ width: 390, height: 900 });
+      await page.screenshot({ path: `/tmp/account-recovery-capture-${js}.png`, fullPage: true });
+      await page.getByRole("button", { name: "Cancel deletion", exact: true }).click();
+      await browserExpect(page.getByRole("status")).toContainText("Deletion is cancelled");
+      const href = await page
+        .getByRole("link", { name: "Continue to sign in", exact: true })
+        .getAttribute("href");
+      expect(new URL(href ?? "", origin).searchParams.get("returnTo")).toBe(destination);
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).deletionScheduledFor,
+      ).toBeNull();
+      expect(await prisma.session.count({ where: { userId: user.id } })).toBe(0);
+    } finally {
+      await close();
+    }
+  }
+}, 60000);
+
+it("prioritizes verified recovery over a different signed-in account", async () => {
+  for (const js of [true, false]) {
+    for (const deletion of [false, true]) {
+      await prisma.requestBudget.deleteMany();
+      const activeEmail = `active-recovery-${crypto.randomUUID()}@example.com`;
+      const signed = await signInWithCode(app.getHttpServer(), { email: activeEmail });
+      const email = `other-recovery-${crypto.randomUUID()}@example.com`;
+      await signInWithCode(app.getHttpServer(), { email });
+      const user = await prisma.user.update({
+        where: { email },
+        data: {
+          accountState: "inactive",
+          selfDeactivated: true,
+          deletionScheduledFor: deletion ? new Date(Date.now() + 86400000) : null,
+          operationsVersion: { increment: 1 },
+        },
+      });
+      await prisma.session.deleteMany({ where: { userId: user.id } });
+      await prisma.$executeRaw`UPDATE request_budgets SET expires_at = clock_timestamp() WHERE key = ${emailKey(emailConfig().secret, "issue-gap", email)}`;
+      const { page, close } = await freshPage(js);
+      try {
+        for (const raw of signed.headers["set-cookie"] as unknown as string[]) {
+          const [name, ...value] = raw.split(";")[0].split("=");
+          await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
+        }
+        await ready(page, "/account");
+        await browserExpect(
+          page.getByRole("link", { name: "Deactivate account", exact: true }),
+        ).toBeVisible();
+        await ready(page, "/sign-in?returnTo=/notifications");
+        await page.getByLabel("Email address").fill(email);
+        await page.getByRole("button", { name: "Continue with email", exact: true }).click();
+        await page.getByRole("button", { name: "Send code", exact: true }).click();
+        await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+        await page.getByRole("button", { name: "Verify and continue", exact: true }).click();
+        const label = deletion ? "Cancel deletion" : "Reactivate account";
+        await browserExpect(page.locator("h1")).toHaveText(label);
+        await browserExpect(page.locator("main")).toContainText(email);
+        await browserExpect(
+          page.getByRole("link", { name: /^(Deactivate|Delete) account$/ }),
+        ).toHaveCount(0);
+        await browserExpect(
+          page.getByRole("button", {
+            name: deletion ? "Reactivate account" : "Cancel deletion",
+            exact: true,
+          }),
+        ).toHaveCount(0);
+        await page.getByRole("button", { name: label, exact: true }).click();
+        await browserExpect(page.getByRole("status")).toContainText(
+          deletion ? "Deletion is cancelled" : "Your account is active again",
+        );
+        const href = await page
+          .getByRole("link", { name: "Continue to sign in", exact: true })
+          .getAttribute("href");
+        expect(new URL(href ?? "", origin).searchParams.get("returnTo")).toBe("/notifications");
+        const recovered = await prisma.user.findUniqueOrThrow({ where: { id: user.id } });
+        expect(recovered.accountState).toBe(deletion ? "inactive" : "active");
+        expect(recovered.deletionScheduledFor).toBeNull();
+        expect(await prisma.session.count({ where: { userId: user.id } })).toBe(0);
+        await ready(page, "/settings");
+        await browserExpect(page.locator("main")).toContainText(activeEmail);
+      } finally {
+        await close();
+      }
+    }
+  }
+}, 60000);
+
+it("preserves the sign-in destination when choosing a different email", async () => {
+  for (const js of [true, false]) {
+    await prisma.requestBudget.deleteMany();
+    const { page, close } = await freshPage(js);
+    try {
+      const item = await prisma.resource.findFirstOrThrow({ where: { collectionId: sourceId } });
+      const destination = `/c/${sourceId}?item=${item.id}`;
+      for (const returnTo of ["/settings?section=hub", destination]) {
+        await ready(page, `/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
+        await page.getByLabel("Email address").fill(`wrong-${crypto.randomUUID()}@example.com`);
+        await page.getByRole("button", { name: "Continue with email", exact: true }).click();
+        await page.getByRole("link", { name: "Use a different email", exact: true }).click();
+        expect(new URL(page.url()).searchParams.get("returnTo")).toBe(returnTo);
+      }
+      const email = `right-${crypto.randomUUID()}@example.com`;
+      await signInWithCode(app.getHttpServer(), { email });
+      await page.getByLabel("Email address").fill(email);
+      await page.getByRole("button", { name: "Continue with email", exact: true }).click();
+      await page.getByRole("button", { name: "Send code", exact: true }).click();
+      await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+      await page.getByRole("button", { name: "Verify and continue" }).click();
+      await browserExpect(page).toHaveURL(`${origin}${destination}`);
+    } finally {
+      await close();
+    }
+  }
+}, 30000);
+
+it("offers deliberate account creation and an optional named hub after email proof", async () => {
+  for (const js of [true, false]) {
+    for (const withHub of [false, true]) {
+      await prisma.requestBudget.deleteMany();
+      const { page, close } = await freshPage(js);
+      try {
+        const email = `explicit-${crypto.randomUUID()}@example.com`;
+        const destination = `/c/${sourceId}`;
+        await ready(
+          page,
+          `/${withHub ? "sign-up" : "sign-in"}?returnTo=${encodeURIComponent(destination)}`,
+        );
+        await browserExpect(
+          page.getByRole("heading", {
+            name: withHub ? "Create your account" : "Sign in to nslinkhub",
+            exact: true,
+          }),
+        ).toBeVisible();
+        await page.getByLabel("Email address").fill(email);
+        await page.getByRole("button", { name: "Continue with email", exact: true }).click();
+        await page.getByRole("button", { name: "Send code", exact: true }).click();
+        await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+        await page.getByRole("button", { name: "Verify and continue", exact: true }).click();
+        await browserExpect(page).toHaveURL(`${origin}/sign-up/confirm?method=email`);
+        await browserExpect(page.locator(".verify-reason")).toContainText(email);
+        expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
+        await browserExpect(page.getByLabel("Start with a hub", { exact: true })).not.toBeChecked();
+        await browserExpect(page.getByLabel("Hub name", { exact: true })).not.toBeVisible();
+        if (withHub) {
+          await page.getByLabel("Start with a hub", { exact: true }).check();
+          await page.getByLabel("Hub name", { exact: true }).fill("Engineering toolkit");
+        }
+        await page.screenshot({
+          path: `/tmp/explicit-auth-create-${js}-${withHub}.png`,
+          fullPage: true,
+        });
+        await page.getByRole("button", { name: "Create account", exact: true }).click();
+        await browserExpect(page).toHaveURL(`${origin}${destination}`);
+        const user = await prisma.user.findUniqueOrThrow({ where: { email } });
+        const hub = await prisma.hub.findUnique({ where: { ownerUserId: user.id } });
+        if (withHub) {
+          expect(hub?.name).toBe("Engineering toolkit");
+          expect(hub?.handle).toBe(user.username);
+        } else expect(hub).toBeNull();
+      } finally {
+        await close();
+      }
+    }
+  }
+}, 60000);
+
+it("keeps centered authentication entries consistent across viewports and themes", async () => {
+  const { page, close } = await freshPage();
+  try {
+    for (const theme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: theme });
+      for (const width of [390, 768, 1280, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        for (const route of ["sign-in", "sign-up"]) {
+          await ready(page, `/${route}`);
+          const entry = page.locator(".auth-entry");
+          const box = await entry.boundingBox();
+          expect(box).not.toBeNull();
+          expect(Math.abs((box?.x ?? 0) + (box?.width ?? 0) / 2 - width / 2)).toBeLessThan(2);
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+          const input = await page.getByLabel("Email address").boundingBox();
+          const email = await page
+            .getByRole("button", { name: "Continue with email", exact: true })
+            .boundingBox();
+          const google = await page
+            .getByRole("button", { name: "Continue with Google", exact: true })
+            .boundingBox();
+          expect(input?.width).toBe(email?.width);
+          expect(email?.width).toBe(google?.width);
+          expect((input?.y ?? 0) < (email?.y ?? 0) && (email?.y ?? 0) < (google?.y ?? 0)).toBe(
+            true,
+          );
+          await page.screenshot({
+            path: `/tmp/explicit-auth-${route}-${theme}-${width}.png`,
+            fullPage: true,
+          });
+        }
+      }
+    }
+    await ready(page, "/sign-in?notice=unavailable");
+    await page.screenshot({ path: "/tmp/explicit-auth-error.png", fullPage: true });
+  } finally {
+    await close();
+  }
+}, 60000);

@@ -22,6 +22,10 @@ collections transfer), and collaboration happens per collection with
 If organizations are ever needed, follow GitHub: people keep their personal
 accounts, can own organizations, and transfer collections into them.
 
+The address-update assumption above is superseded by [ADR-0041](0041-fixed-account-email.md):
+email changes are unavailable pending a controlled identity action. The rejection
+of memberships and hub transfers remains unchanged.
+
 ## Links
 
 - [ADR-0001](0001-drive-tenancy-model.md)

@@ -1,11 +1,12 @@
 import { webServerConfig } from "@nslinkhub/config/web-server";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { NativeForm } from "../../../components/native-form";
 import { VerifyCode } from "../../../components/verification";
 import { readFlow } from "../../../lib/form-server";
 import { queryValue } from "../../../lib/http";
 import { readPendingAction } from "../../../lib/pending-action";
-import { verificationCopy } from "../../../lib/verification";
+import { googleConnectionCopy, verificationCopy } from "../../../lib/verification";
 export const metadata: Metadata = { title: "Verify your email" };
 export const dynamic = "force-dynamic";
 export default async function Page({
@@ -20,7 +21,17 @@ export default async function Page({
   const pending = purpose === "confirm" || purpose === "resume" ? await readPendingAction() : null;
   return (
     <VerifyCode
-      copy={verificationCopy(purpose, { returnTo: flow.returnTo, action: pending?.label })}
+      copy={
+        flow.googleConnection
+          ? googleConnectionCopy
+          : {
+              ...verificationCopy(purpose, { returnTo: flow.returnTo, action: pending?.label }),
+              ...(flow.intent === "sign-up" && {
+                after:
+                  "Verify your email, then finish creating your account or sign in if you already have one.",
+              }),
+            }
+      }
       email={flow.email}
       notice={queryValue(query.notice)}
       wait={queryValue(query.wait)}
@@ -33,10 +44,18 @@ export default async function Page({
         ),
       )}
       footer={
-        purpose === "invitation" ? (
+        flow.googleConnection ? (
+          <NativeForm action="/forms/google-cancel">
+            <button type="submit" className="button">
+              Cancel
+            </button>
+          </NativeForm>
+        ) : purpose === "invitation" ? (
           <a href="/invitations/review">Back to invitation</a>
         ) : purpose === "confirm" ? null : (
-          <a href={`/sign-in?returnTo=${encodeURIComponent(flow.returnTo)}`}>
+          <a
+            href={`/${flow.intent === "sign-up" ? "sign-up" : "sign-in"}?returnTo=${encodeURIComponent(flow.returnTo)}`}
+          >
             Use a different email
           </a>
         )

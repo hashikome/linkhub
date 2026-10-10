@@ -3,6 +3,11 @@
 **Status:** accepted, amended 2026-10-08: one **Manage** workspace at `/manage`
 **Date:** 2026-10-08
 
+The dated amendments below preserve the evolution of this decision. Current
+Collections and Audit views are unified and capability-scoped under ADR-0023 and
+ADR-0024; neither has a My hub / Service switch. The owner-facing section is
+labelled Access. See the [current workspace contract](../design-docs/manage-workspace.md).
+
 ## Context
 
 A person can own a hub and also administer or operate the service. Separate

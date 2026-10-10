@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { SignInOptions } from "../../components/sign-in-options";
+import { GoogleSignIn } from "../../components/google-sign-in";
+import { PasskeyButton } from "../../components/passkey-button";
 import { VerifyStart } from "../../components/verification";
 import { readPendingAction } from "../../lib/pending-action";
 import { readSession } from "../../lib/session";
@@ -17,7 +18,12 @@ export default async function Page() {
   if (!pending) redirect("/manage");
   return (
     <VerifyStart
-      alternatives={<SignInOptions returnTo={pending.target} />}
+      alternatives={
+        <>
+          <PasskeyButton returnTo={pending.target} />
+          <GoogleSignIn returnTo={pending.target} />
+        </>
+      }
       copy={verificationCopy("confirm", { action: pending.label })}
       purpose="confirm"
       email={session.email}

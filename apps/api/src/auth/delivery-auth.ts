@@ -4,29 +4,32 @@ import { AppException, appError } from "../common/errors/app-exception";
 import { AUTHORITY_LOCK } from "../database/authority-context";
 import { emailKey, enqueueEmail } from "../email/outbox";
 import type { Prisma, PrismaClient } from "../generated/prisma/client";
-import { invalidateAccountInvitations, invitationCodeIdentifier } from "../operations/invitations";
-import {
-  acceptInvitation,
-  finishInvitation,
-  previewInvitation,
-  verificationContext,
-} from "../operations/recipient";
+import { invitationCodeIdentifier } from "../operations/invitations";
+import { acceptInvitation, previewInvitation, verificationContext } from "../operations/recipient";
 import { accountActionContext, completeAccountAction } from "./account-lifecycle";
+import { recoveryContext, recoveryCookie, stageRecovery } from "./account-recovery";
 import { createAuth } from "./create-auth";
-import { bindHandoverProofs, bindProofIdentifiers, handoverIdentifiers } from "./handover-proofs";
+import {
+  discardEmailRegistration,
+  registrationCookie,
+  registrationToken,
+  stageEmailRegistration,
+} from "./email-registration";
+import {
+  connectionCookieHeader,
+  discardGoogleConnection,
+  googleConnectionCookie,
+  googleConnectionToken,
+  pendingGoogleConnection,
+} from "./google-connection";
+import { bindProofIdentifiers } from "./handover-proofs";
 import type { GoogleCredentials } from "./security-config";
-import { invalidateSecurityChallenges, securityHandler, securityPath } from "./security-handler";
+import { securityHandler, securityPath } from "./security-handler";
 import type { SecurityContext } from "./security-plugins";
 
 const basePath = "/api/v1/auth";
 const accountPaths = new Set(["/account/send", "/account/confirm"]);
-const codePaths = new Set([
-  "/code/send",
-  "/code/verify",
-  "/email-change/start",
-  "/email-change/confirm-current",
-  "/email-change/confirm-new",
-]);
+const codePaths = new Set(["/code/send", "/code/verify"]);
 const invitationPaths = new Set([
   "/invitations/preview",
   "/invitations/accept",
@@ -38,7 +41,6 @@ const nativePaths = new Set([
   "/revoke-session",
   "/revoke-sessions",
   "/revoke-other-sessions",
-  "/update-user",
 ]);
 const failure = (status: number, code = "invalid_request") =>
   Response.json(
@@ -93,6 +95,7 @@ export interface DeliveryAuthOptions {
   secret: string;
   suppressionSecret: string;
   baseURL: string;
+  webOrigin?: string;
   supportUrl: string;
   // Seconds between two sign-in codes for one address (default CODE_RESEND_SECONDS).
   codeResendSeconds?: number;
@@ -102,8 +105,9 @@ export interface DeliveryAuthOptions {
 }
 export function createDeliveryAuth(options: DeliveryAuthOptions) {
   const { prisma, secret, baseURL, supportUrl } = options;
+  const webOrigin = options.webOrigin ?? new URL(baseURL).origin;
   const resendGap = options.codeResendSeconds ?? CODE_RESEND_SECONDS;
-  const ordinary = createAuth({ prisma, secret, baseURL, google: options.google });
+  const ordinary = createAuth({ prisma, secret, baseURL, webOrigin, google: options.google });
   async function getSession(input: { headers: Headers }) {
     const session = await ordinary.api.getSession(input);
     if (!session) return null;
@@ -161,25 +165,62 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
         return failure(404);
       const origin = request.headers.get("origin");
       if (
-        (origin && origin !== new URL(baseURL).origin) ||
+        (origin && origin !== webOrigin) ||
         (!origin && request.headers.has("cookie")) ||
         request.headers.get("sec-fetch-site") === "cross-site"
       )
         return failure(403);
       if (
         invitationPaths.has(path) &&
-        (origin !== new URL(baseURL).origin || request.headers.has("authorization"))
+        (origin !== webOrigin || request.headers.has("authorization"))
       )
         return failure(403, "forbidden");
+      let discardedConnection = false;
+      let discardedRegistration = false;
       try {
-        return await prisma.$transaction(
+        const result = await prisma.$transaction(
           async (tx) => {
             // All auth mutations, including code session creation, share this
             // DB lock. Cross-process ordering is deliberate at this product's scale.
             await tx.$executeRaw`SELECT pg_advisory_xact_lock(${AUTHORITY_LOCK}::bigint)`;
+            const connectionToken = googleConnectionToken(request.headers, baseURL);
+            if (
+              registrationToken(request.headers, baseURL) &&
+              ["/code/send", "/invitations/accept", "/invitations/resend"].includes(path)
+            ) {
+              await discardEmailRegistration(
+                tx,
+                secret,
+                registrationToken(request.headers, baseURL),
+              );
+              discardedRegistration = true;
+            }
+            if (path === "/code/send") {
+              if (body.googleConnection !== undefined && typeof body.googleConnection !== "boolean")
+                return failure(400);
+              // A fresh email flow replaces abandoned Google linking. Inline
+              // Google proof explicitly continues its identity-bound flow.
+              if (connectionToken && body.googleConnection !== true) {
+                await discardGoogleConnection(tx, secret, connectionToken);
+                discardedConnection = true;
+              }
+            }
+            if (
+              path.startsWith("/code/") &&
+              !discardedConnection &&
+              (connectionToken || body.googleConnection === true)
+            ) {
+              const pending = await pendingGoogleConnection(tx, secret, connectionToken);
+              if (
+                !pending?.user ||
+                typeof body.email !== "string" ||
+                body.email.trim().toLowerCase() !== pending.proof.email
+              )
+                return failure(400);
+            }
             const signedIn = await localSession();
             async function localSession() {
-              return createAuth({ prisma: tx, secret, baseURL }).api.getSession({
+              return createAuth({ prisma: tx, secret, baseURL, webOrigin }).api.getSession({
                 headers: request.headers,
               });
             }
@@ -230,13 +271,21 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                   : failure(400);
             }
             let deliveryFailed = false;
+            const recovering =
+              path.startsWith("/code/") && email(body.email)
+                ? await recoveryContext(tx, secret, email(body.email) as string)
+                : null;
+            const awaitingCreation =
+              path === "/code/verify" &&
+              body.createAccount !== true &&
+              !!email(body.email) &&
+              !(await tx.user.findUnique({ where: { email: email(body.email) as string } }));
+            let verifiedMissingEmail = false;
             let deliveryCount = 0;
-            let target: string | undefined;
-            let proofIdentifiers: ReturnType<typeof handoverIdentifiers> | undefined;
             let invitationIdentifier: string | undefined;
             let emailPurpose: SignInCodePurpose = "sign-in";
             const security: SecurityContext = {
-              proofOnly: !!lifecycle,
+              proofOnly: !!lifecycle || !!recovering,
               invitationToken:
                 path === "/invitations/verify" && typeof body.token === "string"
                   ? body.token
@@ -247,41 +296,31 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
               prisma: tx,
               secret,
               baseURL,
+              webOrigin,
               plugins: [
                 emailOTP({
+                  disableSignUp: awaitingCreation,
                   otpLength: 8,
                   expiresIn: 300,
                   allowedAttempts: 3,
                   resendStrategy: "rotate",
                   storeOTP: { hash: async (otp) => emailKey(secret, "otp", otp) },
-                  changeEmail: { enabled: true, verifyCurrentEmail: true },
+                  changeEmail: { enabled: false },
                   sendVerificationOTP: async ({ email: to, otp, type }) => {
                     try {
-                      if (type !== "sign-in" && (!target || !proofIdentifiers))
-                        throw new Error("Missing workflow");
+                      if (type !== "sign-in") throw new Error("Unsupported email workflow");
                       const identifier =
-                        type === "sign-in"
-                          ? (lifecycle?.identifier ?? invitationIdentifier ?? `sign-in-otp-${to}`)
-                          : type === "change-email"
-                            ? proofIdentifiers?.next
-                            : proofIdentifiers?.current;
-                      if (!identifier) throw new Error("Missing proof namespace");
+                        lifecycle?.identifier ?? invitationIdentifier ?? `sign-in-otp-${to}`;
                       await (options.persistEmail ?? enqueueEmail)(tx, {
                         secret,
                         suppressionSecret: options.suppressionSecret,
                         supportUrl,
                         to,
                         code: otp,
-                        kind:
-                          type === "sign-in"
-                            ? "sign-in"
-                            : type === "change-email"
-                              ? "new-email"
-                              : "current-email",
+                        kind: "sign-in",
                         identifier,
                         purpose:
                           lifecycle?.action ?? (invitationIdentifier ? "invitation" : emailPurpose),
-                        newEmail: target,
                       });
                       deliveryCount++;
                     } catch {
@@ -335,6 +374,12 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                 if (typeof body.code !== "string" || !/^\d{8}$/.test(body.code))
                   throw appError("bad_request");
               } else {
+                // Invitation acceptance/resend is its own email-proof flow.
+                // It must neither finish nor be blocked by abandoned OAuth.
+                if (connectionToken) {
+                  await discardGoogleConnection(tx, secret, connectionToken);
+                  discardedConnection = true;
+                }
                 if (
                   !(await budget(tx, emailKey(secret, "issue", verification.invitation.email), 5))
                 )
@@ -349,20 +394,16 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
             }
             let nativePath = path;
             let nativeBody = body;
-            let currentEmail: string | undefined;
-            let userId: string | undefined;
             let expectedDelivery = false;
-            const issuing = path === "/code/send" || path === "/email-change/start";
+            const issuing = path === "/code/send";
             if (codePaths.has(path)) {
               const allowed =
                 path === "/code/send"
-                  ? ["email", "purpose"]
-                  : path === "/code/verify"
-                    ? ["email", "code", "name"]
-                    : path === "/email-change/start"
-                      ? ["newEmail"]
-                      : ["code"];
+                  ? ["email", "purpose", "googleConnection"]
+                  : ["email", "code", "name", "createAccount"];
               if (Object.keys(body).some((k) => !allowed.includes(k))) return failure(400);
+              if (body.createAccount !== undefined && typeof body.createAccount !== "boolean")
+                return failure(400);
               if (path === "/code/send" && body.purpose !== undefined) {
                 if (!signInCodePurposes.some((purpose) => purpose === body.purpose))
                   return failure(400);
@@ -377,126 +418,42 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                   body.name.length > 255)
               )
                 return failure(400);
-              let budgetIdentity: string;
-              if (path.startsWith("/code/")) {
-                const address = email(body.email);
-                if (!address) return failure(400);
-                if (issuing) {
-                  const wait = await cooldown(
-                    tx,
-                    emailKey(secret, "issue-gap", address),
-                    resendGap,
-                  );
-                  if (wait) return coolingDown(wait);
-                }
-                const account = await tx.user.findUnique({
-                  where: { email: address },
-                  select: { accountState: true },
-                });
-                if (account && account.accountState !== "active") {
-                  if (
-                    !(await budget(
-                      tx,
-                      emailKey(secret, issuing ? "issue" : "verify", address),
-                      issuing ? 5 : 15,
-                    ))
-                  )
-                    return failure(429, "too_many_requests");
-                  return issuing
-                    ? Response.json({ success: true }, { headers: { "Cache-Control": "no-store" } })
-                    : failure(400);
-                }
-                budgetIdentity = address;
-                nativePath = issuing ? "/email-otp/send-verification-otp" : "/sign-in/email-otp";
-                nativeBody = issuing
-                  ? { email: address, type: "sign-in" }
-                  : {
-                      email: address,
-                      otp: body.code,
-                      ...(typeof body.name === "string" ? { name: body.name.trim() } : {}),
-                    };
-                expectedDelivery = issuing;
-              } else {
-                const session = await localAuth.api.getSession({ headers: request.headers });
-                if (!session) return failure(401);
-                userId = session.user.id;
-                currentEmail = session.user.email.toLowerCase();
-                budgetIdentity = userId;
-                // Both proofs must be completed from the initiating, still-valid session.
-                if (path === "/email-change/start") {
-                  target = email(body.newEmail);
-                  if (!target || target === currentEmail) return failure(400);
-                  if (!(await budget(tx, emailKey(secret, "issue", budgetIdentity), 5)))
-                    return failure(429, "too_many_requests");
-                  const previous = await tx.emailChangeIntent.findUnique({ where: { userId } });
-                  if (previous) {
-                    const identifiers = Object.values(handoverIdentifiers(secret, previous));
-                    const context = await localAuth.$context;
-                    for (const identifier of identifiers)
-                      await context.internalAdapter.deleteVerificationByIdentifier(identifier);
-                    await tx.emailOutbox.updateMany({
-                      where: {
-                        challengeKey: {
-                          in: identifiers.map((id) => emailKey(secret, "challenge", id)),
-                        },
-                        state: "pending",
-                      },
-                      data: { state: "cancelled", payload: null },
-                    });
-                  }
-                  await tx.emailChangeIntent.upsert({
-                    where: { userId },
-                    create: {
-                      userId,
-                      sessionId: session.session.id,
-                      currentEmail,
-                      newEmail: target,
-                      phase: "current",
-                      expiresAt: new Date(Date.now() + 600_000),
-                    },
-                    update: {
-                      sessionId: session.session.id,
-                      currentEmail,
-                      newEmail: target,
-                      phase: "current",
-                      expiresAt: new Date(Date.now() + 600_000),
-                    },
-                  });
-                  nativePath = "/email-otp/send-verification-otp";
-                  nativeBody = { email: currentEmail, type: "email-verification" };
-                  expectedDelivery = true;
-                } else {
-                  const intent = await tx.emailChangeIntent.findUnique({ where: { userId } });
-                  if (
-                    !intent ||
-                    intent.sessionId !== session.session.id ||
-                    intent.currentEmail !== currentEmail ||
-                    intent.expiresAt <= new Date() ||
-                    intent.phase !== (path.endsWith("confirm-current") ? "current" : "new")
-                  )
-                    return failure(400);
-                  target = intent.newEmail;
-                  nativePath = path.endsWith("confirm-current")
-                    ? "/email-otp/request-email-change"
-                    : "/email-otp/change-email";
-                  nativeBody = { newEmail: target, otp: body.code };
-                  // Native occupied-address response deliberately has no callback.
-                  expectedDelivery =
-                    path.endsWith("confirm-current") &&
-                    !(await tx.user.findUnique({ where: { email: target } }));
-                }
-                proofIdentifiers = bindHandoverProofs(await localAuth.$context, secret, {
-                  userId,
-                  sessionId: session.session.id,
-                  currentEmail,
-                  newEmail: target,
-                });
+              const address = email(body.email);
+              if (!address) return failure(400);
+              if (issuing) {
+                const wait = await cooldown(tx, emailKey(secret, "issue-gap", address), resendGap);
+                if (wait) return coolingDown(wait);
               }
+              const account = await tx.user.findUnique({
+                where: { email: address },
+                select: { accountState: true },
+              });
+              if (account && account.accountState !== "active" && !recovering) {
+                if (
+                  !(await budget(
+                    tx,
+                    emailKey(secret, issuing ? "issue" : "verify", address),
+                    issuing ? 5 : 15,
+                  ))
+                )
+                  return failure(429, "too_many_requests");
+                return issuing
+                  ? Response.json({ success: true }, { headers: { "Cache-Control": "no-store" } })
+                  : failure(400);
+              }
+              nativePath = issuing ? "/email-otp/send-verification-otp" : "/sign-in/email-otp";
+              nativeBody = issuing
+                ? { email: address, type: "sign-in" }
+                : {
+                    email: address,
+                    otp: body.code,
+                    ...(typeof body.name === "string" ? { name: body.name.trim() } : {}),
+                  };
+              expectedDelivery = issuing;
               if (
-                path !== "/email-change/start" &&
                 !(await budget(
                   tx,
-                  emailKey(secret, issuing ? "issue" : "verify", budgetIdentity),
+                  emailKey(secret, issuing ? "issue" : "verify", address),
                   issuing ? 5 : 15,
                 ))
               )
@@ -524,12 +481,38 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                 ? { email: lifecycle.address, type: "sign-in" }
                 : { email: lifecycle.address, otp: body.code };
             }
+            if (awaitingCreation) {
+              const context = await localAuth.$context;
+              const find = context.internalAdapter.findUserByEmail.bind(context.internalAdapter);
+              // Better Auth's signInEmailOTP atomically consumes OTP before this
+              // lookup. disableSignUp prevents writes; this flag distinguishes
+              // proved absence from the same generic invalid-OTP error on bad proof.
+              context.internalAdapter.findUserByEmail = async (...args) => {
+                const result = await find(...args);
+                if (!result && args[0] === email(body.email)) verifiedMissingEmail = true;
+                return result;
+              };
+            }
             const headers = new Headers(request.headers);
+            if (recovering)
+              bindProofIdentifiers(
+                await localAuth.$context,
+                new Map([
+                  [`sign-in-otp-${recovering.address}`, `${recovering.identifier}:identify`],
+                ]),
+              );
             headers.set(
               "cookie",
               (headers.get("cookie") ?? "")
                 .split(";")
-                .filter((part) => !part.includes("better-auth.trust_device="))
+                .filter(
+                  (part) =>
+                    !part.includes("better-auth.trust_device=") &&
+                    !(
+                      discardedConnection &&
+                      part.trim().startsWith(`${googleConnectionCookie(baseURL)}=`)
+                    ),
+                )
                 .join(";"),
             );
             headers.set("content-type", "application/json");
@@ -542,12 +525,58 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
               }),
             );
             if (security.rejected) throw appError("unauthorized");
+            if (awaitingCreation && verifiedMissingEmail && response.status === 400) {
+              await discardEmailRegistration(
+                tx,
+                secret,
+                registrationToken(request.headers, baseURL),
+              );
+              const token = await stageEmailRegistration(tx, secret, email(body.email) as string);
+              await options.beforeCommit?.();
+              return Response.json(
+                { registrationRequired: true },
+                {
+                  headers: {
+                    "Cache-Control": "no-store",
+                    "Set-Cookie": registrationCookie(baseURL, token),
+                  },
+                },
+              );
+            }
             if (
               deliveryFailed ||
               (response.ok && expectedDelivery && deliveryCount !== 1) ||
               response.status >= 500
             )
               throw new Error("Auth transaction failed");
+            if (recovering && path === "/code/verify" && response.ok) {
+              const verified = await response.clone().json();
+              if (!verified.token || verified.user?.id !== recovering.account?.id)
+                throw appError("unauthorized");
+              // This proof reveals the available recovery action, never signs in.
+              await tx.session.deleteMany({ where: { token: verified.token } });
+              const token = await stageRecovery(tx, secret, recovering);
+              await tx.auditLog.create({
+                data: {
+                  category: "authentication",
+                  actorKind: "user",
+                  actorUserId: verified.user.id,
+                  targetUserId: verified.user.id,
+                  action: "account.recovery.identify",
+                  outcome: "success",
+                },
+              });
+              await options.beforeCommit?.();
+              return Response.json(
+                { accountRecovery: true },
+                {
+                  headers: {
+                    "Cache-Control": "no-store",
+                    "Set-Cookie": recoveryCookie(baseURL, token),
+                  },
+                },
+              );
+            }
             if (lifecycle && path.endsWith("confirm")) {
               if (!response.ok) {
                 await tx.auditLog.create({
@@ -585,72 +614,18 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
               }
               if (!verified.token || !verified.user?.id)
                 throw new Error("Missing verified session");
-              const loggedInAt = new Date();
-              await tx.session.updateMany({
-                where: { token: verified.token, userId: verified.user.id },
-                data: { verifiedAt: loggedInAt },
-              });
-              // Persist the completed sign-in, not session reads or refreshes.
-              // This rolls back with the session if invitation/commit work fails.
-              await tx.user.update({
-                where: { id: verified.user.id },
-                data: { lastLoginAt: loggedInAt },
-              });
-              userId = verified.user.id;
-              if (verifyInvitation) await finishInvitation(tx, body.token, verified.user.id);
               // A completed sign-in ends the resend wait for that address.
               const verifiedAddress = path === "/code/verify" ? email(body.email) : undefined;
               if (verifiedAddress)
                 await tx.$executeRaw`DELETE FROM request_budgets WHERE key = ${emailKey(secret, "issue-gap", verifiedAddress)}`;
             }
-            if (codePaths.has(path)) {
-              if (response.ok && path.endsWith("confirm-current"))
-                await tx.emailChangeIntent.update({ where: { userId }, data: { phase: "new" } });
-              if (response.ok && path.endsWith("confirm-new")) {
-                if (userId) await invalidateSecurityChallenges(tx, userId);
-                const context = await localAuth.$context;
-                await context.internalAdapter.deleteSessions(
-                  (await tx.session.findMany({ where: { userId }, select: { token: true } })).map(
-                    (session) => session.token,
-                  ),
-                );
-                // Old-address challenges must not recreate access during handover.
-                await context.internalAdapter.deleteVerificationByIdentifier(
-                  `sign-in-otp-${currentEmail}`,
-                );
-                await context.internalAdapter.deleteVerificationByIdentifier(
-                  `email-verification-otp-${currentEmail}`,
-                );
-                const grants = await tx.operatorGrant.deleteMany({ where: { userId } });
-                const admins = await tx.adminGrant.deleteMany({ where: { userId } });
-                if (!userId || !currentEmail) throw new Error("Missing handover identity");
-                await invalidateAccountInvitations(tx, userId, currentEmail);
-                await tx.user.update({
-                  where: { id: userId },
-                  data: { operationsVersion: { increment: 1 } },
-                });
-                if (grants.count || admins.count)
-                  await tx.auditLog.create({
-                    data: {
-                      category: "operation",
-                      actorKind: "user",
-                      actorUserId: userId,
-                      targetUserId: userId,
-                      action: "account.handover",
-                      reason: "access_administration",
-                      outcome: "success",
-                    },
-                  });
-                await tx.emailChangeIntent.delete({ where: { userId } });
-                response.headers.delete("set-cookie");
-                response.headers.delete("set-auth-token");
-              }
+            // Issuance/rejected proof are delivery evidence. Successful sign-in
+            // is recorded only by completeAuthentication, after all factors.
+            if (path === "/code/send" || (path === "/code/verify" && !response.ok)) {
               await tx.auditLog.create({
                 data: {
                   category: "authentication",
-                  actorKind: userId ? "user" : "anonymous",
-                  actorUserId: userId,
-                  targetUserId: userId,
+                  actorKind: "anonymous",
                   action: path.slice(1).replaceAll("/", "."),
                   outcome: response.ok ? "success" : "rejected",
                 },
@@ -670,6 +645,11 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
           },
           { maxWait: 5000, timeout: 15000 },
         );
+        // Emit cancellation only after its database transaction committed.
+        if (discardedRegistration) result.headers.append("set-cookie", registrationCookie(baseURL));
+        if (discardedConnection)
+          result.headers.append("set-cookie", connectionCookieHeader(baseURL));
+        return result;
       } catch (error) {
         if (error instanceof AppException) return failure(error.getStatus(), error.code);
         return failure(503, "service_unavailable");

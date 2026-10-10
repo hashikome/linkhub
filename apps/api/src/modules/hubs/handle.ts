@@ -33,3 +33,11 @@ export function isReservedHandle(handle: string): boolean {
 export function hasValidHandleFormat(handle: string): boolean {
   return handle.length >= HANDLE_MIN && handle.length <= HANDLE_MAX && HANDLE_RE.test(handle);
 }
+
+// Keep the SQL reserve_hub_handle trigger's interval in sync with this policy.
+export const HANDLE_CHANGE_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+export function handleChangeAvailableAt(changedAt: Date | null | undefined): string | null {
+  if (!changedAt) return null;
+  const availableAt = new Date(changedAt.getTime() + HANDLE_CHANGE_COOLDOWN_MS);
+  return availableAt.getTime() > Date.now() ? availableAt.toISOString() : null;
+}

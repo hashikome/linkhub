@@ -44,7 +44,13 @@ export function requestBudget(
     const scope =
       (path === "/api/v1/auth/invitations/preview" && request.method === "POST") ||
       (request.method === "GET" &&
-        ["/api/v1/auth/methods", "/api/v1/auth/security/status"].includes(path))
+        [
+          "/api/v1/auth/methods",
+          "/api/v1/auth/security/status",
+          "/api/v1/auth/google-connection",
+          "/api/v1/auth/account/recovery",
+          "/api/v1/auth/email-registration",
+        ].includes(path))
         ? "read"
         : path.startsWith("/api/v1/auth/")
           ? "auth"

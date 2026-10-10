@@ -1,5 +1,7 @@
 # Deliver codes-only authentication locally
 
+> Historical milestone. The email-change workflow recorded here is retired under [ADR-0041](../../engineering-decisions/0041-fixed-account-email.md). Current authentication guidance is in [auth delivery](../../design-docs/auth-delivery-integration.md).
+
 ## Purpose / Big Picture
 
 The user chose adoption gate #3 next, ahead of the unfinished web scaffold.

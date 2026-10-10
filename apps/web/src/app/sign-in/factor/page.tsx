@@ -20,10 +20,11 @@ export default async function Page({
     <section className="reader account-flow verify">
       <h1>Confirm your sign-in</h1>
       <p>
-        Your account has extra protection. Use your authenticator, a registered passkey or a
-        recovery code to finish signing in.
+        Your account has extra protection. Use a registered passkey, or continue with your
+        authenticator or a recovery code.
       </p>
       <FormNotice code={queryValue(query.notice)} />
+      <PasskeyButton pending returnTo={flow.returnTo} />
       <NativeForm action="/forms/factor-verify">
         <input type="hidden" name="method" value={recovery ? "recovery" : "totp"} />
         <label htmlFor="factor-code">
@@ -48,9 +49,16 @@ export default async function Page({
           {recovery ? "Use an authenticator code" : "Use a recovery code"}
         </a>
       </p>
-      <PasskeyButton pending returnTo={flow.returnTo} />
       <div className="verify-footer">
-        <a href="/sign-in">Start again</a>
+        {flow.googleConnection ? (
+          <NativeForm action="/forms/google-cancel">
+            <button type="submit" className="button">
+              Cancel
+            </button>
+          </NativeForm>
+        ) : (
+          <a href="/sign-in">Start again</a>
+        )}
         <a href="/support#account-recovery">Help with account recovery</a>
       </div>
     </section>

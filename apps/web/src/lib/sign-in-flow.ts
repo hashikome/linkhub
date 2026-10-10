@@ -3,6 +3,8 @@ import { safeReturn } from "./http";
 import { type VerificationPurpose, verificationPurposes } from "./verification";
 
 export interface SignInFlow {
+  intent?: "sign-in" | "sign-up";
+  googleConnection?: boolean;
   invitationToken?: string;
   /** Why the code was sent: decides the wording and what runs afterwards. */
   purpose?: VerificationPurpose;
@@ -37,6 +39,7 @@ export function openSignInFlow(
     );
     if (
       typeof flow.email !== "string" ||
+      (flow.intent !== undefined && !["sign-in", "sign-up"].includes(flow.intent)) ||
       typeof flow.returnTo !== "string" ||
       !Number.isFinite(flow.issued) ||
       flow.issued > now ||

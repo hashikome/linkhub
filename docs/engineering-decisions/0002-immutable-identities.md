@@ -48,9 +48,12 @@ replacing it; details live in [service operations](../design-docs/service-operat
 
 ## Amendment (2026-10-10)
 
-[ADR-0033](0033-permanent-hub-handles-and-self-service-accounts.md) makes explicitly
-claimed hub handles permanent and retains every issued handle after deletion.
-Person usernames remain freely editable. It also adds distinct self-service
-deactivation, recovery, deletion and cancellation alongside operator lifecycle
-controls. Its rules supersede conflicting handle-renaming/release and
-operator-only initiation statements above; UUID identity and authorization remain.
+[ADR-0033](0033-permanent-hub-handles-and-self-service-accounts.md) introduced
+self-service account lifecycle and retained handle reservations. Its permanent
+handle rule was superseded by [ADR-0042](0042-editable-hub-handles.md), then
+[ADR-0043](0043-deliberate-hub-handle-changes.md) settled the current policy:
+30 days between handle changes, with retired spellings never reusable by anyone.
+Person username rules are separate. [ADR-0041](0041-fixed-account-email.md) fixes
+account email pending a dedicated identity-change workflow; immutable UUIDs
+continue to own references and authorization. Self-service lifecycle remains
+accepted, with contextual recovery under [ADR-0040](0040-contextual-account-recovery.md).

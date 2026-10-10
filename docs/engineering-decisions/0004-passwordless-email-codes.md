@@ -3,6 +3,16 @@
 **Status:** accepted  
 **Date:** 2026-10-07
 
+The email method and auth boundary remain accepted.
+[ADR-0035](0035-passwordless-account-security.md) adds passkeys, Google and
+optional TOTP/recovery; [ADR-0039](0039-confirmed-google-account-creation.md)
+permits confirmed account creation from verified Google identity.
+
+[ADR-0044](0044-explicit-auth-entry-and-optional-hub.md) supersedes the unified
+entry and implicit ordinary email creation policy, adds a shared verified creation
+screen and permits an optional named hub during signup. Other decisions remain
+accepted unless already marked superseded.
+
 ## Context
 
 Passwords add reset flows, breach exposure and support load for a product that

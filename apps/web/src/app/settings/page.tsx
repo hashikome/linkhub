@@ -27,6 +27,13 @@ export default async function Page({
       ) : (
         <ProfileEditor
           profile={result.data}
+          timeZones={[
+            ...new Set([
+              "UTC",
+              ...Intl.supportedValuesOf("timeZone"),
+              ...(result.data.timeZone ? [result.data.timeZone] : []),
+            ]),
+          ].sort()}
           notice={queryValue(query.notice)}
           section={
             queryValue(query.section) === "hub"

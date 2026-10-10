@@ -27,7 +27,7 @@ The collection title and resource titles provide the visual hierarchy.
 
 Desktop page gutter is 32 px and the shell stops at 1120 px. Every page starts
 at the shell's left content edge (the wordmark's edge); narrower surfaces keep
-their own measure without re-centering: reader 768 px, settings 736 px, sign-in
+their own measure without re-centering: reader 768 px, settings 1056 px, sign-in
 and capture 512 px. Prose is capped at 65–70 characters. Below 640 px use 20 px
 gutters and stack the title/action group. The shell must fit 320 px without
 horizontal scrolling. At 1024 px the collection reader places discussion beside the
@@ -46,8 +46,9 @@ Do not make a row containing secondary controls into one enclosing link.
 | Resource row | One primary destination in ink, then one meta line: hostname (leading `www.` dropped), a small arrow-up-right external glyph, and optional tags inline. External links use normal browser behavior and a no-referrer policy. No script/data URL navigation. |
 | Collection reference | Viewer-authorized destination title, then a meta line with a stacked-squares icon and an accent “Collection” label; links to its immutable ID without source tokens. Unavailable targets show a neutral muted entry. |
 | Heading resource | Plain section heading in resource order, with spacing rather than a card or separator. |
+| Expanded resource | Keep a persistent neutral surface and fine inset boundary around the title, destination, details and copy action. A small outer gap separates the open item from its neighbors. The grouping follows native `open` state, including without JavaScript; hover is not required, and keyboard focus remains distinct. |
 | Button | Filled accent for the primary action, bordered neutral with ink text for secondary, accent text for low emphasis. Shared primary/secondary button sizing: 32 px with a mouse/trackpad, 44 px touch targets on coarse pointers. Fields remain 38 px with fine pointers. Default/hover/focus/active/disabled/pending states share geometry. Signed-out navigation renders Sign in as a compact secondary button. |
-| Sharing | Hub, collection and footer sharing controls are deferred to the sharing and hub-engagement slices. Contributors occupy the top of the collection sidebar; Discussion sits directly below them and grows with its own content on wide, tall screens, capped by the available page space above the footer before scrolling internally. Empty discussions stay compact. Its position is independent of the collection header. The footer contains Support only beside the product identity. |
+| Sharing | Profile, hub and collection sharing use contextual controls; Share nslinkhub belongs in the shared footer. Contributors occupy the top of the collection sidebar; Discussion sits directly below them and grows with its own content on wide, tall screens, capped by the available page space above the footer before scrolling internally. Empty discussions stay compact. Its position is independent of the collection header. The footer contains Share nslinkhub and Support beside the product identity. |
 | Toast | Transient confirmations (saved, resent, signed out, done, copied) appear top-center as a small card in the page's own surface, border and radius, with a tone mark (✓ success, dot info), fitted to the message; they clear after ~5 s and the `?notice=` code is removed afterwards. Errors, warnings and anything needing action stay inline: info (neutral blue), warning (amber), error (red). |
 | Email verification | One flow for every purpose (sign in, first link, continue, resume, confirm, invitation): the start screen (reason line; the known address in bold or an email field; what happens next; Send code, plus Cancel where backing out makes sense) and the code screen (where it went in bold, the code, the purpose's button, "Didn't receive the code? Send a new code"). Short paragraphs with clear space; no extra panels. |
 | Pagination | Visible continuation control with pending state and result-count announcement; prevent duplicate loads; preserve existing results on a retryable page failure. |
@@ -87,8 +88,9 @@ acceptance concerns new requests and stale application/browser state.
 
 ## Runtime and HTTP boundary
 
-Browser requests use one typed same-origin adapter under `/api/v1`; no public
-API-origin environment setting, bearer storage or client imports from the API.
+Browser requests use one typed adapter under `/api/v1`, addressed directly to
+the validated public backend origin rendered at runtime. Credentialed requests
+use exact-origin CORS locally. No bearer storage or client imports from the API.
 Normalize the product error union and raw better-auth's different protocol at
 their respective adapters. UI copy branches on stable codes. Unknown codes
 receive a safe fallback rather than raw remote messages.
@@ -130,10 +132,10 @@ not bypass that check. Cookie-free direct API clients retain bearer support
 without an Origin requirement; the auth guard still validates the bearer.
 Auth routes retain better-auth's origin checks, including login-CSRF coverage.
 Test all of these cases before shipping browser writes. Keep the raw
-better-auth handler ahead of body parsing. Align `BETTER_AUTH_URL`, allowed
-origins, cookies and redirects with port 3000 in local browser development;
-preserve supported direct API/bearer clients. Production uses path routing on
-one HTTPS origin. No CORS policy is added by implication.
+better-auth handler ahead of body parsing. `BETTER_AUTH_URL` uses backend port
+4000 locally; `WEB_ORIGIN` uses web port 3000 for allowed browser requests,
+redirects and passkeys. Exact-origin credentialed CORS is explicit (ADR-0036).
+Production uses path routing on one HTTPS origin.
 
 Runtime configuration has separate server and browser exports. Server secrets
 retain `_FILE` precedence and loud invalid-production failures. Web server
@@ -176,7 +178,7 @@ If a document navigation is cancelled (for example with Escape), the loading
 surface keeps a keyboard-accessible reload action. It reloads the current URL
 through fresh server authorization; it never simply reveals the old hidden DOM.
 
-The dev server rewrites `/api/*` to the trusted internal API origin. Production
+The dev browser calls the backend directly; Next has no API rewrite. Production
 uses ingress path routing to the API and web separately. Both dev and production
 run the web's `server.ts` entry point: it derives the source from the socket and
 explicit trusted proxy hops, overwrites untrusted attribution, and signs a
@@ -203,45 +205,47 @@ client status page or dependency details in the UI.
 
 ## Sign-in and service operations
 
-Email-code sign-in uses one email field followed by one eight-digit code field,
-with native POST forms, visible resend/failure feedback and a safe local return.
+Ordinary sign-in offers email and configured Google. Email entry leads to a
+passkey or an eight-digit email code; first-link capture goes directly to the
+code path. Email verification uses native POST forms, visible resend/failure
+feedback and a safe local return.
 The code flow is held in a short-lived encrypted HttpOnly cookie; email and codes
 never appear in navigation URLs. No code is consumed by GET. Form submission
 hides the previous document until fresh server rendering, including cancellation
 recovery. Signed-in navigation shows an avatar-only account menu containing
-Notifications, Settings, role-gated Manage, and Sign out.
+Profile, Hub, Notifications, Settings, role-gated Manage, and Sign out.
 The notification badge counts items newer than the account's last visit to
 Notifications (`users.notifications_seen_at`); “Clear all” sets
 `notifications_cleared_at`. `GET /api/v1/notifications`, `POST …/seen` and
 `POST …/clear` are account-owned and separate from audited operator APIs.
 The footer stacks the current-year product copyright above a smaller, muted
-“an ns series product” line, with a Support link beside
-it. Privacy and Terms join it when those pages exist. Service status is reserved for API monitoring and
+“an ns series product” line, with Share nslinkhub and Support links beside
+it. Site sharing stays in the footer. Privacy and Terms join it when those pages exist. Service status is reserved for API monitoring and
 has no client page or navigation entry.
 A single icon button beside the avatar cycles System → Light → Dark → System.
 Its icon shows the current mode; its accessible label and tooltip name the current
-and next modes. System remains the default. Only admins
-see `Operators and invitations` in the ops nav.
+and next modes. System remains the default.
 
 Manage is one role-aware workspace. Owners see Access, Collections and Audit;
-operators also see Accounts, and admins have Team and Invitations. Owner and
-service contexts remain explicitly separate in shared sections.
+operators also see Accounts and Analytics, and admins have Team and Invitations.
+Collections and Audit Log each present one backend-scoped view without context tabs.
 
 For service operators, `/manage` is an account table searchable by exact user ID or username, email and hub handle fragments.
-Account (name and user ID), Username, Email, Role, Status, Joined and Active sessions are separate columns.
-Email verification accompanies the address. Account detail includes hub, bio, suspension
+Columns are Account (name and username), Email, Role, Status, Member
+since, Last login and Sessions.
+Email verification is on account detail, alongside hub, bio, suspension
 evidence and session start/verification/expiry dates, without IP or user agent.
 Session counts include only unexpired sessions; they are not historical last-login evidence.
-Each account shows its user ID beneath its name, with Username in its own column.
-The ID uses the Audit Log suffix display: hover reveals the full UUID and clicking
-copies it with temporary “Copied” feedback. No expansion is needed. `/manage/collections`
-resolves a pasted public collection link and lists active holds. Details use labelled identity/status rows, followed by named
+Each account groups its name and username in the Account column; immutable
+user IDs and individual sessions appear on account detail. `/manage/collections`
+lists authorized owned/shared collections and service-visible publications/holds,
+with a search by collection ID or link. Details use labelled identity/status rows, followed by named
 actions with consequences, a required bounded reason and confirmation. Account
 suspension, reactivation and session revocation are separate forms. Collection
 moderation uses minimal IDs/hold state; operators read any content through the
 ordinary reader. `/manage/audit` has one Search field for displayed actor, action, target, outcome and change,
 Action and From/To dates, with an Include read events checkbox. Search matches all words case-insensitively, including partial IDs; it stays
-bound to continuation. Explicit identity filters resolve to full IDs. Both audit contexts display the last UUID
+bound to continuation. Explicit identity filters resolve to full IDs. Audit rows display the last UUID
 segment for Actor and Target; hover reveals the full ID, and clicking copies it
 with temporary “Copied” feedback.
 Current usernames accompany actor IDs. Actions use explicit labels; targets follow
@@ -250,20 +254,22 @@ Timestamp, Actor, Action, Target, Outcome and Change, in that order. Outcome
 shows the recorded result separately; Change shows
 bounded hub effects and existing service states/reasons; missing evidence stays
 explicitly unavailable. Actions/decisions is the default; Include read events adds
-routine reads. Audit timestamps use the viewer's local `YYYY-MM-DD HH:mm:ss` with
-seconds and date rollover, without per-row UTC offsets (labelled UTC without JS).
+routine reads. Audit timestamps use the account's preferred timezone, or the device
+in Automatic mode, as `YYYY-MM-DD HH:mm:ss`, with seconds and date rollover,
+without per-row offsets. Automatic without JS is labelled UTC; explicit choices
+render correctly on the server and without JS (ADR-0045).
 Desktop timestamps stay on one line. Missing Change values read “Not recorded”.
-My hub / Service uses the same blue active underline as the Manage tabs.
 Accounts switches to labelled rows below 1024px to accommodate its identity and
 session columns; other Manage tables retain their narrower breakpoint.
-Date ranges follow the same local days, with a UTC fallback without JavaScript.
+Date ranges follow those same calendar days, including daylight-saving boundaries.
+Only Automatic without JavaScript falls back to UTC.
 Load more appends rows and disappears after the final page. Accounts,
-Access, both Collections contexts, Team and Invitations use the same continuation
+Access, Collections, Team and Invitations use the same continuation
 behavior, with sticky column headings and preserved filters. Shared ManageTable
 appends server-rendered rows from an authorized read-only server action, preserving
 native operation forms and their server-generated operation IDs. Native links
-still navigate to the next page without JavaScript. No metrics dashboard, private-content preview or disabled
-future actions. Error/reload and denied-access states work without JavaScript.
+still navigate to the next page without JavaScript. Analytics reports only recorded share requests/opens. No private-content
+preview or disabled future actions. Error/reload and denied-access states work without JavaScript.
 
 `/manage/team` lists current admins and operators. The separate admin-only
 `/manage/invitations` tab owns the email invitation form and invitation rows with
@@ -289,15 +295,17 @@ Native form requests use `x-web-form-source`, signed with the separate
 it only on POST for request budgeting; the existing read proof cannot substitute.
 The web overwrites incoming proofs, checks the exact configured public Origin,
 and forwards only bounded JSON and the session cookie. This attribution grants
-no authentication or product permission. API/web both receive `BETTER_AUTH_URL`.
+no authentication or product permission. API/web receive backend `BETTER_AUTH_URL`
+and browser `WEB_ORIGIN`; only the public backend origin enters browser config.
 
 ## Profile and appearance
 
-`/settings` has left-hand navigation for Profile, Hub and Notifications, with
-one section visible at a time. Selection uses `?section=hub` or
-`?section=notifications`; the default and unknown values select Profile. No
-additional settings subsections are introduced. Account access and deletion uses
-a separate `/account` confirmation flow, linked from Profile and sign-in. On mobile, the navigation becomes
+`/settings` has left-hand navigation for Profile, Hub, Notifications and Security.
+Profile, Hub and Notifications show one panel at a time; selection uses
+`?section=hub` or `?section=notifications`, with Profile as the default. Security
+opens `/settings/security`. Account access and deletion uses a separate `/account`
+confirmation flow linked from Profile; signed-out recovery appears only after
+verified email sign-in identifies an eligible account. On mobile, the navigation becomes
 a compact horizontal row. The active section sits in a rounded, bordered panel
 using the canvas surface and shared panel radius, matching the collection and
 discussion containers. Navigation stays unboxed beside it, with a surface fill
@@ -326,23 +334,26 @@ Hub creation and update dates are not displayed. Published collections has its o
 and quiet count; empty feedback sits immediately beneath it, never at the foot
 of the page. No row separators or decorative container borders are added.
 The count uses public visibility rules across all pages, excluding private or held content.
-Full-name or email changes never rename a hub or change its description. Hubs
-are not transferable.
+Full-name changes never rename a hub or change its description. Account email
+is fixed (ADR-0041), and hubs are not transferable.
 In Settings, View your public profile appears beneath Username, linking to
 `/username`; View your public hub appears beneath Handle, using
-`/h/:hubId?view=public`. These replace the static address hints. Ordinary clicks
+`/h/:hubId?view=public`. Ordinary clicks
 wait for pending autosave and use the saved username or immutable hub ID.
 Without JavaScript, links use the last saved values. There is no copy-link action.
 Native POST forwards PATCH with signed form-source attribution; Origin, backend
-validation and ownership remain enforced. Credential changes are excluded.
+validation and ownership remain enforced. Credential changes are excluded. Profile includes an autosaving Timezone selector:
+Automatic (device) or a named IANA timezone, persisted on User through the API.
+Public profiles never expose that preference.
 
 The shared avatar requests `/api/v1/users/:id/avatar`. Under
 [ADR-0034](../engineering-decisions/0034-public-gravatar-avatars.md), all viewers
 receive the active person's verified-email Gravatar or our generated SVG. The
 proxy checks account eligibility before and after image resolution; unavailable
-accounts receive only the generated icon. Chosen-image priority is retired.
+accounts receive only the generated icon. Stored vendor image URLs do not
+participate in picture selection.
 Hashes stay server-side, responses are no-store, and provider fetch/cache limits
-remain bounded. See [identity and handles](identity-and-handles.md#gravatar-follow-up).
+remain bounded. See [identity and handles](identity-and-handles.md#profile-pictures).
 
 Person profiles show a 64px picture above their name. Contributor lists and
 account menus reuse the same component and user-ID URL. Settings has no picture
@@ -359,17 +370,21 @@ reacts to the OS preference. Header theme forms preserve the current safe local
 URL, including shared-link query context, and work without JavaScript. The account
 menu is a native disclosure enhanced with Escape and outside-click dismissal.
 
-Signed-out visitors always follow the system color preference, even when the
-browser retains an earlier appearance cookie. Saved Light/Dark/System preferences
-apply only with a currently valid session; preference changes require sign-in.
-The account-menu trigger shows only the avatar; the popup begins with Notifications.
+Appearance is available in the header to every visitor. Signed-out readers
+default to System and can choose a temporary appearance for their browser session.
+Their toggle shows only the resolved Light/Dark mode; System is an explicit choice
+only for signed-in users. CSS resolves the reader icon before hydration.
+Their reader choice is separate from the saved Light/Dark/System preference used
+with a valid account session; changing one never overwrites the other.
+The account-menu trigger shows only the avatar; the popup begins with Profile
+and Hub, followed by Notifications.
 
 
-Profile and hub changes autosave after an 800ms typing pause. Show Saving/Saved
+Profile and hub fields except Handle autosave after an 800ms typing pause. Show Saving/Saved
 status, retain drafts on failure and offer Retry. Edits made during a save queue
 a subsequent save; viewing the public hub flushes pending edits before navigating.
-No Save button appears with JavaScript. A noscript Save changes button preserves
-native form editing without JavaScript.
+Handle always has an explicit Save handle action when eligible. Other fields
+use a noscript Save changes button for native editing.
 Success uses green semantic feedback. Debounced handle availability distinguishes
 current, available, reserved, taken and invalid names without exposing owners.
 It is advisory: final validation and the database unique constraint decide the
@@ -386,12 +401,13 @@ attribution and description as the public page. Save a link lives in the top bar
 “+” icon below 640 px). Your collections is a separate section below this identity;
 it includes the owner’s private collections.
 
-The wordmark links signed-in users directly to `/h/:hubId` for their personal hub
-and signed-out users to the landing page.
+The wordmark links signed-in users to `/h/:hubId`, or `/hub` for explicit hub
+creation when absent, and signed-out users to the landing page.
 Keep its normal ink color in all interaction states and remove link underlining;
 retain the shared focus outline. Notification rows are informational, with no
 link/hover affordance that implies in-app invitation acceptance. They direct
-recipients to their email. Invitation codes are not implemented.
+recipients to the emailed invitation link. Acceptance always requires a fresh
+invitation-bound code; notification rows cannot authorize it.
 
 
 Routine profile-save confirmation is a compact green “Saved” with a check beside
@@ -405,7 +421,8 @@ in metadata titles.
 
 Discover is a persistent header link grouped on the right with the account controls for both signed-in and
 anonymous visitors. Do not repeat it as a breadcrumb on hub/collection pages;
-collection context retains its hub link. Signed-in visitors then see Save a link, the appearance toggle and the avatar; navigation wraps at narrow widths or
+collection context retains its hub link. Appearance is available to all visitors. Signed-in visitors also see Save a link
+and the avatar; signed-out visitors see Sign in. Navigation wraps at narrow widths or
 enlarged text.
 
 
@@ -452,14 +469,37 @@ no-JavaScript rendering retains readable cursor pagination. Long pages use the
 document scrollbar; main has no separate scroll container.
 
 Collection rows show title, up to two description lines, then hub attribution and
-updated date. Keep the header/footer and landing discovery divider; omit repeated
+updated date. Keep the header/footer dividers; omit repeated
 row and example-content rules. Account navigation retains **Sign in**. Capture
 reuses labelled native controls, private defaults and explicit success/failure.
 
-Landing composition: two balanced desktop columns, capture above discovery on
-the left and a compact example collection spanning the right. The discovery
-divider marks the second intent within the left column. Mobile stacks capture,
-example, discovery. Keep the shared typeface, tinted-neutral palette and blue actions.
+Landing composition: two desktop columns, the hero message and capture action
+on the left and a compact interactive example collection on the right. Columns
+use a 3rem gap. The left message and action center within a stable 38rem stage
+beside the initial example; the example grows independently from its top edge.
+Changing its height must not move the left headline or action. The landing CTA
+uses a 2.75rem minimum height and 1rem text to anchor the invitation beside the
+preview. Mobile removes the stage height and stacks the hero and example.
+Keep the shared typeface, tinted-neutral palette and blue actions. The hero has
+only **Save your first link**; **Sign in** and **Discover** stay in the header.
+The supporting copy leads with turning good finds into useful guides, sharing
+knowledge and discovering other people's collections; there is no separate
+discovery section. Saving a link remains the concrete first action.
+The labelled example reuses `CollectionMeta`, `Tags`, `ResourceSections` and
+item disclosures, with one item open initially. Sections and items retain native
+keyboard and no-JavaScript disclosure behavior; resource titles open real
+external links. Preview mode suppresses fictional identity navigation, automatic URL selection
+updates and initial item scrolling. Both preview and reader offer **Copy link to
+this item** from the first render: a quiet text button, live copied confirmation
+and a selectable URL if clipboard access fails. Copying keeps the item open and
+never navigates. Preview addresses reopen the selected item on the landing page;
+real collection addresses reopen it inside its collection. Neither uses fictional
+collection routes. The button becomes available after hydration; without JavaScript,
+a native **Open item link to copy its address** fallback remains available.
+The item context has an explicit client boundary shared by reader and preview,
+so development and production use the same presentation contract.
+It fetches no example records
+and omits the full reader sidebar and sharing controls.
 
 Collection owners can edit name, description and comment settings together.
 The editor preserves submitted values on errors through progressive form state,
@@ -467,8 +507,9 @@ including without JavaScript. Backend policy and version checks remain authorita
 Hide collection pagination entirely when all results fit and no further cursor exists.
 
 Collection previews and readers show description and tags, hub context and
-updated time. Reader metadata keeps the owner, contributor count and updated
-time on one line, with “Created by <person>” when creator and owner differ.
+updated time. Reader metadata keeps hub context and updated time together, with
+“Created by <username>” when creator and owner differ. Contributor counts live
+in the Contributors section above Discussion.
 The API supplies immutable creator provenance.
 Hub links use the immutable `/h/:hubId` route. No email fallback is used for
 publication attribution. Collection ownership follows the hub owner, not the
@@ -491,8 +532,8 @@ The edit page requires the API's `canEdit` capability; owner metadata additional
 requires `canManage`. The API still decides every write. Visitors see read-only content.
 
 Both `/h/:hubId` and `/@handle` resolve the hub and show its authenticated owner
-their own collections. Everyone else receives only the public list. `/hub` is a
-compatibility redirect, never the shared address. Settings alone offers View your
+their own collections. Everyone else receives only the public list. `/hub` redirects to an existing owned hub or offers explicit Create hub when
+none exists; it is never the shared address. Settings alone offers View your
 public hub, using `?view=public`; that explicit preview always uses public list
 queries, including pagination. Copy links omit the preview flag and use the
 immutable ID. Private listing authorization remains backend-owned.
@@ -509,8 +550,9 @@ Accent blue is reserved for primary actions, inline text links, focus and
 selection; titles, navigation and metadata links are ink or muted. The header
 Discover link is muted, turning ink on hover. The collection reader's hub link
 carries a small back chevron; operator section navigation does not. The account
-menu popup and the landing example are the only elevated surfaces. Hub and
-collection layouts add no row separators or container borders. Exact values live in
+menu popup is elevated. Collection sheets, settings panels, discussion and the
+landing example use the shared quiet surface and boundary tokens. Hub and
+collection-list rows use whitespace without decorative separators. Exact values live in
 [DESIGN.md](../../DESIGN.md).
 
 
@@ -569,7 +611,9 @@ collection layouts add no row separators or container borders. Exact values live
   as now, 53m, 23h, 2d, then a date ("Oct 7"); the exact time is on hover.
 - Discovery is `GET /api/v1/discover` (web `/discover`).
 
-Collection-row and account-detail Action buttons use the secondary button style. Native modal dialogs are portaled out of tables, centered, labelled, and retain keyboard Escape/focus behavior. Actions are direct links, with no intermediate selector or Run step. Without JavaScript, an expandable native list provides the same operation continuation. Collection toolbar Share leads to a copyable URL and owner-only access controls.
+Collection names are plain-text buttons that open action dialogs. Permitted
+actions on account details use the secondary button style. Native modal dialogs
+are portaled out of tables, centered, labelled, and retain keyboard Escape/focus behavior. Actions are direct links, with no intermediate selector or Run step. Without JavaScript, an expandable native list provides the same operation continuation. Collection toolbar Share leads to a copyable URL and owner-only access controls.
 
 Accounts rows open account detail directly. The account name is a plain-text form button for keyboard and JavaScript-free access, without an anchor; copy-ID controls do not navigate. No Select or Action column is shown. Account detail presents permitted action buttons at the bottom without a chooser dialog.
 
@@ -580,15 +624,22 @@ before metadata. Desktop metadata uses a 10rem label column, 24px column gap and
 layout keeps the existing theme, field order and bottom action placement.
 
 
-### Permanent hub handle and account confirmation
+### Editable hub handle and account confirmation
 
-An unclaimed hub handle shows availability, its prospective `/@handle` address,
-a permanence checkbox and an explicit Claim handle button. Handle edits never
-autosave. After claiming, the handle becomes a plain label/value fact in the same
-layout as Hub ID, retaining the hint “This is your claimed permanent hub handle.”
-A hidden field preserves the native form's saved handle, while the backend
-continues to enforce immutability.
-Person usernames continue to autosave with existing validation.
+Handle offers availability feedback, its prospective `/@handle` address and an
+explicit Save handle button when eligible. Before saving, explain the 30-day
+limit and that a replaced handle can never be used again, including by its owner.
+During cooldown the field is read-only, Save handle is disabled, and the backend's
+next eligible date is displayed. Names and other allowed fields continue to save.
+Explicit save avoids accidental renames during typing. Hub ID remains an immutable fact and shared links survive.
+Opening the public hub or profile saves ordinary edits but excludes a draft handle
+change; navigation never counts as Save handle.
+Handle uses a separate native form and submits only the handle. Ordinary autosave
+excludes it, even while its draft is invalid or unavailable. The handle input is
+read-only while its request is pending; the response reconciles the confirmed
+handle and cooldown without discarding newer edits to other fields. Without
+JavaScript, Save changes submits the ordinary fields and Save handle submits only
+the handle. Person usernames continue to autosave with existing validation.
 
 Account deactivation and deletion are separate choices. Each explains consequences
 before sending an action-specific email code. The native verification form names
@@ -599,15 +650,42 @@ only the final deletion confirmation receives destructive emphasis.
 
 ## Passwordless security settings
 
-Sign-in offers passkeys, configured Google, and the existing email flow. Google
-is labeled for existing accounts. `/settings/security` contains named passkeys,
+Separate `/sign-in` and `/sign-up` share a centered 400px email-first column,
+slightly above the viewport midpoint, with stable placement across subsequent
+screens. Sign-in reads Sign in to nslinkhub; signup reads Create your account.
+Visible email label/input, full-width primary Continue with email, quiet or, then
+full-width secondary Continue with Google. The footer switches entry while keeping
+the validated destination. Passkeys and factors appear only in subsequent steps.
+
+After verified absence, `/sign-up/confirm` shows the selected email and explicit
+Create account. Sign-in offers Use a different email; signup offers Already have
+an account? Sign in. Cancellation consumes proof. Email and Google reuse verified
+identity without another code. The creation form offers Start with a hub, unchecked,
+revealing a required name; no handle setup is needed. The backend assigns the same
+initial username/handle and creates both atomically. First-link capture and
+invitations retain their focused email-code journeys. Google email must match the
+account email. `/sign-in/google` remains only the existing-account proof step;
+missing accounts use the shared creation screen. No linking mechanics appear in copy.
+No separate Settings step is required. `/settings/security` contains named passkeys,
 authenticator setup with a local QR/manual key, explicit removal and recovery
 codes. Setup material uses an encrypted HttpOnly five-minute cookie; passkey
 recovery codes stay in component memory until dismissed. Secrets are never URL
 parameters or third-party QR requests. Native email, TOTP and recovery forms work
 without JavaScript; passkeys explain their browser requirement.
 
-`/sign-in/factor` completes a pending login. OAuth returns to an app-owned page;
-a subsequent native POST resumes a saved action after checking account ownership.
-Passkey completion uses the same POST. Support explains each method and recovery.
+`/sign-in/factor` completes a pending login. After OAuth, `/sign-in/complete`
+validates the fresh backend session and sealed destination, clears the flow and
+redirects immediately; it renders no completion screen. Interrupted writes retain
+a POST, submitted automatically with JavaScript; only native browsers without
+JavaScript need a Resume your action button for those writes. Account ownership
+is rechecked before replay. Passkey completion uses the same POST. Support explains each method and recovery.
 See [passwordless security](passwordless-security.md).
+
+### Contextual account recovery
+
+Sign-in and first-link capture omit generic recovery links. After email proof,
+`/account` renders one backend-selected action and its reason: Reactivate account
+for self-deactivation, Cancel deletion for an unexpired deletion schedule. Explain
+whether the person was signing in or saving a link. Keep the known email visible,
+use one primary consent button, and preserve the destination for fresh sign-in.
+A public visit without proof offers sign-in rather than both recovery options.

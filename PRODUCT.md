@@ -104,6 +104,12 @@ a list: it has order, sections, context (notes, discussion) and references to
 other collections, so it reads like a guide someone maintains. Every feature
 should make a collection more useful to follow, or easier to keep current.
 
+Public-facing copy leads with people's curation: selecting useful resources,
+putting them in order, giving them context and keeping them current for a reader.
+Fast saving is an entry action. The unit of value is a collection someone can
+learn from, work with or share, whether its resources are articles, videos,
+tools, references or other collections.
+
 ### Free Public Curation, Paid Convenience
 
 New collections default to public, with an explicit private choice. Public
@@ -292,9 +298,9 @@ is pending and must cover first-save, native forms and API defaults together.
   the spot with a new collection (currently private) named with the date ("Saved links,
   7 Oct"); with a hub that has collections, they choose where the links go.
   Existing accounts are never turned away. Saving is atomic and safe to retry;
-  no profile, title or handle setup comes first. **Sign in** on its own creates
-  the account only — no hub until the first saved link or collection
-  (ADR-0018).
+  no profile, title or handle setup comes first. Ordinary **Sign in** never silently
+  creates an account. Explicit account creation offers an optional named hub, off
+  by default; otherwise ownership can create it later (ADR-0044).
 - **Save a link (signed in):** always in the header. One or two links per save;
   each address turns blue when it is a valid public link and red when it isn't,
   and shows the page's title once found. Tags are optional, behind **Add
@@ -377,8 +383,8 @@ details, attribution, section authoring and reordering Built.
   silently overwritten.
 - **Attribution** (ADR-0015): like commits and contributors on
   GitHub, every change is recorded as "who did what to which item". The
-  collection shows its **creator** and its **contributors** ("Paul John and 2
-  contributors"); each item says who added it and when; contributors can open
+  collection shows its **creator** and a **Contributors** section with usernames
+  and a total; expanded items credit their adding username and timestamp; contributors can open
   the collection's history.
 
 ### 6.4 Link Previews And Notes
@@ -438,8 +444,7 @@ way around the paid requirement. Entitlements are not yet enforced.
   collection exists.
 - **Transfer:** a collection moves to one of its contributors' hubs; references are
   untouched, the previous owner becomes a contributor, the creator stays on
-  record. Hubs are never transferred; an email change only updates the same
-  person’s address. The optional-hub design must handle a recipient without a
+  record. Hubs are never transferred; the chosen account email is fixed. The optional-hub design must handle a recipient without a
   hub when collection transfer is implemented against it.
 
 ### 6.6 Discover, Subscriptions And Your Home
@@ -452,8 +457,8 @@ saves API only; subscriptions and home tabs Planned
   by text and tags, tag filters (popular tags from published collections over
   the last 90 days) and full-text search are planned; no date-range filter.
 - **Public hub page:** the hub's name, handle, description, the planned **Subscribe** action, and
-  published collections. Sharing UI is deferred for a fresh design in the
-  sharing and hub-engagement slices. Planned
+  published collections. The contextual Share page is implemented for hubs,
+  profiles, collections and the site, with site sharing in the footer. Planned
   hub counts prioritize subscribers and total collection saves: readers saving
   curated collections to return to. Individual resource copies are a separate
   action and do not contribute to collection-save counts.
@@ -539,11 +544,29 @@ Purpose: take a collection out of the product as a document. Status: API only.
 ### 6.11 Account And Sign-In
 
 Purpose: one account, passwordless, that never loses what you were doing.
-Status: sign-in, verification, settings, permanent hub-handle claims and
-self-service account lifecycle, public Gravatar avatars and passwordless security Built; email change API only.
+Status: sign-in, verification, settings, editable hub handles and
+self-service account lifecycle, public Gravatar avatars and passwordless security Built; controlled email change is backlog.
 
-- **Sign-in:** prefer a passkey with device unlock, or use Google for an existing
-  account, or an eight-digit emailed code. Google never registers an account.
+- **Sign-in and signup:** Separate `/sign-in` and `/sign-up` pages share email-first
+  authentication, with Continue with Google secondary (ADR-0044). Sign-in reads
+  **Sign in to nslinkhub**; signup reads **Create your account**. Account absence
+  is disclosed only after proof. A missing account requires explicit Create account;
+  sign-in offers Use a different email, signup offers Already have an account? Sign in.
+  Verified email proof is reused without another code. Creation offers optional
+  **Start with a hub**, unchecked by default, requiring a hub name when selected.
+  The backend creates account and hub atomically and assigns a common initial
+  username/handle available in both namespaces; both remain editable under their policies. After entering an
+  email, an existing user can use a registered passkey without email or TOTP
+  codes. Otherwise, verify an eight-digit emailed code. Google callback alone never
+  creates an account: if its email has none here, explicitly offer to create one,
+  show the email and offer explicit creation or a return to sign-in.
+  Confirmation then creates the account from Google's verified email and name,
+  connects Google and signs in atomically, without a second inbox code or separate
+  linking workflow. The backend resolves Gravatar from the verified email.
+  Existing accounts connect Google within sign-in; Settings is optional.
+  Invitations retain their own email-code verification. Save your first link goes
+  directly through the shared email-code screens and resumes the saved link
+  afterwards, without Google or standalone passkey choices.
   Emails carry codes only; neither passwords nor usernames are login credentials.
 - **Account security:** optional passkeys and authenticator-app TOTP in Settings.
   After either is enrolled, email and Google require a registered factor or
@@ -561,21 +584,30 @@ self-service account lifecycle, public Gravatar avatars and passwordless securit
 - **Settings:** username, full name, email and member-since; optional hub name,
   handle, description and permanent id; whether to publicly connect the person profile and hub. Profiles show name, username and an optional personal bio (up to 500 characters),
   independent of the hub description. A missing hub is explained with a first-save action. Changes
-  save as they are made. Appearance (System, Light, Dark) is a header control.
-- **Email change** (only ever the same person updating their address): the
-  current address confirms by code
-  (ignoring it changes nothing), the new address verifies by code, then every
-  session is signed out.
+  save as they are made. Timezone defaults to Automatic (the device); an explicit
+  choice is stored on the account and follows it across devices, including initial
+  server-rendered dates and calendar filters (ADR-0045). Appearance (System, Light, Dark) is a header control.
+- **Account identity:** user UUID and the chosen email are fixed. Profile updates
+  can change names and bios, never identity fields. Controlled email change is
+  backlog (ADR-0041): any future process requires a dedicated POST action with
+  identity proof and relevant owner/operator notifications, not ordinary PUT/PATCH.
+  A separate account gets its own identity and does not inherit access.
 - **Profile avatars** *(Built)*: use Gravatar, falling back to our
   existing generated icons when no image is available or the provider fails.
   Profile Settings links to picture instructions on Support, without a picture
   preview. Gravatar is optional; no Gravatar account is required to use the product.
-- **Hub handles:** generated handles are provisional. Owners explicitly claim one
-  permanent handle; all issued spellings stay reserved after changes or deletion.
+- **Hub handles:** owners can change the handle and name as the hub's purpose
+  evolves. Shared links keep using the stable hub ID. Issued spellings remain
+  retired forever once replaced, including for the same owner. Changes require
+  30 days between successful renames; the initial generated handle can be
+  customized immediately (ADR-0043).
   Usernames and display names remain freely editable within their validation rules.
 - **Account deactivation:** email-confirmed, reversible, no automatic deletion.
   Hide the profile and owned collections from everyone, revoke sessions/privileges,
   retain data. Explicit email-confirmed reactivation restores content; sign in anew.
+  Signing in or saving a link with an eligible inactive account leads, after email
+  proof, to exactly the applicable reactivation or deletion-cancellation action.
+  Ordinary sign-in shows no generic recovery link; the saved destination survives.
 - **Account deletion:** a separate email-confirmed action with a 14-day grace
   period and export/transfer advice. Cancellation keeps the account inactive.
   Final cleanup removes the hub and owned collections, anonymizes contributions,
@@ -705,9 +737,9 @@ are scoped, revocable and rate-limited per plan.
   unpublishing (dormant) and comes back on republish.
 - Each person owns at most one hub, created explicitly or on first ownership
   (not sign-in or import), with a unique handle; never derived from their email.
-  Owners explicitly claim one permanent handle; every issued spelling stays
-  reserved after deletion. Durable links use permanent ids and survive hub-name
-  or collection changes.
+  Owners can rename handles once every 30 days; retired spellings are never
+  reusable by anyone, including after deletion. Durable links use permanent ids and survive hub-name,
+  handle or collection changes.
 - Tags use a unique normalized-name catalogue and item assignments. Collection
   assignments are the stored union of their own item tags, maintained in the same
   transaction as item changes. A link keeps one canonical address, at most once
@@ -778,7 +810,7 @@ Nothing is deployed; everything built runs and is verified locally. The API
 | 6.3 Item reordering | Built | Built |
 | 6.3 Other item organization and references | Not yet | Built |
 | 6.3 Attribution and history | Built | Built |
-| 6.4 Link metadata (title, description, site name) | Shown as titles | Built |
+| 6.4 Link metadata (title, description, site name) | Titles and inline details | Built |
 | 6.4 Item details routes | Built | Built |
 | 6.4 Preview cards, notes | Planned | Planned |
 | 6.5 Sharing, publishing, transfer | Built | Built |
@@ -792,8 +824,8 @@ Nothing is deployed; everything built runs and is verified locally. The API
 | 6.10 Download and export | Not yet | Built |
 | People and hubs: usernames, profiles, optional hub | Built | Built |
 | 6.11 Sign-in, verification, settings | Built | Built |
-| 6.11 Email change | Not yet | Built |
-| 6.11 Permanent hub handles, deactivation/recovery, deletion/cancellation | Built | Built |
+| 6.11 Controlled email change | Backlog | Backlog (old API retired) |
+| 6.11 Handle changes (30-day cooldown, no retired-handle reuse), account lifecycle | Built | Built |
 | 6.11 Gravatar profile avatars | Built | Public active-account proxy and generated fallback built |
 | 6.11 Single sign-on | Planned | Planned |
 | 6.12 Service operations | Built | Built |
@@ -802,14 +834,12 @@ Nothing is deployed; everything built runs and is verified locally. The API
 | 6.13 Curator accounts | Planned | Planned |
 | Browser extension | Planned | Uses the existing API |
 
-The accumulated milestones have completed whole-diff review, fixes, verification
-and commit. Gravatar profile avatars extend the existing proxy across public
-person surfaces; see
-[identity and handles](docs/design-docs/identity-and-handles.md#gravatar-follow-up).
+Public person pictures use the backend Gravatar proxy with generated fallback;
+see [identity and handles](docs/design-docs/identity-and-handles.md#profile-pictures).
 Richer Gravatar profile display remains a later paid feature, with fields and
 entitlements still to be designed.
 
-Delivery order for the remaining milestones:
+Delivery sequence and remaining work (completed foundations are marked):
 
 1. **Link metadata foundation** — done
    ([deliver-link-metadata](docs/exec-plans/completed/deliver-link-metadata.md)):
@@ -826,7 +856,7 @@ Delivery order for the remaining milestones:
    including native links and authorized reads beyond the first page.
    [Implementation and verification](docs/exec-plans/completed/deliver-collaborators-and-routes.md).
    Preview cards, notes and item editing remain in their later milestones.
-5. **Manage** for the hub owner (§6.9) —
+5. **Manage** for the hub owner (§6.9) — core built; remaining extensions in
    [manage-workspace](docs/design-docs/manage-workspace.md).
 6. **Bulk import** (§6.2) —
    [deliver-bulk-import](docs/exec-plans/active/deliver-bulk-import.md).
@@ -836,17 +866,18 @@ Delivery order for the remaining milestones:
    [hub-home-and-following](docs/design-docs/hub-home-and-following.md):
    subscribers, collection bookmarks/saves and meaningful hub engagement counts.
 9. **Link previews and notes** (§6.4), with Add to my collection.
-10. **Organizing and sharing in the web** (§6.3, §6.5, §6.10) — items,
-   sections, references, sharing, publishing, transfer, download. Redesign sharing
-   across collections and hubs, including whether the footer has any sharing role;
-   no provisional sharing widgets ship ahead of that slice.
+10. **Remaining web organization and downloads** (§6.3, §6.5, §6.10) —
+    item/reference editing and export. Sections, reordering, contextual sharing,
+    publishing and transfer are built. Social destinations remain deferred;
+    site sharing lives in the footer.
 11. **Discover search** (§6.6).
 12. **Rest of the internals pass** — fewer queries, one write-lock opt-out per
     controller, the forms route as an action table, Save a link drafts in
     Redis, focus rings.
-13. **Account** (§6.11) — email change in the web remains. Passkeys, existing-account Google sign-in, authenticator-app codes and protected recovery are built.
-    Permanent hub-handle claims and self-service deactivation/recovery and
-    deletion/cancellation are built (ADR-0033).
+13. **Account** (§6.11) — controlled email change is backlog; standard profile edits exclude email and user UUID. Passkeys, confirmed Google onboarding/sign-in, authenticator-app codes and protected recovery are built.
+    Hub-handle changes with a 30-day cooldown and permanent retirement are built
+    (ADR-0043). Self-service deactivation/recovery and deletion/cancellation are
+    built (ADR-0033/0040).
 14. **Browser extension** (§7).
 15. **Targeted sharing by invitation** (§6.5).
 16. **ns-series single sign-on** (§6.11) — `docs/design-docs/identity-sso.md`.
@@ -875,5 +906,3 @@ Delivery order for the remaining milestones:
 - Focused designs: `docs/design-docs/README.md`.
 - Settled foundations: `docs/engineering-decisions/README.md`.
 - Security and reliability rules: `docs/SECURITY.md`, `docs/RELIABILITY.md`.
-
-Implemented management follow-up (2026-10-09): account deactivation and admin-scheduled 14-day deletion/cancellation, backend-permitted action dialogs, and unified collection management with owner actions. Self-service deactivation, recovery and deletion are implemented in ADR-0033. See ADR-0023 for operator controls.

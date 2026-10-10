@@ -90,8 +90,8 @@ Read, in this order:
    access to their destinations; a resource's kind is
    set by *how it was added*, never URL inspection; tags use normalized relations (API names remain arrays);
    sharing = link / direct / publish; export reads like a Google Doc;
-   sign-in is passwordless: email codes own onboarding, while passkeys and
-   Google can sign into existing accounts; enrolled protection also applies to
+   sign-in is passwordless: email codes and explicitly confirmed Google identity
+   can create accounts; registered passkeys also sign in. Enrolled protection applies to
    email/Google fallback. Hubs have one owner and never transfer, while
    collections can. People have usernames and optional hubs; the first successful ownership
    operation creates a hub.
@@ -245,7 +245,7 @@ Read first (short):
    `_FILE` contract and the two-directional validation (present-but-malformed
    always rejected; production requires the secrets).
 2. [infra-deployment.md](../design-docs/infra-deployment.md) — § Origins
-   (one public origin, no CORS, ports) and the secret-contract item.
+   (direct local API/CORS, production ingress, ports) and the secret-contract item.
 
 Then prove the production guard is real:
 
@@ -282,13 +282,13 @@ Goal: understand the working web surface, accepted direction and release gates.
 Read:
 
 1. [identity-and-handles.md](../design-docs/identity-and-handles.md) for
-   implemented identity, URL and email-change contracts, then
+   implemented identity, URL, fixed-email and handle-change contracts, then
    [people-and-hubs.md](../design-docs/people-and-hubs.md) for person profiles and optional hubs.
 2. [transactional-email.md](../design-docs/transactional-email.md) and
    [auth-delivery-integration.md](../design-docs/auth-delivery-integration.md)
    for encrypted delivery, proof/session transactions and local/live acceptance.
    Read [passwordless-security.md](../design-docs/passwordless-security.md) for
-   passkeys, existing-account Google, optional TOTP, protected recovery and the
+   passkeys, Google sign-in and confirmed account creation, optional TOTP, protected recovery and the
    precise OAuth callback configuration.
    Inspect [code-email.tsx](../../packages/email/src/code-email.tsx), the shared
    base for code messages.

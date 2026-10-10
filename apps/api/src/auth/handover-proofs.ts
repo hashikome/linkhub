@@ -9,6 +9,7 @@ interface HandoverBinding {
 }
 
 export function handoverIdentifiers(secret: string, binding: HandoverBinding) {
+  // Retained for revoking historical intents; email changes are unavailable.
   // JSON preserves field boundaries: native `${old}-${new}` does not.
   const scope = JSON.stringify([
     binding.userId,
@@ -20,20 +21,6 @@ export function handoverIdentifiers(secret: string, binding: HandoverBinding) {
     current: `handover-current:${emailKey(secret, "handover", scope)}`,
     next: `handover-new:${emailKey(secret, "handover", scope)}`,
   };
-}
-
-export function bindHandoverProofs(
-  context: Pick<AuthContext, "internalAdapter">,
-  secret: string,
-  binding: HandoverBinding,
-) {
-  const identifiers = handoverIdentifiers(secret, binding);
-  const names = new Map([
-    [`email-verification-otp-${binding.currentEmail}`, identifiers.current],
-    [`change-email-otp-${binding.currentEmail}-${binding.newEmail}`, identifiers.next],
-  ]);
-  bindProofIdentifiers(context, names);
-  return identifiers;
 }
 
 export function bindProofIdentifiers(

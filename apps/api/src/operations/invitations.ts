@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { publicOrigins } from "@nslinkhub/config/public-origins";
 import { renderServiceInvitation } from "@nslinkhub/email";
 import { isEmail } from "class-validator";
 import { appError } from "../common/errors/app-exception";
@@ -20,7 +21,7 @@ export async function queueInvitation(tx: Prisma.TransactionClient, invite: Serv
     data: { tokenHash: invitationDigest(token) },
   });
   const config = emailConfig();
-  const origin = new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000");
+  const origin = new URL(publicOrigins(process.env).webOrigin);
   if (!["http:", "https:"].includes(origin.protocol) || origin.username || origin.password)
     throw appError("service_unavailable");
   const rendered = await renderServiceInvitation({

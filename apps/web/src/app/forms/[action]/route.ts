@@ -50,9 +50,10 @@ import {
 } from "../../../lib/pending-action";
 import { securityForm } from "../../../lib/security-forms";
 import { serverRead } from "../../../lib/server-api";
-import { readSession } from "../../../lib/session";
+import { readOwnProfile, readSession } from "../../../lib/session";
 import { resendTiming } from "../../../lib/sign-in-flow";
 import { appearanceCookie } from "../../../lib/theme";
+import { dayBoundary } from "../../../lib/time";
 import { captureUrl, isUuid, parseTags } from "../../../lib/validation";
 import type { VerificationPurpose } from "../../../lib/verification";
 
@@ -68,6 +69,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
   }
   const securityResponse = await securityForm(action, request, form);
   if (securityResponse) return securityResponse;
+  if (action === "account-recover") {
+    const result = await formPost<{ action: "reactivate" | "cancel_deletion" }>(
+      request,
+      "/api/v1/auth/account/recovery/confirm",
+      { confirm: form.get("confirm") === "yes" },
+      true,
+    );
+    return redirectResponse(
+      result.ok
+        ? `/account?done=${result.data.action}`
+        : `/account?notice=${result.status === 404 ? "expired" : "unavailable"}`,
+      result.setCookies ?? [],
+    );
+  }
   if (action === "account-send" || action === "account-confirm") {
     const flow = action === "account-confirm" ? await readAccountFlow() : null;
     if (
@@ -295,41 +310,43 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     const theme = form.get("theme");
     if (!["light", "dark", "system"].includes(theme ?? ""))
       return new Response("Invalid appearance", { status: 400 });
-    if (!(await readSession())) return redirectResponse("/sign-in?returnTo=%2Fsettings");
     return redirectResponse(safeDocumentReturn(form.get("returnTo")), [
-      appearanceCookie(theme as string),
+      appearanceCookie(theme as string, !!(await readSession())),
     ]);
   }
   if (action === "profile-save") {
     const json = request.headers.get("accept")?.includes("application/json");
-    const section = form.get("section") === "hub" ? "hub" : "profile";
+    const handleOnly = form.get("savePart") === "handle";
+    const section = handleOnly || form.get("section") === "hub" ? "hub" : "profile";
     const settingsPath = `/settings?section=${section}`;
     const displayName = form.get("displayName")?.trim() ?? "",
       username = form.get("username")?.trim().toLowerCase() ?? "";
-    const hubFields = form.has("handle")
+    const hubFields = form.has("hubName")
       ? {
           showOwner: form.get("showOwner") === "on",
           hubName: form.get("hubName")?.trim() ?? "",
-          handle: form.get("handle")?.trim().toLowerCase() ?? "",
           hubDescription: form.get("hubDescription") ?? "",
         }
       : {};
-    if (form.get("claimHandle") === "true" && form.get("confirmHandle") !== "on")
-      return redirectResponse("/settings?section=hub&notice=handle-confirmation-required");
     const bio = form.get("bio") ?? "";
-    const body = {
-      displayName,
-      username,
-      bio,
-      ...hubFields,
-      ...(form.get("confirmHandle") === "on" ? { confirmHandle: true } : {}),
-    } satisfies UpdateProfileRequest;
+    const body = (
+      handleOnly
+        ? { handle: form.get("handle")?.trim().toLowerCase() ?? "" }
+        : {
+            displayName,
+            username,
+            bio,
+            ...(form.has("timeZone") ? { timeZone: form.get("timeZone") || null } : {}),
+            ...hubFields,
+          }
+    ) satisfies UpdateProfileRequest;
     if (
-      displayName.length > 255 ||
-      bio.length > 500 ||
-      !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(username) ||
-      username.length < 3 ||
-      username.length > 20
+      !handleOnly &&
+      (displayName.length > 255 ||
+        bio.length > 500 ||
+        !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(username) ||
+        username.length < 3 ||
+        username.length > 20)
     )
       return json
         ? Response.json({ ok: false, code: "validation_failed", status: 400 }, { status: 400 })
@@ -351,7 +368,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
         issued: Date.now(),
       });
     return redirectResponse(
-      `${settingsPath}&notice=${result.ok ? "profile-saved" : result.code === "username_unavailable" ? "username-unavailable" : result.code === "username_reserved" || result.code === "username_invalid" ? "username-invalid" : result.code === "handle_claimed" ? "handle-claimed" : result.code === "handle_confirmation_required" ? "handle-confirmation-required" : result.code === "handle_unavailable" ? "handle-unavailable" : result.code === "handle_reserved" || result.code === "handle_invalid" ? "handle-invalid" : result.status === 429 ? "limited" : "unavailable"}`,
+      `${settingsPath}&notice=${result.ok ? "profile-saved" : result.code === "username_unavailable" ? "username-unavailable" : result.code === "username_reserved" || result.code === "username_invalid" ? "username-invalid" : result.code === "handle_change_cooldown" ? "handle-cooldown" : result.code === "handle_unavailable" ? "handle-unavailable" : result.code === "handle_reserved" || result.code === "handle_invalid" ? "handle-invalid" : result.status === 429 ? "limited" : "unavailable"}`,
     );
   }
   if (action === "invitation-open") {
@@ -388,8 +405,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     if (!result.ok)
       return redirectResponse(
         `/invitations/review?notice=${result.status === 429 ? "limited" : "unavailable"}`,
+        result.setCookies ?? [],
       );
     return redirectResponse("/sign-in/code?notice=sent", [
+      ...(result.setCookies ?? []),
       flowCookie(
         sealFlow({
           email: result.data.email,
@@ -420,10 +439,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     if (!result.ok)
       return redirectResponse(
         `/invitations/review?notice=${result.code === "invitation_session_mismatch" ? "wrong-account" : result.status === 400 ? "invalid" : result.status === 409 ? "conflict" : result.status === 429 ? "limited" : "unavailable"}`,
+        result.setCookies ?? [],
       );
     if (result.data.state === "declined")
       return redirectResponse("/invitations/review?notice=declined");
     return redirectResponse("/sign-in/code?notice=invitation-accepted", [
+      ...(result.setCookies ?? []),
       flowCookie(
         sealFlow({
           email: result.data.email,
@@ -461,11 +482,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     };
     return redirectResponse(
       `/sign-in/code?notice=${result.ok ? "sent" : result.status === 429 ? "limited" : "unavailable"}${!result.ok && result.retryAfter ? `&wait=${Math.min(result.retryAfter, 600)}` : ""}`,
-      [flowCookie(sealFlow(flow))],
+      [flowCookie(sealFlow(flow)), ...(result.setCookies ?? [])],
     );
   }
   if (action === "code-send" || action === "code-resend") {
-    const previous = action === "code-resend" ? await readFlow() : null;
+    const stored = await readFlow();
+    const previous =
+      action === "code-resend" ||
+      (stored &&
+        !stored.invitationToken &&
+        !stored.googleConnection &&
+        stored.email === form.get("email")?.trim().toLowerCase() &&
+        stored.returnTo === safeReturn(form.get("returnTo")))
+        ? stored
+        : null;
     const email = previous?.email ?? form.get("email")?.trim().toLowerCase();
     const returnTo = previous?.returnTo ?? safeReturn(form.get("returnTo"));
     if (!email || email.length > 254 || !/^\S+@\S+\.\S+$/.test(email))
@@ -490,6 +520,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
         ? { token: previous.invitationToken }
         : ({
             email,
+            ...(previous?.googleConnection ? { googleConnection: true } : {}),
             purpose: signInCodePurposes.find((value) => value === purpose),
           } satisfies SendSignInCodeRequest),
       true,
@@ -499,12 +530,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
       email,
       returnTo,
       purpose,
+      intent: previous?.intent,
+      ...(previous?.googleConnection ? { googleConnection: true } : {}),
       ...resendTiming(previous, result, webServerConfig().codeResendSeconds),
       ...(previous?.invitationToken ? { invitationToken: previous.invitationToken } : {}),
     };
     return redirectResponse(
       `/sign-in/code?notice=${result.ok ? (previous ? "resent" : "sent") : result.status === 429 ? "limited" : "unavailable"}${!result.ok && result.retryAfter ? `&wait=${Math.min(result.retryAfter, 600)}` : ""}`,
-      [flowCookie(sealFlow(flow), returnTo.startsWith("/capture/") ? 1800 : 600)],
+      [
+        flowCookie(sealFlow(flow), returnTo.startsWith("/capture/") ? 1800 : 600),
+        ...(result.setCookies ?? []),
+      ],
     );
   }
   if (action === "code-verify") {
@@ -518,13 +554,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
       flow.invitationToken ? "/api/v1/auth/invitations/verify" : "/api/v1/auth/code/verify",
       flow.invitationToken
         ? { token: flow.invitationToken, code }
-        : ({ email: flow.email, code } satisfies VerifySignInCodeRequest),
+        : ({
+            email: flow.email,
+            code,
+            createAccount: flow.purpose === "first-link",
+          } satisfies VerifySignInCodeRequest),
       true,
     );
     if (!result.ok)
       return redirectResponse(
         `/sign-in/code?notice=${result.status === 429 ? "limited" : result.status >= 500 || !result.status ? "unavailable" : "invalid"}${result.retryAfter ? `&wait=${Math.min(result.retryAfter, 600)}` : ""}`,
       );
+    if ((result.data as { registrationRequired?: boolean })?.registrationRequired)
+      return redirectResponse("/sign-up/confirm?method=email", result.setCookies ?? []);
+    if ((result.data as { accountRecovery?: boolean })?.accountRecovery)
+      return redirectResponse("/account", result.setCookies ?? []);
     if ((result.data as { twoFactorRedirect?: boolean })?.twoFactorRedirect)
       return redirectResponse("/sign-in/factor", result.setCookies ?? []);
     return completeSignIn(request, flow, result);
@@ -541,7 +585,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
   }
   if (action === "manage-search") {
     if (form.get("page") === "audit") {
-      const { filters } = auditQuery(Object.fromEntries(form));
+      const query = Object.fromEntries(form);
+      const timeZone = (await readOwnProfile())?.timeZone;
+      if (timeZone) {
+        // Native forms cannot recompute hidden instants as dates are edited.
+        // Resolve their calendar days with the saved preference here as well.
+        for (const key of ["from", "to"]) {
+          if (!query[key]) continue;
+          const instant = dayBoundary(query[key], key === "to", timeZone);
+          if (!instant) return redirectResponse("/manage/audit?notice=filters-unavailable");
+          query[`${key}Instant`] = instant;
+        }
+      }
+      const { filters } = auditQuery(query);
       filters.delete("cursor");
       const result = await serverRead<unknown[]>(`/api/v1/manage/audit?${filters}`);
       if (!result.ok) {

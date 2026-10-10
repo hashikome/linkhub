@@ -2,6 +2,8 @@
 
 Status: implemented for profiles, hubs, collections and the site. Social destinations remain deferred.
 
+The site-wide “Share nslinkhub” entry lives in the shared footer alongside Support.
+
 One `/share` page renders the resource name, share heading, labeled URL, Copy link
 and a contextual return link below. Copy link is visible but disabled before
 hydration; without JavaScript, the URL remains selectable for manual copying.
@@ -28,6 +30,19 @@ Entry actions preserve their source path and query in `returnTo`. This is
 validated as a local path; it never permits an external redirect. The return
 label reflects the destination (for example, Back to profile or Back to
 collections). Direct entry falls back to the resource, or home for site sharing.
+
+## Sharing an exact item
+
+Expanded collection items offer “Copy link to this item”. The browser copies an
+absolute collection address with `item={resourceId}` and the matching item anchor,
+keeping the supplied collection access context. Following it opens that item and
+its section, including items beyond the first page. Copying stays on the current
+page and confirms “Link copied.”; it grants no access or creates a tracked share
+entry. Resource titles continue to open the resource destination.
+
+When clipboard access fails, a labeled read-only URL appears for manual copying.
+Without JavaScript, the existing item permalink remains a native link. The
+fictional homepage demo keeps its direct external resource link instead.
 
 ## Accepted commercial boundary (implementation pending)
 

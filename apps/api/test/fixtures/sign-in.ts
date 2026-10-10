@@ -36,7 +36,7 @@ export async function signInWithCode(server: App, input: { email: string; name?:
   if (!code) throw new Error("Expected captured code");
   return request(server)
     .post("/api/v1/auth/code/verify")
-    .send({ ...input, code })
+    .send({ ...input, code, createAccount: true })
     .expect(200);
 }
 

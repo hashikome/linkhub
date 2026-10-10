@@ -11,6 +11,7 @@ export const reservedUsernames = new Set([
   "manage",
   "capture",
   "sign-in",
+  "sign-up",
   "sign-out",
   "support",
   "c",

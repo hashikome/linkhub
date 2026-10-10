@@ -683,7 +683,7 @@ describe("service operator authority (HTTP)", () => {
       {
         category: "authentication",
         targetUserId: operator.id,
-        action: "code.verify",
+        action: "security.sign_in.email",
         outcome: "success",
       },
     ])
@@ -720,9 +720,14 @@ describe("service operator authority (HTTP)", () => {
     );
     const searched = await as(
       "get",
-      `/api/v1/manage/audit?q=${operator.id}&action=code.verify`,
+      `/api/v1/manage/audit?q=${operator.id}&action=security.sign_in.email`,
     ).expect(200);
     expect(searched.body.data.some((e: { id: string }) => e.id === events[2].id)).toBe(true);
+    const byLabel = await as(
+      "get",
+      "/api/v1/manage/audit?q=Sign%20in%20with%20email&action=security.sign_in.email",
+    ).expect(200);
+    expect(byLabel.body.data.some((e: { id: string }) => e.id === events[2].id)).toBe(true);
     const hidden = await as("get", `/api/v1/manage/audit?targetId=${c.id}`).expect(200);
     expect(hidden.body.data).toEqual([]);
     const own = await as("get", `/api/v1/manage/audit?targetId=${c.id}`, owner).expect(200);
@@ -921,7 +926,7 @@ describe("service operator authority (HTTP)", () => {
     await command("collection.release", c.body.data.id, 1).expect(201);
     await request(server()).get(`/api/v1/collections/${c.body.data.id}`).expect(200);
   });
-  it("removes both service roles and authored invitations during verified email handover", async () => {
+  it("rejects email changes without mutating service authority or invitations", async () => {
     const target = await login("handover"),
       newEmail = `next-${randomUUID()}@example.com`;
     await changeOperatorGrant(prisma, {
@@ -934,25 +939,28 @@ describe("service operator authority (HTTP)", () => {
     const pending = await as("post", "/api/v1/operations/operator-invitations", target)
       .send({ email: `handover-invite-${randomUUID()}@example.com`, operationId: randomUUID() })
       .expect(201);
-    await as("post", "/api/v1/auth/email-change/start", target).send({ newEmail }).expect(200);
+    await as("post", "/api/v1/auth/email-change/start", target).send({ newEmail }).expect(404);
     await as("post", "/api/v1/auth/email-change/confirm-current", target)
-      .send({ code: await codeFor(target.email) })
-      .expect(200);
+      .send({ code: "12345678" })
+      .expect(404);
     await as("post", "/api/v1/auth/email-change/confirm-new", target)
-      .send({ code: await codeFor(newEmail) })
-      .expect(200);
-    expect(await prisma.operatorGrant.findUnique({ where: { userId: target.id } })).toBeNull();
-    expect(await prisma.adminGrant.findUnique({ where: { userId: target.id } })).toBeNull();
+      .send({ code: "12345678" })
+      .expect(404);
+    expect(await prisma.operatorGrant.findUnique({ where: { userId: target.id } })).not.toBeNull();
+    expect(await prisma.adminGrant.findUnique({ where: { userId: target.id } })).not.toBeNull();
     expect(
       (await prisma.serviceInvitation.findUniqueOrThrow({ where: { id: pending.body.data.id } }))
         .state,
-    ).toBe("cancelled");
-    expect(await prisma.session.count({ where: { userId: target.id } })).toBe(0);
+    ).toBe("pending");
+    expect(await prisma.session.count({ where: { userId: target.id } })).toBe(1);
     expect(
       await prisma.auditLog.count({
         where: { targetUserId: target.id, action: "account.handover" },
       }),
-    ).toBe(1);
+    ).toBe(0);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: target.id } })).email).toBe(
+      target.email,
+    );
   });
   it("serializes competing operator actions without propagating holds through references", async () => {
     const a = await login("race-a"),

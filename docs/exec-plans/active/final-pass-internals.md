@@ -41,9 +41,8 @@ None yet.
 - Pre-deployment: schema changes go into new reviewed migrations on top of the
   squashed `0_init`; the dev database is reset and reseeded (`bun run db:seed`)
   if a change is easier that way. No compatibility code.
-- Scope: this internals pass preserves current role contracts and labels. The
-  accepted `viewer`/`contributor` rename is separate product work in PRODUCT §11;
-  Curator names the professional account type (ADR-0016).
+- Scope: preserve the implemented `viewer`/`contributor` contracts and labels.
+  Paid entitlements follow ADR-0028 and are outside this internals pass.
 
 ## Outcomes & Retrospective
 
