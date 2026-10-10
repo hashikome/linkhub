@@ -4,42 +4,61 @@ import type { GravatarService } from "./gravatar.service";
 import { UserAvatarService } from "./user-avatar.service";
 
 const id = "01923456-789a-7bcd-8ef0-123456789abc";
-function fixture(image: string | null = null, emailVerified = true) {
-  const lookup = mock(async () => ({ image, emailVerified, email: "reader@example.com" }));
-  const resolve = mock(async () => null as { body: Buffer; contentType: string } | null);
+const fallback = { location: `/api/v1/avatars/${id}.svg` };
+const image = { body: Buffer.from("image bytes"), contentType: "image/png" };
+const active = {
+  email: "reader@example.com",
+  emailVerified: true,
+  accountState: "active",
+  deletionScheduledFor: null as Date | null,
+};
+function fixture(user: typeof active | null = active) {
+  const lookup = mock(async () => user);
+  const current = mock(async () => ({ id }) as { id: string } | null);
+  const resolve = mock(async (_email: string) => image as typeof image | null);
   const service = new UserAvatarService(
-    { user: { findUnique: lookup } } as unknown as PrismaService,
+    { user: { findUnique: lookup, findFirst: current } } as unknown as PrismaService,
     { resolve } as unknown as GravatarService,
   );
-  return { service, lookup, resolve };
+  return { service, lookup, current, resolve };
 }
-describe("own-account avatar selection", () => {
-  it("does no personal lookup for anonymous or other-account requests", async () => {
-    const { service, lookup, resolve } = fixture();
-    for (const actor of [null, { userId: "someone-else" }]) {
-      expect(await service.resolve(id, actor)).toEqual({ location: `/api/v1/avatars/${id}.svg` });
+describe("public account avatar selection", () => {
+  it("uses the active person's verified email independently of the viewer", async () => {
+    const { service, resolve } = fixture();
+    expect(await service.resolve(id)).toEqual(image);
+    expect(resolve).toHaveBeenCalledWith(active.email);
+  });
+  it("does not contact Gravatar for missing or ineligible accounts", async () => {
+    for (const user of [
+      null,
+      { ...active, emailVerified: false },
+      { ...active, accountState: "inactive" },
+      { ...active, accountState: "suspended" },
+      { ...active, deletionScheduledFor: new Date() },
+    ]) {
+      const { service, resolve } = fixture(user);
+      expect(await service.resolve(id)).toEqual(fallback);
+      expect(resolve).not.toHaveBeenCalled();
     }
-    expect(lookup).not.toHaveBeenCalled();
-    expect(resolve).not.toHaveBeenCalled();
   });
-  it("prefers a chosen HTTPS picture without a Gravatar lookup", async () => {
-    const { service, resolve } = fixture("https://images.example.com/chosen.png");
-    expect(await service.resolve(id, { userId: id })).toEqual({
-      location: "https://images.example.com/chosen.png",
-    });
-    expect(resolve).not.toHaveBeenCalled();
+  it("retains the generated icon when no provider image is available", async () => {
+    const { service, resolve } = fixture();
+    resolve.mockResolvedValueOnce(null);
+    expect(await service.resolve(id)).toEqual(fallback);
   });
-  it("uses Gravatar for verified email and falls back to the immutable generator", async () => {
-    const { service, resolve } = fixture("javascript:alert(1)");
-    const image = { body: Buffer.from("image bytes"), contentType: "image/png" };
-    resolve.mockResolvedValueOnce(image);
-    expect(await service.resolve(id, { userId: id })).toEqual(image);
-    expect(resolve).toHaveBeenCalledWith("reader@example.com");
-    expect(await service.resolve(id, { userId: id })).toEqual({
-      location: `/api/v1/avatars/${id}.svg`,
-    });
-    const unverified = fixture(null, false);
-    await unverified.service.resolve(id, { userId: id });
-    expect(unverified.resolve).not.toHaveBeenCalled();
+  it("discards an image if its account or verified email changed during resolution", async () => {
+    const { service, current } = fixture();
+    current.mockResolvedValueOnce(null);
+    expect(await service.resolve(id)).toEqual(fallback);
+  });
+  it("reads the current email on every request instead of caching a user association", async () => {
+    const { service, lookup, resolve } = fixture();
+    await service.resolve(id);
+    lookup.mockResolvedValueOnce({ ...active, email: "new@example.com" });
+    await service.resolve(id);
+    expect(resolve.mock.calls.map(([email]) => email)).toEqual([
+      "reader@example.com",
+      "new@example.com",
+    ]);
   });
 });

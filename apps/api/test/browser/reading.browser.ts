@@ -11,11 +11,13 @@ import { requestBudgetKey } from "../../src/common/middleware/request-budget";
 import type { PrismaService } from "../../src/database/prisma.service";
 import { emailConfig } from "../../src/email/config";
 import { emailKey, unseal } from "../../src/email/outbox";
+import type { AvatarImage } from "../../src/modules/avatars/gravatar.service";
 import { ensurePersonalHub } from "../../src/modules/hubs/hub-onboarding";
 import { itemTags } from "../../src/modules/resources/item-tags";
 import { signInHubOwner, signInWithCode } from "../fixtures/sign-in";
 
 const root = resolve(__dirname, "../../../..");
+const gravatarImages = new Map<string, AvatarImage>();
 let app: INestApplication;
 let prisma: PrismaService;
 let browser: Browser;
@@ -175,7 +177,7 @@ beforeAll(async () => {
   const { GravatarService } = await import("../../src/modules/avatars/gravatar.service.js");
   const module = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(GravatarService)
-    .useValue({ resolve: async () => null })
+    .useValue({ resolve: async (email: string) => gravatarImages.get(email) ?? null })
     .compile();
   app = module.createNestApplication({ bodyParser: false, logger: false });
   app.use(
@@ -5979,3 +5981,111 @@ it("rejects an account confirmation replaced by another tab", async () => {
     await close();
   }
 }, 30000);
+
+it("shows public Gravatar pictures and optional Settings guidance with native fallback", async () => {
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGOQS5n2HwAD1AIY4wETJQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  for (const js of [true, false]) {
+    await prisma.requestBudget.deleteMany();
+    const email = `gravatar-browser-${crypto.randomUUID()}@example.com`;
+    const name = "A reader with a deliberately long public display name";
+    const signed = await signInWithCode(app.getHttpServer(), { email, name });
+    const id = signed.body.user.id;
+    const collection = await request(app.getHttpServer())
+      .post("/api/v1/collections")
+      .auth(signed.headers["set-auth-token"], { type: "bearer" })
+      .send({
+        title: "A picture beside a contribution",
+        slug: `avatar-${crypto.randomUUID()}`,
+        published: true,
+      })
+      .expect(201);
+    gravatarImages.set(email, { body: png, contentType: "image/png" });
+    const { page, close } = await freshPage(js);
+    const loaded = async (selector: string, width: number) => {
+      const picture = page.locator(selector);
+      await browserExpect(picture).toHaveAttribute("src", `/api/v1/users/${id}/avatar`);
+      await browserExpect
+        .poll(() => picture.evaluate((element: HTMLImageElement) => element.naturalWidth))
+        .toBe(width);
+    };
+    const externalImages: string[] = [];
+    page.on("request", (request) => {
+      if (request.resourceType() === "image" && !request.url().startsWith(origin))
+        externalImages.push(request.url());
+    });
+    try {
+      await ready(page, `/people/${id}`);
+      await browserExpect(page.locator("h1")).toHaveText(name);
+      await loaded(".person-picture .avatar", 1);
+      expect(await page.content()).not.toContain(email);
+      expect(await page.content()).not.toContain("gravatar.com/avatar/");
+      if (js)
+        for (const width of [390, 768, 1280, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          for (const colorScheme of ["light", "dark"] as const) {
+            await page.emulateMedia({ colorScheme });
+            expect(
+              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            ).toBe(true);
+            await page.screenshot({
+              path: `/tmp/gravatar-profile-${width}-${colorScheme}.png`,
+              fullPage: true,
+              animations: "disabled",
+            });
+          }
+        }
+      await ready(page, `/c/${collection.body.data.id}`);
+      await loaded(".contributor-list .avatar", 1);
+      await browserSignIn(page, email, "/settings");
+      const region = page.getByRole("region", { name: "Profile picture", exact: true });
+      await browserExpect(region).toContainText("public on your profile and contributions");
+      await browserExpect(region).toContainText("optional");
+      const provider = region.getByRole("link", { name: /Create or update your Gravatar/ });
+      await browserExpect(provider).toHaveAttribute("href", "https://gravatar.com/");
+      await browserExpect(provider).toHaveAttribute("target", "_blank");
+      await browserExpect(provider).toHaveAttribute("rel", "noopener noreferrer");
+      await loaded("header .avatar", 1);
+      await loaded('[aria-labelledby="profile-picture-label"] .avatar', 1);
+      if (js)
+        for (const width of [390, 768, 1280, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          for (const colorScheme of ["light", "dark"] as const) {
+            await page.emulateMedia({ colorScheme });
+            expect(
+              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            ).toBe(true);
+            await provider.focus();
+            await browserExpect(provider).toBeFocused();
+            expect(
+              await provider.evaluate((element) => getComputedStyle(element).outlineStyle),
+            ).not.toBe("none");
+            await page.screenshot({
+              path: `/tmp/gravatar-settings-${width}-${colorScheme}.png`,
+              fullPage: true,
+              animations: "disabled",
+            });
+          }
+        }
+      gravatarImages.delete(email);
+      await page.reload();
+      await loaded("header .avatar", 64);
+      await loaded('[aria-labelledby="profile-picture-label"] .avatar', 64);
+      await browserExpect(region).not.toContainText("don't have a Gravatar");
+      await page.setViewportSize({ width: 390, height: 900 });
+      await page.screenshot({
+        path: `/tmp/gravatar-fallback-settings-${js}.png`,
+        fullPage: true,
+        animations: "disabled",
+      });
+      await ready(page, `/people/${id}`);
+      await loaded(".person-picture .avatar", 64);
+      expect(externalImages).toEqual([]);
+    } finally {
+      gravatarImages.delete(email);
+      await close();
+    }
+  }
+}, 60000);

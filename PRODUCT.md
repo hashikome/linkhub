@@ -540,8 +540,7 @@ Purpose: take a collection out of the product as a document. Status: API only.
 
 Purpose: one account, passwordless, that never loses what you were doing.
 Status: sign-in, verification, settings, permanent hub-handle claims and
-self-service account lifecycle Built; email change API only; expanded Gravatar
-profile avatars are the next implementation task after review and commit.
+self-service account lifecycle and public Gravatar avatars Built; email change API only.
 
 - **Sign-in:** email, then an eight-digit emailed code. Emails carry codes
   only, never sign-in links; neither passwords nor usernames are login credentials.
@@ -560,7 +559,7 @@ profile avatars are the next implementation task after review and commit.
   current address confirms by code
   (ignoring it changes nothing), the new address verifies by code, then every
   session is signed out.
-- **Profile avatars** *(next milestone)*: use Gravatar, falling back to our
+- **Profile avatars** *(Built)*: use Gravatar, falling back to our
   existing generated icons when no image is available or the provider fails.
   Profile Settings recommends creating a Gravatar account with an optional link;
   no Gravatar account is required to use the product.
@@ -788,7 +787,7 @@ Nothing is deployed; everything built runs and is verified locally. The API
 | 6.11 Sign-in, verification, settings | Built | Built |
 | 6.11 Email change | Not yet | Built |
 | 6.11 Permanent hub handles, deactivation/recovery, deletion/cancellation | Built | Built |
-| 6.11 Gravatar profile avatars | Expansion planned | Own-account proxy built; public integration planned |
+| 6.11 Gravatar profile avatars | Built | Public active-account proxy and generated fallback built |
 | 6.11 Single sign-on | Planned | Planned |
 | 6.12 Service operations | Built | Built |
 | Audit strategy and redesign | Deferred milestone; current views provisional | Existing records retained; strategy deferred |
@@ -796,11 +795,11 @@ Nothing is deployed; everything built runs and is verified locally. The API
 | 6.13 Curator accounts | Planned | Planned |
 | Browser extension | Planned | Uses the existing API |
 
-Next session starts with review rounds of the complete uncommitted changes,
-fixes, verification and commit. The first implementation task afterward is
-Gravatar profile avatars, extending the existing own-account proxy; see
+The accumulated milestones have completed whole-diff review, fixes, verification
+and commit. Gravatar profile avatars extend the existing proxy across public
+person surfaces; see
 [identity and handles](docs/design-docs/identity-and-handles.md#gravatar-follow-up).
-Richer Gravatar profile display is a later paid feature, with fields and
+Richer Gravatar profile display remains a later paid feature, with fields and
 entitlements still to be designed.
 
 Delivery order for the remaining milestones:

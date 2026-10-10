@@ -9,6 +9,13 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Show Gravatar pictures on public person profiles, contributions and account
+  navigation, with the existing generated icon for missing or failed images.
+  Replace chosen-image priority; keep email hashes server-side and discard
+  images if the account or verified email changes during retrieval.
+- Add a Settings picture preview and optional Gravatar guidance, explaining
+  public visibility, account-email association and generated fallback.
+
 - Stabilize Manage browser pagination checks across date localization during
   hydration, while retaining row-content and timestamp-value comparisons.
 

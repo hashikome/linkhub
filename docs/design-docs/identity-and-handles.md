@@ -98,31 +98,39 @@ and [ADR-0023](../engineering-decisions/0023-account-lifecycle-and-unified-colle
 
 ## Gravatar follow-up
 
-Selected next implementation task after whole-diff review, fixes, verification
-and commit: integrate Gravatar primarily for profile avatars across person-facing
-surfaces. Richer Gravatar profile information is a later optional paid feature;
-field selection, consent and backend entitlements remain to be designed. Do not
-replace local usernames, permanent hub handles or authorization with provider data.
+The shared avatar endpoint is public and viewer-neutral under
+[ADR-0034](../engineering-decisions/0034-public-gravatar-avatars.md). For an active
+account with verified email and no pending deletion, it serves proxied Gravatar
+image bytes. Missing images or provider failure use our existing UUID-seeded SVG;
+missing, unverified, inactive, suspended and deletion-pending accounts use that
+same fallback without contacting the provider. Stored chosen-image URLs no longer
+participate in selection. Existing vendor image fields are not erased.
 
-Accepted avatar order for that milestone: Gravatar first, then our existing
-deterministic generated icon when no Gravatar image is available, including
-people without a Gravatar account. Provider failures also retain that fallback.
-The generated icon remains ours; do not replace it with a provider-generated
-default. Profile Settings should offer an optional recommendation and link to
-create a Gravatar account for a profile picture. Registration is never required
-to use NSLinkHub. Avoid claiming that a missing image proves no account exists.
-This replaces the chosen-image-first priority when the milestone is implemented.
+Public person profiles, contributor lists and account navigation use the same
+immutable `/api/v1/users/:id/avatar` address. Profile Settings explains that the
+picture is public and associated with the account email, and offers an optional
+link to create or update a Gravatar. Registration is never required, and missing
+images are never described as evidence that no Gravatar account exists. Picture
+management remains at the provider; no upload/editor or provider selector is added.
 
-Existing foundation: `UserAvatarService` resolves only the signed-in person's own
-avatar through a chosen HTTPS image, then proxied Gravatar for a verified email,
-then the generated SVG. Other viewers currently receive the generated fallback
-without an account lookup. Extend this deliberately rather than duplicating it.
+The API reads current eligibility and email for every request, then checks them
+again after image retrieval to discard in-flight results from changed accounts.
+User-ID responses remain private/no-store. The provider cache is keyed by the
+normalized-email hash, not user ID: changed emails select a different cache entry,
+and deactivation prevents access to any cached picture. Cache entries are bounded
+to 128; TTLs are one hour for pictures, 15 minutes for missing images and one minute
+for failures. A reactivated account may use its current email's cached picture.
 
-Before implementation, specify public avatar visibility and account-state checks,
-provider disclosure/choice, cache invalidation on email changes or deactivation,
-and safe fallback on missing images, timeouts or provider failure. Keep email
-hashes and any profile API credentials server-side, preserve immutable user-ID
-avatar URLs, and do not automatically import unrelated profile fields.
+Keep the existing fixed HTTPS origin, SHA256 normalization, `d=404`, G rating,
+128px requests, 1.5-second timeout, 256KB response limit, content-type/signature
+checks and 16-request concurrency cap. Provider redirects are rejected. Hashes
+stay server-side and never appear in browser markup or redirects. Provider
+requests carry no viewer cookies or referrers; no profile API credentials,
+profile requests or provider scripts are needed.
+
+Richer Gravatar profile information is a later optional paid feature; field
+selection, consent and backend entitlements remain to be designed. Local names,
+bios, usernames, permanent handles and authorization remain product-owned.
 
 Official references (checked 2026-10-10):
 

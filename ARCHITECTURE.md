@@ -75,7 +75,7 @@ ref/               disposable, git-ignored implementation context
 | `resources` | items (links with server-resolved titles, collection references, headings), tags, reorder with version checks, public-address rule, link preview |
 | `imports` | bookmarks-HTML + universal-CSV ingestion with per-row error reports |
 | `exports` | synchronous export (`POST /exports`): markdown/PDF/Word, one document per collection, zipped when several — programmatic renderers, no queue |
-| `avatars` | deterministic SVG generation from safe seeds; account clients use immutable user UUIDs; no user lookup |
+| `avatars` | public active-account Gravatar proxy at immutable user-ID URLs; deterministic SVG fallback from safe seeds |
 | `health` | liveness (`/health`) + per-dependency readiness (`/status`: postgres, queue Redis → ready/degraded/unavailable; 503 when postgres is down) |
 | `comments` | collection discussion: questions, replies, accepted answers, hiding |
 | `operations` | service operators and admins: account restrictions, collection holds, invitations, audit, notifications |

@@ -336,15 +336,21 @@ Without JavaScript, links use the last saved values. There is no copy-link actio
 Native POST forwards PATCH with signed form-source attribution; Origin, backend
 validation and ownership remain enforced. Credential changes are excluded.
 
-The shared avatar requests `/api/v1/users/:id/avatar`. For the signed-in user's
-own UUID, the API prefers a stored chosen HTTPS image, then a Gravatar for the
-verified email, then the generated geometric SVG. Gravatar uses normalized-email
-SHA256 and `d=404`; image bytes are proxied with bounded time/body/cache limits.
-Email hashes never enter browser markup or Gravatar redirects. Anonymous and
-other-user requests only get the generated fallback, without looking up the
-account. The immutable `/api/v1/avatars/:seed.svg` generator stays unchanged.
-No photo upload UI or automatic name/bio import is introduced. Account settings
-contains no profile-picture row; the automatically resolved avatar stays in the header.
+The shared avatar requests `/api/v1/users/:id/avatar`. Under
+[ADR-0034](../engineering-decisions/0034-public-gravatar-avatars.md), all viewers
+receive the active person's verified-email Gravatar or our generated SVG. The
+proxy checks account eligibility before and after image resolution; unavailable
+accounts receive only the generated icon. Chosen-image priority is retired.
+Hashes stay server-side, responses are no-store, and provider fetch/cache limits
+remain bounded. See [identity and handles](identity-and-handles.md#gravatar-follow-up).
+
+Person profiles show a 64px picture above their name. Contributor lists and
+account menus reuse the same component and user-ID URL. Settings includes a
+picture preview, public-visibility explanation, generated-fallback guidance and
+an optional link to create or update a Gravatar with the account email. The link
+opens a separate tab to preserve profile drafts. Missing images never imply a
+missing provider account. No photo upload UI, embedded editor or automatic
+name/bio import is introduced.
 
 Appearance is a validated, HttpOnly, SameSite cookie containing only `light`,
 `dark` or `system`. Server rendering sets the root attribute, and CSS semantic

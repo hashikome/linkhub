@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { type ApiPath, withCursor } from "../lib/http";
 import { serverRead } from "../lib/server-api";
 import { readSession } from "../lib/session";
+import { Avatar } from "./avatar";
 import { Feedback } from "./feedback";
 import { FormNotice } from "./form-notice";
 import { NativeForm } from "./native-form";
@@ -42,6 +43,9 @@ export async function PersonProfile({
       <ShareOpen shareId={shareId} kind="profile" resourceId={person.userId} />
       <div className="page-heading shareable-heading">
         <div>
+          <div className="person-picture">
+            <Avatar userId={person.userId} large />
+          </div>
           <h1>{name || person.username}</h1>
           {(name || hub) && (
             <p className="hub-identity meta">

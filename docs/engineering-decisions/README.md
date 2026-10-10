@@ -81,3 +81,5 @@ alongside their original rationale.
 - [0032-relational-item-and-collection-tags.md](0032-relational-item-and-collection-tags.md) — Shared tag identities, item assignments and a transactionally maintained collection-tag relation.
 
 - [0033-permanent-hub-handles-and-self-service-accounts.md](0033-permanent-hub-handles-and-self-service-accounts.md) — Permanent hub handles, retained reservations and distinct self-service deactivation/deletion.
+
+- [0034-public-gravatar-avatars.md](0034-public-gravatar-avatars.md) — Public active-account pictures, server-side proxying and generated fallback.

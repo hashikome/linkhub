@@ -276,3 +276,9 @@ stored, once per address. `LINK_TITLES=off`
 disables it; tests disable it unless `LINK_TITLES=on`.
 
 Account deactivation and pending deletion block authentication and distribution just as suspension does. Self-service and admin-scheduled deletion have a 14-day grace period; cancellation and terminal cleanup serialize through the authority lock (ADR-0023/0033). Unified collection management never grants service operators private content access.
+
+Public avatar images follow [ADR-0034](engineering-decisions/0034-public-gravatar-avatars.md):
+only active, verified accounts without pending deletion may serve a Gravatar.
+Eligibility and email are rechecked after provider resolution; all other cases
+use the same generated fallback. User-ID responses are no-store, provider hashes
+stay server-side, and provider caches never bypass current account checks.

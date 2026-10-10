@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, mock } from "bun:test";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import request from "supertest";
@@ -8,16 +8,18 @@ import { PrismaService } from "../src/database/prisma.service";
 import { GravatarService } from "../src/modules/avatars/gravatar.service";
 import { signInWithCode } from "./fixtures/sign-in";
 
+const png = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGOQS5n2HwAD1AIY4wETJQAAAABJRU5ErkJggg==",
+  "base64",
+);
+const resolveAvatar = mock(async (email: string) =>
+  email.startsWith("avatar-hit-") ? { body: png, contentType: "image/png" } : null,
+);
 let app: INestApplication;
 beforeAll(async () => {
   const module = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(GravatarService)
-    .useValue({
-      resolve: async (email: string) =>
-        email.startsWith("avatar-hit-")
-          ? { body: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), contentType: "image/png" }
-          : null,
-    })
+    .useValue({ resolve: resolveAvatar })
     .compile();
   app = module.createNestApplication({ bodyParser: false });
   configureApp(app);
@@ -101,31 +103,113 @@ describe("public generated avatar HTTP contract", () => {
   });
 });
 
-describe("own-account avatar HTTP resolution", () => {
-  it("serves a proxied Gravatar, respects a chosen image and keeps public fallback private", async () => {
+describe("public account avatar HTTP resolution", () => {
+  it("serves the same proxied Gravatar to every viewer and ignores chosen-image priority", async () => {
     const email = `avatar-hit-${crypto.randomUUID()}@example.com`;
     const login = await signInWithCode(app.getHttpServer(), { email });
-    const token = login.headers["set-auth-token"];
+    const other = await signInWithCode(app.getHttpServer(), {
+      email: `avatar-viewer-${crypto.randomUUID()}@example.com`,
+    });
     const prisma = app.get(PrismaService);
-    const user = await prisma.user.findUniqueOrThrow({ where: { email } });
-    const path = `/api/v1/users/${user.id}/avatar`;
-    const image = await request(app.getHttpServer())
-      .get(path)
-      .auth(token, { type: "bearer" })
-      .expect(200);
-    expect(image.headers["content-type"]).toContain("image/png");
-    expect(image.headers["cache-control"]).toBe("private, no-store");
-    expect(image.headers.location).toBeUndefined();
-    const anonymous = await request(app.getHttpServer()).get(path).expect(302);
-    expect(anonymous.headers.location).toBe(`/api/v1/avatars/${user.id}.svg`);
-    await prisma.user.update({
-      where: { id: user.id },
+    const user = await prisma.user.update({
+      where: { email },
       data: { image: "https://images.example.com/chosen.png" },
     });
-    const chosen = await request(app.getHttpServer())
-      .get(path)
-      .auth(token, { type: "bearer" })
-      .expect(302);
-    expect(chosen.headers.location).toBe("https://images.example.com/chosen.png");
+    const path = `/api/v1/users/${user.id}/avatar`;
+    for (const token of [null, login.headers["set-auth-token"], other.headers["set-auth-token"]]) {
+      const get = request(app.getHttpServer()).get(path);
+      if (token) get.auth(token, { type: "bearer" });
+      const image = await get.expect(200);
+      expect(image.body).toEqual(png);
+      expect(image.headers["content-type"]).toContain("image/png");
+      expect(image.headers["cache-control"]).toBe("private, no-store");
+      expect(image.headers.location).toBeUndefined();
+      expect(JSON.stringify(image.headers)).not.toContain(email);
+      expect(JSON.stringify(image.headers)).not.toContain("gravatar.com");
+    }
+    // A new verified email selects its own image/fallback, without a user-ID cache.
+    const nextEmail = `avatar-missing-${crypto.randomUUID()}@example.com`;
+    await prisma.user.update({ where: { id: user.id }, data: { email: nextEmail } });
+    const missing = await request(app.getHttpServer()).get(path).expect(302);
+    expect(missing.headers.location).toBe(`/api/v1/avatars/${user.id}.svg`);
+    expect(resolveAvatar).toHaveBeenLastCalledWith(nextEmail);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).image).toBe(
+      "https://images.example.com/chosen.png",
+    );
+  });
+
+  it("withholds photos and provider lookups for unverified, inactive, suspended and deleted accounts", async () => {
+    const email = `avatar-hit-${crypto.randomUUID()}@example.com`;
+    const login = await signInWithCode(app.getHttpServer(), { email });
+    const id = login.body.user.id;
+    const path = `/api/v1/users/${id}/avatar`;
+    const prisma = app.get(PrismaService);
+    await request(app.getHttpServer()).get(path).expect(200);
+    for (const data of [
+      { accountState: "active", emailVerified: false, deletionScheduledFor: null },
+      { accountState: "inactive", emailVerified: true, deletionScheduledFor: null },
+      { accountState: "suspended", emailVerified: true, deletionScheduledFor: null },
+      {
+        accountState: "inactive",
+        emailVerified: true,
+        deletionScheduledFor: new Date(Date.now() + 86400000),
+      },
+    ]) {
+      await prisma.user.update({ where: { id }, data });
+      resolveAvatar.mockClear();
+      const hidden = await request(app.getHttpServer()).get(path).expect(302);
+      expect(hidden.headers.location).toBe(`/api/v1/avatars/${id}.svg`);
+      expect(hidden.headers["cache-control"]).toBe("private, no-store");
+      expect(resolveAvatar).not.toHaveBeenCalled();
+    }
+    await prisma.user.update({
+      where: { id },
+      data: { accountState: "active", deletionScheduledFor: null },
+    });
+    await request(app.getHttpServer()).get(path).expect(200);
+    await prisma.user.delete({ where: { id } });
+    resolveAvatar.mockClear();
+    const deleted = await request(app.getHttpServer()).get(path).expect(302);
+    expect(deleted.headers.location).toBe(`/api/v1/avatars/${id}.svg`);
+    expect(resolveAvatar).not.toHaveBeenCalled();
+  });
+
+  it("discards in-flight photos after email changes or account deactivation", async () => {
+    const prisma = app.get(PrismaService);
+    for (const changeEmail of [true, false]) {
+      const email = `avatar-hit-${crypto.randomUUID()}@example.com`;
+      const login = await signInWithCode(app.getHttpServer(), { email });
+      const id = login.body.user.id;
+      let started = () => {},
+        release = () => {};
+      const waiting = new Promise<void>((done) => {
+        started = done;
+      });
+      const held = new Promise<void>((done) => {
+        release = done;
+      });
+      resolveAvatar.mockImplementationOnce(async () => {
+        started();
+        await held;
+        return { body: png, contentType: "image/png" };
+      });
+      const result = request(app.getHttpServer())
+        .get(`/api/v1/users/${id}/avatar`)
+        .then((response) => response);
+      try {
+        await waiting;
+        await prisma.user.update({
+          where: { id },
+          data: changeEmail
+            ? { email: `avatar-missing-${crypto.randomUUID()}@example.com` }
+            : { accountState: "inactive" },
+        });
+      } finally {
+        release();
+      }
+      const response = await result;
+      expect(response.status).toBe(302);
+      expect(response.headers.location).toBe(`/api/v1/avatars/${id}.svg`);
+    }
   });
 });

@@ -7,13 +7,9 @@ import {
   Query,
   Req,
   Res,
-  UseGuards,
 } from "@nestjs/common";
 import { ApiProduces, ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
-import { CurrentUser } from "src/common/decorators/current-user.decorator";
-import { OptionalAuthGuard } from "src/common/guards/optional-auth.guard";
-import type { AuthUser } from "src/common/interfaces/auth-user.interface";
 import { AvatarsService } from "./avatars.service";
 import { AvatarQueryDto } from "./dto/avatar-query.dto";
 import { UserAvatarService } from "./user-avatar.service";
@@ -62,19 +58,14 @@ export class AvatarsController {
 export class UserAvatarController {
   constructor(private readonly avatars: UserAvatarService) {}
 
-  @UseGuards(OptionalAuthGuard)
   @Get(":id/avatar")
-  async get(
-    @Param("id", new ParseUUIDPipe()) id: string,
-    @CurrentUser() actor: AuthUser | null,
-    @Res() res: Response,
-  ) {
+  async get(@Param("id", new ParseUUIDPipe()) id: string, @Res() res: Response) {
     res.set({
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
       "Referrer-Policy": "no-referrer",
     });
-    const avatar = await this.avatars.resolve(id.toLowerCase(), actor);
+    const avatar = await this.avatars.resolve(id.toLowerCase());
     if ("location" in avatar) return res.redirect(302, avatar.location);
     return res.type(avatar.contentType).send(avatar.body);
   }

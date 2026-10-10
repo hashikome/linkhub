@@ -1,5 +1,4 @@
 import { Injectable } from "@nestjs/common";
-import { AuthUser } from "src/common/interfaces/auth-user.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { type AvatarImage, GravatarService } from "./gravatar.service";
 
@@ -12,26 +11,30 @@ export class UserAvatarService {
     private readonly gravatar: GravatarService,
   ) {}
 
-  async resolve(id: string, actor: AuthUser | null): Promise<ResolvedAvatar> {
+  async resolve(id: string): Promise<ResolvedAvatar> {
     const fallback = { location: `/api/v1/avatars/${id}.svg` };
-    // The public route must not reveal whether a UUID belongs to an account.
-    if (actor?.userId !== id) return fallback;
+    // Public pictures follow current account eligibility for every viewer.
+    // Missing and unavailable accounts share the same generated fallback.
     const user = await this.prisma.user.findUnique({
       where: { id },
-      select: { image: true, email: true, emailVerified: true },
+      select: { email: true, emailVerified: true, accountState: true, deletionScheduledFor: true },
     });
-    if (!user) return fallback;
-    if (user.image) {
-      try {
-        const image = new URL(user.image);
-        if (image.protocol === "https:" && !image.username && !image.password) {
-          return { location: image.href };
-        }
-      } catch {
-        /* Invalid stored images fall through to automatic avatars. */
-      }
-    }
-    if (!user.emailVerified) return fallback;
-    return (await this.gravatar.resolve(user.email)) ?? fallback;
+    if (!user?.emailVerified || user.accountState !== "active" || user.deletionScheduledFor)
+      return fallback;
+    const image = await this.gravatar.resolve(user.email);
+    if (!image) return fallback;
+    // The provider can take time. Never serve an old email's picture or an
+    // account's cached photo after it became unavailable during that wait.
+    const current = await this.prisma.user.findFirst({
+      where: {
+        id,
+        email: user.email,
+        emailVerified: true,
+        accountState: "active",
+        deletionScheduledFor: null,
+      },
+      select: { id: true },
+    });
+    return current ? image : fallback;
   }
 }

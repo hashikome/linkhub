@@ -1089,6 +1089,7 @@ html[data-revalidating="true"] .session-nav {
   visibility: hidden;
 }
 .avatar {
+  object-fit: cover;
   display: inline-flex;
   justify-content: center;
   align-items: center;
@@ -1104,6 +1105,9 @@ html[data-revalidating="true"] .session-nav {
   width: 4rem;
   height: 4rem;
   flex-basis: 4rem;
+}
+.person-picture {
+  margin-bottom: 1rem;
 }
 .account-menu {
   position: relative;
@@ -2122,9 +2126,15 @@ html[data-revalidating="true"] .session-nav {
   gap: 1rem;
   width: 100%;
 }
-.settings-field > label {
+.settings-field > label,
+.settings-picture-label {
   padding-block: 0.5rem;
   font-weight: 550;
+}
+.settings-picture-label {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: inherit;
 }
 .settings-field textarea {
   min-height: 8.5rem;
@@ -2753,7 +2763,8 @@ main .ops-filters select {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.375rem;
   }
-  .settings-field > label {
+  .settings-field > label,
+  .settings-picture-label {
     padding: 0;
   }
   .account-facts dd {

@@ -2,6 +2,7 @@
 import type { HandleAvailability, Profile, UsernameAvailability } from "@nslinkhub/types";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { readJson, submitForm } from "../lib/http";
+import { Avatar } from "./avatar";
 import { FormNotice } from "./form-notice";
 import { LocalTime } from "./local-time";
 
@@ -390,6 +391,26 @@ export function ProfileEditor({
                   <dd className="account-email">{profile.email}</dd>
                 </div>
               </dl>
+              <section className="settings-field" aria-labelledby="profile-picture-label">
+                <h2 id="profile-picture-label" className="settings-picture-label">
+                  Profile picture
+                </h2>
+                <div className="settings-field-control">
+                  <Avatar userId={profile.id} large />
+                  <p className="field-help">
+                    Your Gravatar picture is public on your profile and contributions. When no
+                    picture is available, we use your generated icon.
+                  </p>
+                  <p className="field-help">
+                    <a href="https://gravatar.com/" target="_blank" rel="noopener noreferrer">
+                      Create or update your Gravatar
+                      <span className="sr-only"> (opens in a new tab)</span>
+                    </a>{" "}
+                    with your account email. It’s optional. Picture changes can take up to an hour
+                    to appear.
+                  </p>
+                </div>
+              </section>
               <div className="settings-field">
                 <label htmlFor="display-name">Full name</label>
                 <input
