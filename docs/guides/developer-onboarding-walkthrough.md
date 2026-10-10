@@ -12,7 +12,7 @@ answer in your own words before continuing. Reading the whole file in one go
 is the failure mode this structure exists to prevent. Every file is a
 clickable link.
 
-**Pin:** verified against commit `3f9e05c`. This is enforced, not honor
+**Pin:** verified against commit `e99047f`. This is enforced, not honor
 system: `check:guide-pin` (part of `bun run verify`) fails when any file this
 guide links changes after the pinned commit. To clear it, reread the affected
 sessions, fix any drift, and move the pin to the latest commit — in a
@@ -90,7 +90,9 @@ Read, in this order:
    access to their destinations; a resource's kind is
    set by *how it was added*, never URL inspection; tags use normalized relations (API names remain arrays);
    sharing = link / direct / publish; export reads like a Google Doc;
-   sign-in uses email codes; hubs have one owner and never transfer, while
+   sign-in is passwordless: email codes own onboarding, while passkeys and
+   Google can sign into existing accounts; enrolled protection also applies to
+   email/Google fallback. Hubs have one owner and never transfer, while
    collections can. People have usernames and optional hubs; the first successful ownership
    operation creates a hub.
 2. [ARCHITECTURE.md](../../ARCHITECTURE.md) — the domain model, codemap,
@@ -115,6 +117,9 @@ Read, in this order:
 ## Session 3 — Walk The Product Over Curl
 
 Goal: every core capability exercised by hand. API running (`bun run dev`).
+Use a fresh test account for the email-code example below. An account with
+passkeys or TOTP returns a pending factor challenge instead of a usable token
+until its additional proof completes.
 
 ```bash
 # Request a code. For real mail, configure Resend and run the email worker
@@ -282,6 +287,9 @@ Read:
 2. [transactional-email.md](../design-docs/transactional-email.md) and
    [auth-delivery-integration.md](../design-docs/auth-delivery-integration.md)
    for encrypted delivery, proof/session transactions and local/live acceptance.
+   Read [passwordless-security.md](../design-docs/passwordless-security.md) for
+   passkeys, existing-account Google, optional TOTP, protected recovery and the
+   precise OAuth callback configuration.
    Inspect [code-email.tsx](../../packages/email/src/code-email.tsx), the shared
    base for code messages.
 3. [web-product-experience.md](../design-docs/web-product-experience.md),
