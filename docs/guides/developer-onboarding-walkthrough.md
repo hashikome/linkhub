@@ -12,7 +12,7 @@ answer in your own words before continuing. Reading the whole file in one go
 is the failure mode this structure exists to prevent. Every file is a
 clickable link.
 
-**Pin:** verified against commit `c8e5d6e`. This is enforced, not honor
+**Pin:** verified against commit `98b0970`. This is enforced, not honor
 system: `check:guide-pin` (part of `bun run verify`) fails when any file this
 guide links changes after the pinned commit. To clear it, reread the affected
 sessions, fix any drift, and move the pin to the latest commit — in a
@@ -241,8 +241,10 @@ Now trace why, through five files (read in this order):
    — a fresh non-reconnecting client per check; the API holds no standing
    Redis connection.
 3. [collection-policy.service.ts](../../apps/api/src/modules/hubs/collection-policy.service.ts)
-   — **the heart of the product's security.** Read `resolve()` and the
-   independent grant checks slowly; note `requireRead` throws 404, not 403.
+   — **the heart of the product's security.** Follow `resolve()` and
+   `resolveMany()` into their shared evaluator and read the independent grant
+   checks slowly; note `requireRead` throws 404, not 403. Batched references
+   still check each destination's access and current same-hub ownership.
 4. [collections.service.ts](../../apps/api/src/modules/collections/collections.service.ts)
    — find `readCollectionView` (ID reads authorize here) and
    resource references (each destination is authorized separately).
