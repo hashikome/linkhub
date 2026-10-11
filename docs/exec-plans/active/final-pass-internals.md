@@ -20,8 +20,10 @@ the only blocker is a change to behaviour, business workflow or UX.)
   (2026-10-08: delivered first, as the link-metadata foundation — title,
   description and site name, text only — ahead of bulk import; see
   `PRODUCT.md` §11.)
-- [ ] M2 Fewer queries: batched reference access, batched comment replies,
-  comment writes reuse loaded rows.
+- [x] (2026-10-11) M2 Fewer queries: batched reference access, batched comment
+  replies, comment writes reuse loaded rows. Baseline, regressions, full isolated
+  standard gate and production browser acceptance pass. Review found no
+  actionable regressions; user approved local commits. Push remains pending.
 - [ ] M3 One write-lock opt-out per controller.
 - [ ] M4 Forms route as an action table with one status-to-notice mapping.
 - [ ] M5 Save a link drafts in Redis (cookie holds only the draft id).
@@ -32,7 +34,18 @@ the only blocker is a change to behaviour, business workflow or UX.)
 
 ## Surprises & Discoveries
 
-None yet.
+M2 inspection confirms per-reference target/source/policy queries, two reply
+queries per question, and mutation-response reloads. Availability now includes
+owner suspension and collection holds; batching must preserve both as well as
+same-hub reference scope. Measure actual SQL statements against disposable data.
+
+The baseline SQL event counts for 1/20 references were 14/90 for resource pages,
+10/105 for plain exports, and 10/105 for expanded exports with empty targets.
+For 1/20 questions with an accepted reply each, discussion used 11/49 statements.
+After batching: 13/13, 9/9, 10/10 and 11/11 respectively. Comment create/edit/
+accept/hide used 16/15/17/15 statements before and 10/10/12/10 afterward.
+These are service-call SQL counts including Prisma relation queries, not HTTP
+latency or complete request counts; auth middleware is outside this fixture.
 
 ## Decision Log
 
@@ -43,10 +56,26 @@ None yet.
   if a change is easier that way. No compatibility code.
 - Scope: preserve the implemented `viewer`/`contributor` contracts and labels.
   Paid entitlements follow ADR-0028 and are outside this internals pass.
+- 2026-10-11 M2 scope: batch within each service operation only, with fresh
+  policy reads on subsequent operations; no authorization cache or schema change.
+  Keep 100 readable replies, accepted-first ordering and question-bound cursors.
+  Preserve the running development database. Present the completed diff for user
+  review; do not commit or push until explicitly approved.
 
 ## Outcomes & Retrospective
 
-(To fill at completion.)
+M2 implementation reduces repeated queries without changing wire contracts,
+schema or authorization rules. Seven new real-database regressions pass (98
+assertions); existing focused comment, export, structure and lifecycle suites
+pass. The full isolated standard gate passes, including both app builds and
+typechecks. Full production browser acceptance passes: 98 tests, zero failures,
+one optional performance benchmark skipped, 1,934 assertions (820.71 seconds).
+Review found no actionable regressions; API typechecking and 32 focused runtime
+tests (651 assertions) passed again during review. The user approved local
+commits; pushing is a separate next step. M3–M7 remain separate milestones.
+No schema changes, development data resets or production
+changes were needed. Query counts are acceptance evidence, not a claim about
+deployed page latency.
 
 ## Context And Orientation
 
@@ -80,6 +109,14 @@ answers for the page's questions in one query and the first reply page for all
 questions in one windowed query (`ROW_NUMBER() OVER (PARTITION BY parent_id)`),
 same reply count (100) and ordering. Mutations build their response from the
 rows and access already loaded; `create` reuses the hold check it already did.
+
+The implemented policy also retains a fresh batched availability query for
+holds and owner suspension. Single resolution delegates to the same evaluator.
+`readableReferences` centralizes the same-hub projection for resources and
+exports (the reference-rule helper originally listed in M6 is therefore covered
+here). Export expansion batches item reads at the one permitted extra level.
+No policy data persists across service operations. Existing ADR-0008/0047
+boundaries are preserved; this is a query implementation change, not a new grant.
 
 **M3 — Write lock.** Replace the method list exceptions, the two metadata keys,
 the `ParsedUploadAuthorityInterceptor` subclass and the
@@ -117,6 +154,11 @@ Per milestone: implement, `bun run check`, typecheck both apps, focused unit/e2e
 tests, then the full gates in the isolated checkout. Migrations with
 `bunx prisma migrate dev --create-only` + review; reset and reseed dev.
 
+For M2, do not run migrations/reset/reseed against development. Run
+`TMPDIR="$PWD/test-results/t" bun run verify:isolated`, then the same wrapper
+with `test:browser`. `apps/api/test/query-batching.e2e.spec.ts` is included by
+the standard API gate and measures actual SQL events against its disposable DB.
+
 ## Validation And Acceptance
 
 - Saving a link shows its title as today; the page is fetched once for preview +
@@ -140,6 +182,12 @@ dev database can be reset (`docs/runbooks/local-development.md`) and reseeded.
 
 ## Artifacts And Notes
 
+M2 local logs: `test-results/m2-baseline.log`, `m2-focused.log`,
+`m2-regression.log`, `m2-verify.log`, `m2-browser.log`, and `m2-review.log`. These ignored files
+are disposable; the counts and final acceptance results belong in this plan.
+The walkthrough's policy trace was reviewed for the shared evaluator; its
+guide-only refresh follows the approved implementation commit.
+
 Source review: four parallel review agents (reuse, simplification, efficiency,
 altitude), 2026-10-07; the items they raised are summarized in
 `docs/exec-plans/tech-debt-tracker.md` and resolved here.
@@ -148,6 +196,7 @@ altitude), 2026-10-07; the items they raised are summarized in
 
 - Implemented wire: `Resource.title` is the displayed title; metadata storage
   and refresh rules live in the collections-and-resources design.
-- Planned internals: `@Authority(mode)`, `CollectionPolicyService.resolveMany`,
-  and Redis `capture-draft:<id>` storage.
+- Implemented M2 internals: `CollectionPolicyService.resolveMany` and the shared
+  `readableReferences` projection.
+- Planned internals: `@Authority(mode)` and Redis `capture-draft:<id>` storage.
 - Redis and the worker are already part of the local and production topology.

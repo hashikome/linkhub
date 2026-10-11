@@ -1,11 +1,11 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { AuditAction, CommentAuthor, CommentThreads, CommentView } from "@linkhub/types";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { recordAudit } from "src/common/audit";
 import { appError } from "src/common/errors/app-exception";
 import type { AuthUser } from "src/common/interfaces/auth-user.interface";
 import { decodeCursor, encodeCursor } from "src/common/utils/cursor.util";
 import { PrismaService } from "src/database/prisma.service";
-import type { Collection, CollectionComment, Prisma } from "src/generated/prisma/client";
+import { type Collection, type CollectionComment, Prisma } from "src/generated/prisma/client";
 import { CollectionPolicyService } from "../hubs/collection-policy.service";
 import type { CreateCommentDto, UpdateCommentDto } from "./dto/comment.dto";
 
@@ -36,6 +36,7 @@ export class CommentsService {
     const held = Boolean(await this.policy.holdReason(collection));
     return {
       moderator: access.canWriteContent,
+      held,
       canComment: Boolean(viewer) && collection.commentsEnabled && !held,
     };
   }
@@ -100,21 +101,21 @@ export class CommentsService {
       (query.replyTo && !page.some((row) => row.id === query.replyTo))
     )
       throw appError("invalid_cursor");
-    const replyPages = await Promise.all(
-      page.map((question) =>
-        this.replyPage(
-          collectionId,
-          question.id,
-          moderator,
-          query.replyTo === question.id ? query.replyCursor : undefined,
-        ),
-      ),
+    const replyPages = await this.replyPages(
+      collectionId,
+      page.map((row) => row.id),
+      moderator,
+      query.replyTo,
+      query.replyCursor,
     );
-    const authors = await this.authors(collection, [...page, ...replyPages.flatMap((p) => p.rows)]);
+    const authors = await this.authors(collection, [
+      ...page,
+      ...[...replyPages.values()].flatMap((p) => p.rows),
+    ]);
     const shown = (row: CollectionComment) =>
       row.state === "visible" || (row.state === "hidden" && moderator);
-    const comments = page.flatMap((question, index) => {
-      const replyPage = replyPages[index];
+    const comments = page.flatMap((question) => {
+      const replyPage = replyPages.get(question.id) ?? { rows: [], nextCursor: null };
       const answers = replyPage.rows.map((reply) =>
         this.view(reply, [], authors, viewer, moderator),
       );
@@ -133,58 +134,76 @@ export class CommentsService {
     };
   }
 
-  private async replyPage(
+  private async replyPages(
     collectionId: string,
-    parentId: string,
+    parentIds: string[],
     moderator: boolean,
+    continuedParent?: string,
     encoded?: string,
   ) {
     const cursor = encoded ? decodeCursor<{ p: string; t: string; i: string }>(encoded) : null;
     if (
       encoded &&
       (!cursor ||
-        cursor.p !== parentId ||
+        cursor.p !== continuedParent ||
         typeof cursor.t !== "string" ||
         typeof cursor.i !== "string" ||
         !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(cursor.i) ||
         Number.isNaN(Date.parse(cursor.t)))
     )
       throw appError("invalid_cursor");
-    const where = {
-      collectionId,
-      parentId,
-      state: { in: moderator ? ["visible", "hidden"] : ["visible"] },
-    };
-    // Fetch the readable answer independently so even a late answer is first.
-    const accepted = await this.prisma.collectionComment.findFirst({
-      where: { ...where, accepted: true },
+    const pages = new Map<string, { rows: CollectionComment[]; nextCursor: string | null }>();
+    if (!parentIds.length) return pages;
+    const states = moderator ? ["visible", "hidden"] : ["visible"];
+    const accepted = await this.prisma.collectionComment.findMany({
+      where: { collectionId, parentId: { in: parentIds }, state: { in: states }, accepted: true },
     });
-    const limit = REPLY_LIMIT - (accepted ? 1 : 0);
-    const replies = await this.prisma.collectionComment.findMany({
-      where: {
-        ...where,
-        accepted: false,
-        ...(cursor
-          ? {
-              OR: [
-                { createdAt: { gt: new Date(cursor.t) } },
-                { createdAt: new Date(cursor.t), id: { gt: cursor.i } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      take: limit + 1,
-    });
-    const rows = replies.slice(0, limit),
-      last = rows.at(-1);
-    return {
-      rows: accepted ? [accepted, ...rows] : rows,
-      nextCursor:
-        replies.length > limit && last
-          ? encodeCursor({ p: parentId, t: last.createdAt.toISOString(), i: last.id })
-          : null,
-    };
+    const answers = new Map(accepted.map((row) => [row.parentId, row]));
+    // Rank within each question, after visibility and cursor filtering. Fetch
+    // one extra ordinary reply per thread; the accepted answer reserves a slot.
+    // Explicit aliases keep the raw result identical to Prisma's comment rows.
+    const replies = await this.prisma.$queryRaw<CollectionComment[]>(Prisma.sql`
+      SELECT id, collection_id AS "collectionId", author_user_id AS "authorUserId",
+        parent_id AS "parentId", body, state, accepted, hidden_by_user_id AS "hiddenByUserId",
+        version, edited_at AS "editedAt", created_at AS "createdAt", updated_at AS "updatedAt"
+      FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY parent_id ORDER BY created_at, id) AS rank
+        FROM collection_comments
+        WHERE collection_id = ${collectionId}::uuid
+          AND parent_id IN (${Prisma.join(parentIds.map((id) => Prisma.sql`${id}::uuid`))})
+          AND state IN (${Prisma.join(states)}) AND accepted = false
+          ${
+            cursor
+              ? Prisma.sql`AND (parent_id <> ${continuedParent}::uuid OR
+            created_at > ${new Date(cursor.t)} OR (created_at = ${new Date(cursor.t)} AND id > ${cursor.i}::uuid))`
+              : Prisma.empty
+          }
+      ) AS ranked
+      WHERE rank <= ${REPLY_LIMIT + 1}
+      ORDER BY parent_id, created_at, id
+    `);
+    const grouped = new Map<string, CollectionComment[]>();
+    for (const reply of replies) {
+      if (!reply.parentId) continue;
+      const rows = grouped.get(reply.parentId) ?? [];
+      rows.push(reply);
+      grouped.set(reply.parentId, rows);
+    }
+    for (const parentId of parentIds) {
+      const answer = answers.get(parentId);
+      const limit = REPLY_LIMIT - (answer ? 1 : 0);
+      const all = grouped.get(parentId) ?? [];
+      const rows = all.slice(0, limit),
+        last = rows.at(-1);
+      pages.set(parentId, {
+        rows: answer ? [answer, ...rows] : rows,
+        nextCursor:
+          all.length > limit && last
+            ? encodeCursor({ p: parentId, t: last.createdAt.toISOString(), i: last.id })
+            : null,
+      });
+    }
+    return pages;
   }
 
   private view(
@@ -257,17 +276,13 @@ export class CommentsService {
   }
 
   // The mutated comment as its author/moderator now sees it (without replies).
-  private async single(id: string, viewer: AuthUser) {
-    const row = await this.comment(id);
-    const collection = await this.collection(row.collectionId);
-    const access = await this.policy.resolve(collection, viewer);
-    return this.view(
-      row,
-      [],
-      await this.authors(collection, [row]),
-      viewer,
-      access.canWriteContent,
-    );
+  private async single(
+    row: CollectionComment,
+    collection: Collection,
+    viewer: AuthUser,
+    moderator: boolean,
+  ) {
+    return this.view(row, [], await this.authors(collection, [row]), viewer, moderator);
   }
 
   async create(
@@ -277,9 +292,9 @@ export class CommentsService {
     dto: CreateCommentDto,
   ) {
     const collection = await this.collection(collectionId);
-    await this.viewerAccess(collection, user, token);
+    const { moderator, held } = await this.viewerAccess(collection, user, token);
     if (!collection.commentsEnabled) throw appError("comments_disabled");
-    await this.policy.requireUnrestricted(collection);
+    if (held) throw appError("collection_held");
     const body = dto.body.trim();
     if (!body) throw appError("bad_request");
     if (dto.parentId) {
@@ -302,7 +317,7 @@ export class CommentsService {
         body,
       },
     });
-    return this.single(created.id, user);
+    return this.single(created, collection, user, moderator);
   }
 
   async update(id: string, user: AuthUser, dto: UpdateCommentDto) {
@@ -315,12 +330,12 @@ export class CommentsService {
     if (Number(row.version) !== dto.version) throw appError("version_conflict");
     const body = dto.body.trim();
     if (!body) throw appError("bad_request");
-    const updated = await this.prisma.collectionComment.updateMany({
+    const updated = await this.prisma.collectionComment.updateManyAndReturn({
       where: { id, version: row.version },
       data: { body, editedAt: new Date(), version: { increment: 1 } },
     });
-    if (!updated.count) throw appError("version_conflict");
-    return this.single(id, user);
+    if (!updated.length) throw appError("version_conflict");
+    return this.single(updated[0], collection, user, access.canWriteContent);
   }
 
   // Authors remove their own words. A question with replies keeps a placeholder.
@@ -345,7 +360,7 @@ export class CommentsService {
     const row = await this.comment(id);
     const collection = await this.requireModerator(row, user);
     if (row.state === "deleted") throw appError("conflict");
-    await this.prisma.collectionComment.update({
+    const updated = await this.prisma.collectionComment.update({
       where: { id },
       data: hidden
         ? {
@@ -357,7 +372,7 @@ export class CommentsService {
         : { state: "visible", hiddenByUserId: null, version: { increment: 1 } },
     });
     await this.record(collection, user, hidden ? "comment.hidden" : "comment.shown", row);
-    return this.single(id, user);
+    return this.single(updated, collection, user, true);
   }
 
   // One accepted answer per question; marking another replaces it.
@@ -365,13 +380,13 @@ export class CommentsService {
     const row = await this.comment(id);
     const collection = await this.requireModerator(row, user);
     if (!row.parentId || row.state !== "visible") throw appError("bad_request");
-    await this.prisma.$transaction(async (tx) => {
+    const updated = await this.prisma.$transaction(async (tx) => {
       if (accepted)
         await tx.collectionComment.updateMany({
           where: { parentId: row.parentId, accepted: true, id: { not: id } },
           data: { accepted: false, version: { increment: 1 } },
         });
-      await tx.collectionComment.update({
+      const saved = await tx.collectionComment.update({
         where: { id },
         data: { accepted, version: { increment: 1 } },
       });
@@ -382,8 +397,9 @@ export class CommentsService {
         row,
         tx,
       );
+      return saved;
     });
-    return this.single(id, user);
+    return this.single(updated, collection, user, true);
   }
 
   // Moderation is part of the collection's activity (ADR-0015); the comment's

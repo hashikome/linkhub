@@ -46,12 +46,13 @@ export class ExportsService {
 
     // Authorize everything up front; the whole request fails before any
     // rendering if a single collection is missing or unreadable.
+    const access = await this.policy.resolveMany(collections, user);
     for (const id of ids) {
       const collection = byId.get(id);
       if (!collection) {
         throw new NotFoundException(`Collection not found: ${id}`);
       }
-      await this.policy.requireRead(collection, user);
+      if (!access.get(id)?.canRead) throw new NotFoundException("Collection not found");
     }
 
     const expand = dto.expand ?? false;
@@ -100,11 +101,11 @@ export class ExportsService {
     return new Map(rows.map((row) => [row.url, row.title as string]));
   }
 
-  private async inlineItem(
+  private inlineItem(
     resource: Resource,
-    user: AuthUser,
     titles: Map<string, string>,
-  ): Promise<ExportInline> {
+    references: Map<string, Collection>,
+  ): ExportInline {
     if (resource.kind === ResourceKind.HEADING)
       return {
         kind: "heading",
@@ -112,16 +113,8 @@ export class ExportsService {
         description: resource.sectionDescription ?? undefined,
       };
     if (resource.kind !== ResourceKind.COLLECTION_LINK) return this.toLink(resource, titles);
-    const target = resource.linkedCollectionId
-      ? await this.prisma.collection.findUnique({ where: { id: resource.linkedCollectionId } })
-      : null;
-    const source =
-      target &&
-      (await this.prisma.collection.findFirst({
-        where: { id: resource.collectionId, hubId: target.hubId },
-        select: { id: true },
-      }));
-    if (!target || !source || !(await this.policy.resolve(target, user)).canRead)
+    const target = references.get(resource.id);
+    if (!target)
       return { kind: "notice", title: "Collection unavailable — not included in this export." };
     return { kind: "link", title: target.title, url: this.collectionUrl(target.id) };
   }
@@ -137,41 +130,43 @@ export class ExportsService {
       where: { collectionId: collection.id },
       orderBy: { position: "asc" },
     });
-    const titles = await this.linkTitles(resources);
-    const items: ExportItem[] = [];
-    for (const resource of resources) {
-      if (
-        expand &&
-        resource.kind === ResourceKind.COLLECTION_LINK &&
-        resource.linkedCollectionId &&
-        resource.linkedCollectionId !== collection.id
-      ) {
-        const target = await this.prisma.collection.findUnique({
-          where: { id: resource.linkedCollectionId },
-        });
-        if (
-          target &&
-          target.hubId === collection.hubId &&
-          (await this.policy.resolve(target, user)).canRead
-        ) {
-          const entries = await this.prisma.resource.findMany({
-            where: { collectionId: target.id },
-            orderBy: { position: "asc" },
-          });
-          const entryTitles = await this.linkTitles(entries);
-          items.push({
-            kind: "section",
-            title: target.title,
-            description: target.description ?? undefined,
-            links: await Promise.all(
-              entries.map((entry) => this.inlineItem(entry, user, entryTitles)),
-            ),
-          });
-          continue;
-        }
-      }
-      items.push(await this.inlineItem(resource, user, titles));
+    const references = await this.policy.readableReferences(resources, user);
+    const expandedIds = expand
+      ? [
+          ...new Set(
+            [...references.values()]
+              .filter((target) => target.id !== collection.id)
+              .map((target) => target.id),
+          ),
+        ]
+      : [];
+    const entries = expandedIds.length
+      ? await this.prisma.resource.findMany({
+          where: { collectionId: { in: expandedIds } },
+          orderBy: { position: "asc" },
+        })
+      : [];
+    const entryReferences = await this.policy.readableReferences(entries, user);
+    const titles = await this.linkTitles([...resources, ...entries]);
+    const byCollection = new Map<string, Resource[]>();
+    for (const entry of entries) {
+      const group = byCollection.get(entry.collectionId) ?? [];
+      group.push(entry);
+      byCollection.set(entry.collectionId, group);
     }
+    const items: ExportItem[] = resources.map((resource) => {
+      const target = references.get(resource.id);
+      if (expand && target && target.id !== collection.id)
+        return {
+          kind: "section",
+          title: target.title,
+          description: target.description ?? undefined,
+          links: (byCollection.get(target.id) ?? []).map((entry) =>
+            this.inlineItem(entry, titles, entryReferences),
+          ),
+        };
+      return this.inlineItem(resource, titles, references);
+    });
     return { title: collection.title, description: collection.description ?? undefined, items };
   }
 

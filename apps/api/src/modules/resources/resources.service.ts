@@ -53,7 +53,7 @@ export class ResourcesService {
           dto.position,
         )
       : await this.insertExternal(collection, user, url, dto.tags ?? [], dto.position);
-    return this.resourceView(saved, user, await this.context([saved]));
+    return this.resourceView(saved, await this.context([saved], user));
   }
 
   async collectionAtUrl(url: string) {
@@ -170,7 +170,7 @@ export class ResourcesService {
       dto.tags ?? [],
       dto.position,
     );
-    return this.resourceView(resource, user, await this.context([resource]));
+    return this.resourceView(resource, await this.context([resource], user));
   }
 
   async createHeading(collectionId: string, user: AuthUser, dto: CreateHeadingResourceDto) {
@@ -207,7 +207,7 @@ export class ResourcesService {
       },
     });
     await this.record(collection, user, "item.section_added", heading.id);
-    return this.toPublicResource(heading, await this.context([heading]));
+    return this.toPublicResource(heading, await this.context([heading], user));
   }
 
   async getByCollection(
@@ -255,9 +255,9 @@ export class ResourcesService {
             orderBy: { position: "desc" },
           })
         : null;
-    const context = await this.context(section ? [...items, section] : items);
+    const context = await this.context(section ? [...items, section] : items, viewer);
     return {
-      items: await Promise.all(items.map((item) => this.resourceView(item, viewer, context))),
+      items: items.map((item) => this.resourceView(item, context)),
       meta: {
         limit,
         nextCursor,
@@ -277,7 +277,7 @@ export class ResourcesService {
       where: { id: resourceId, collectionId, collection: { hubId: collection.hubId } },
     });
     if (!resource) throw new NotFoundException("Resource not found");
-    return this.resourceView(resource, viewer, await this.context([resource]));
+    return this.resourceView(resource, await this.context([resource], viewer));
   }
 
   async update(collectionId: string, resourceId: string, user: AuthUser, dto: UpdateResourceDto) {
@@ -319,7 +319,7 @@ export class ResourcesService {
 
     if (position !== resource.position) await this.requireNonemptySections(collectionId);
     await this.record(collection, user, "item.updated", saved.id);
-    return this.resourceView(saved, user, await this.context([saved]));
+    return this.resourceView(saved, await this.context([saved], user));
   }
 
   async remove(collectionId: string, resourceId: string, user: AuthUser) {
@@ -525,8 +525,8 @@ export class ResourcesService {
   }
 
   // Link metadata and the people who added the items, for one page of items.
-  private async context(items: Resource[]): Promise<ItemContext> {
-    const [metadata, people, taggedItems] = await Promise.all([
+  private async context(items: Resource[], viewer: AuthUser | null): Promise<ItemContext> {
+    const [metadata, people, taggedItems, references] = await Promise.all([
       readLinkMetadata(this.prisma, linkUrls(items)),
       personRefs(
         this.prisma,
@@ -539,36 +539,24 @@ export class ResourcesService {
           tags: { orderBy: { position: "asc" }, select: { tag: { select: { name: true } } } },
         },
       }),
+      this.policy.readableReferences(items, viewer),
     ]);
     return {
+      references,
       metadata,
       people,
       tags: new Map(taggedItems.map((item) => [item.id, item.tags.map(({ tag }) => tag.name)])),
     };
   }
 
-  private async resourceView(
-    resource: Resource,
-    viewer: AuthUser | null,
-    context: ItemContext,
-  ): Promise<WireResource> {
+  private resourceView(resource: Resource, context: ItemContext): WireResource {
     const base = this.toPublicResource(resource, context);
     if (resource.kind !== ResourceKind.COLLECTION_LINK) return base;
-    const target = resource.linkedCollectionId
-      ? await this.prisma.collection.findUnique({ where: { id: resource.linkedCollectionId } })
-      : null;
-    const sameOwner =
-      target &&
-      (await this.prisma.collection.findFirst({
-        where: { id: resource.collectionId, hubId: target.hubId },
-        select: { id: true },
-      }));
-    const readable = sameOwner && target && (await this.policy.resolve(target, viewer)).canRead;
+    const target = context.references.get(resource.id);
     // Never forward the containing collection's share token or expose unreadable
     // metadata: an unreadable target's id and any stored title (which may have
     // been copied from it) stay out of the response.
-    if (!readable)
-      return { ...base, linkedCollectionId: null, title: null, linkedCollection: null };
+    if (!target) return { ...base, linkedCollectionId: null, title: null, linkedCollection: null };
     return {
       ...base,
       title: target.title,
@@ -612,6 +600,7 @@ export class ResourcesService {
 }
 
 interface ItemContext {
+  references: Map<string, Collection>;
   tags: Map<string, string[]>;
   metadata: Map<string, LinkMeta>;
   people: Map<string, PersonRef>;

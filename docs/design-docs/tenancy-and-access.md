@@ -48,6 +48,12 @@ not perform resolve to 403.
 - Collection-reference metadata and exports authorize the destination separately.
   A source share token is never forwarded to another collection.
 
+`resolveMany` evaluates a batch using fresh account, availability, hub-owner and
+share reads within that operation. It uses the same policy as single-collection
+resolution, with no cache across operations. Resource pages and exports share
+the policy's batched reference projection: source and target must still belong
+to the same hub, and only independently readable targets enter the projection.
+
 ## Roles and labels
 
 Roles come in two separate scopes ([ADR-0013](../engineering-decisions/0013-permission-roles-and-display-labels.md)):

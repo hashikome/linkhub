@@ -17,6 +17,12 @@ Every destination is individually authorized without propagating source tokens.
 Unreadable or deleted targets produce a generic unavailable notice, not private
 metadata or silent omission. External links remain hyperlinks without fetched content.
 
+Root collection authorization is batched. Within each exported document, target
+resolution and authorization are batched per reference level; expansion loads
+the permitted target items together. The second level is rendered as links only.
+This bounds query counts independently of the number of references while keeping
+the same ownership, visibility, ordering and one-level expansion rules.
+
 All three renderers are programmatic (markdown string-building, `pdfkit`,
 `docx`), so no format uses a job queue, no artifacts are stored server-side, and there is nothing to retain or
 clean up. BullMQ/Redis dispatch email delivery from the PostgreSQL outbox to a

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";
 import { PrismaService } from "src/database/prisma.service";
-import { Collection } from "src/generated/prisma/client";
+import { Collection, Resource } from "src/generated/prisma/client";
 import { appError } from "../../common/errors/app-exception";
 import { availableCollections } from "./availability";
 
@@ -32,79 +32,122 @@ export class CollectionPolicyService {
     viewer: AuthUser | null,
     shareToken?: string,
   ): Promise<CollectionAccess> {
+    return (
+      (await this.resolveBatch([collection], viewer, shareToken)).get(collection.id) ?? NO_ACCESS
+    );
+  }
+
+  // Results live only for this operation. Every call checks current account,
+  // ownership, hold and share state; source tokens never enter batch resolution.
+  async resolveMany(collections: Collection[], viewer: AuthUser | null) {
+    return this.resolveBatch(collections, viewer);
+  }
+
+  private async resolveBatch(
+    collections: Collection[],
+    viewer: AuthUser | null,
+    shareToken?: string,
+  ) {
+    const result = new Map(collections.map((collection) => [collection.id, NO_ACCESS]));
+    if (!collections.length) return result;
     if (
       viewer &&
-      !(await this.prisma.user.findFirst({ where: { id: viewer.userId, accountState: "active" } }))
-    )
-      return NO_ACCESS;
-    if (
-      !(await this.prisma.collection.findFirst({
-        where: {
-          id: collection.id,
-          hubId: collection.hubId,
-          ...availableCollections(viewer?.userId),
-        },
+      !(await this.prisma.user.findFirst({
+        where: { id: viewer.userId, accountState: "active" },
+        select: { id: true },
       }))
     )
-      return NO_ACCESS;
-    // The owner of this collection's hub has full authority.
-    if (viewer) {
-      const hub = await this.prisma.hub.findUnique({
-        where: { id: collection.hubId },
-        select: { ownerUserId: true },
-      });
-      if (hub?.ownerUserId === viewer.userId) {
-        return {
+      return result;
+    const available = await this.prisma.collection.findMany({
+      where: {
+        AND: [
+          { OR: collections.map(({ id, hubId }) => ({ id, hubId })) },
+          availableCollections(viewer?.userId),
+        ],
+      },
+    });
+    if (!available.length) return result;
+    const hubs = viewer
+      ? await this.prisma.hub.findMany({
+          where: { id: { in: [...new Set(available.map((collection) => collection.hubId))] } },
+          select: { id: true, ownerUserId: true },
+        })
+      : [];
+    const owned = new Set(
+      hubs.filter((hub) => hub.ownerUserId === viewer?.userId).map((hub) => hub.id),
+    );
+    const sharedIds = available
+      .filter((collection) => !owned.has(collection.hubId))
+      .map((collection) => collection.id);
+    const shares =
+      viewer && sharedIds.length
+        ? await this.prisma.collectionShare.findMany({
+            where: { collectionId: { in: sharedIds }, userId: viewer.userId },
+            select: { collectionId: true, role: true, source: true },
+          })
+        : [];
+    const byId = new Map(shares.map((share) => [share.collectionId, share]));
+    const hash = shareToken ? createHash("sha256").update(shareToken).digest("hex") : undefined;
+    for (const collection of available) {
+      if (owned.has(collection.hubId)) {
+        result.set(collection.id, {
           canRead: true,
           canWriteContent: true,
           canManage: true,
           viaLinkToken: false,
           isOwner: true,
-        };
+        });
+        continue;
       }
+      const share = byId.get(collection.id);
+      const direct = share?.source === "direct";
+      const remembered = share?.source === "link" && collection.linkSharingEnabled;
+      const viaLinkToken = Boolean(
+        hash && collection.linkSharingEnabled && collection.shareTokenHash === hash,
+      );
+      if (direct || remembered || viaLinkToken || collection.published)
+        result.set(collection.id, {
+          canRead: true,
+          canWriteContent: direct && share.role === "contributor",
+          canManage: false,
+          viaLinkToken,
+          isOwner: false,
+        });
     }
+    return result;
+  }
 
-    let canRead = false;
-    let canWriteContent = false;
-    let viaLinkToken = false;
-
-    if (viewer) {
-      const share = await this.prisma.collectionShare.findUnique({
-        where: { collectionId_userId: { userId: viewer.userId, collectionId: collection.id } },
-        select: { role: true, source: true },
-      });
-      if (share?.source === "direct") {
-        canRead = true;
-        canWriteContent = share.role === "contributor";
-      } else if (share?.source === "link" && collection.linkSharingEnabled) {
-        canRead = true;
-      }
+  // References authorize their own destination and require current same-hub
+  // ownership. Return only readable targets, keyed by the referring resource.
+  async readableReferences(
+    items: Resource[],
+    viewer: AuthUser | null,
+  ): Promise<Map<string, Collection>> {
+    const refs = items.filter((item) => item.kind === "collection_link" && item.linkedCollectionId);
+    if (!refs.length) return new Map();
+    const ids = [
+      ...new Set(refs.flatMap((item) => [item.collectionId, item.linkedCollectionId as string])),
+    ];
+    const collections = await this.prisma.collection.findMany({ where: { id: { in: ids } } });
+    const byId = new Map(collections.map((collection) => [collection.id, collection]));
+    const targets = new Map<string, Collection>();
+    for (const item of refs) {
+      const target = byId.get(item.linkedCollectionId as string);
+      if (target && byId.get(item.collectionId)?.hubId === target.hubId)
+        targets.set(target.id, target);
     }
-
-    if (shareToken) {
-      const hash = createHash("sha256").update(shareToken).digest("hex");
-      const match = collection.linkSharingEnabled && collection.shareTokenHash === hash;
-      if (match) {
-        canRead = true;
-        viaLinkToken = true;
-      }
+    const access = await this.resolveMany([...targets.values()], viewer);
+    const readable = new Map<string, Collection>();
+    for (const item of refs) {
+      const target = targets.get(item.linkedCollectionId as string);
+      if (
+        target &&
+        byId.get(item.collectionId)?.hubId === target.hubId &&
+        access.get(target.id)?.canRead
+      )
+        readable.set(item.id, target);
     }
-
-    if (collection.published) {
-      canRead = true;
-    }
-
-    if (!canRead) {
-      return NO_ACCESS;
-    }
-
-    return {
-      canRead,
-      canWriteContent,
-      canManage: false,
-      viaLinkToken,
-      isOwner: false,
-    };
+    return readable;
   }
 
   async holdReason(collection: Collection): Promise<string | null> {

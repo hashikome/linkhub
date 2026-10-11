@@ -32,3 +32,10 @@ access is rechecked on every read. Each thread returns at most 100 readable
 replies, with its readable accepted answer pinned first; other replies continue
 in creation order. The native reader's More replies link preserves the question
 page and share token, and works without JavaScript.
+
+The API loads accepted answers for the question page together, then ranks
+ordinary readable replies per question in one SQL query. A continuation filters
+only its selected question; every other thread retains its first page. These
+two reply queries do not grow with the number of questions. Mutation responses
+reuse the authorized collection and database-returned comment within the existing
+authority transaction; creating a comment also reuses its hold check.

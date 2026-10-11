@@ -9,6 +9,12 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Batch collection-reference authorization in resource pages and exports, and
+  accepted-answer/reply loading in discussion. Reuse authorized collections,
+  hold checks and returned rows for comment mutation responses. Keep current
+  access, same-owner references, 100-reply pages and accepted-answer ordering;
+  add real-SQL query budgets and mixed-access/pagination regressions.
+
 - Use `/c/<collectionId>` for every collection address. Remove slug storage,
   creation/update fields, pretty routes and transfer collisions; matching titles
   are allowed. Preserve IDs, resources and current authorization through the
