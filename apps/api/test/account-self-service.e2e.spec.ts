@@ -16,14 +16,14 @@ const config = {
   prisma,
   secret,
   suppressionSecret,
-  baseURL: "http://localhost:4000",
+  baseURL: "http://localhost:4004",
   supportUrl: "https://fixture-links.dev/support",
   codeResendSeconds: 0,
 };
 const auth = createDeliveryAuth(config);
 function call(path: string, body: object, token?: string, instance = auth) {
   return instance.handler(
-    new Request(`http://localhost:4000/api/v1/auth${path}`, {
+    new Request(`http://localhost:4004/api/v1/auth${path}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",

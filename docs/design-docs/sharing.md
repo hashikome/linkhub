@@ -129,7 +129,7 @@ Preview returns `ShareDescriptor` directly inside `data`: resource fields plus a
 default `message`, without a tracking ID. Custom message text belongs in POST
 JSON and the response, never URL parameters. Clients render messages as text.
 The API owns configured public origin (`BETTER_AUTH_URL`, fallback
-`http://localhost:3000`), URL construction, visibility, token validation and
+`http://localhost:3004`), URL construction, visibility, token validation and
 capabilities. `access` is public, link (valid explicit private token), or
 restricted (recipients need existing access). Unknown/inaccessible resources
 return 404 without a name. Public URLs never carry private tokens.

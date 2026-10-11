@@ -116,7 +116,7 @@ describe("Export (e2e)", () => {
     expect(content).not.toContain(`## section-${sfx}`);
     expect(content).not.toContain(`https://fixture-links.dev/sec-${sfx}`);
     const webOrigin =
-      process.env.WEB_ORIGIN || process.env.BETTER_AUTH_URL || "http://localhost:3000";
+      process.env.WEB_ORIGIN || process.env.BETTER_AUTH_URL || "http://localhost:3004";
     expect(content).toContain(`[section-${sfx}](<${webOrigin}/c/${section}>)`);
   });
 

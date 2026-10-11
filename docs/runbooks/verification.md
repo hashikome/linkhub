@@ -142,9 +142,9 @@ For a focused retry, pass Bun test options through the same runner, for example
 the production build, canary checks and disposable database lifecycle intact;
 record filtered results separately from the full suite.
 
-Install a browser with `bunx playwright install --with-deps chromium`, or use
-existing `/usr/bin/google-chrome-stable`. `BROWSER_CHROME_PATH` can select another
-local Chromium executable. CI installs Playwright Chromium explicitly. No
+Install the pinned browser with `bunx playwright install --with-deps chromium`.
+For an explicit diagnostic run, `BROWSER_CHROME_PATH=/usr/bin/google-chrome-stable`
+can select a locally installed executable. CI installs Playwright Chromium explicitly. No
 missing-service or missing-browser case becomes a skipped pass.
 
 The journey covers explore and public hubs/continuation (including no JavaScript),
@@ -176,3 +176,95 @@ HTTP client only for source-bound socket fixtures because Bun's client ignores
 public API port and rejects API paths on the web ingress. Runtime public-origin
 configuration allows the same production build to test either topology. The API
 owns callback/session/factor handling; tests assert callback URLs use its origin.
+
+## Browser parity and failure evidence
+
+Install the pinned browser with `bunx playwright install chromium` locally
+(`--with-deps` also installs Linux system libraries where needed). Local and CI
+browser acceptance use that pinned full Chromium in headless mode
+(`channel: "chromium"`) by default. `BROWSER_CHROME_PATH=/absolute/path`
+is an explicit diagnostic override; record it when reporting results.
+
+The pre-push hook runs `verify`; it does **not** run browser acceptance. Web
+milestones require both isolated commands above, sequentially. CI runs both gates
+for every push/PR. This keeps the browser requirement explicit without making
+all local pushes silently run the additional suite.
+
+Failed browser contexts retain sanitized action timing traces (`trace.zip`),
+request timing/status waterfalls (`waterfall.json`) and masked non-authentication
+screenshots. Open traces with `bunx playwright show-trace <path>/trace.zip`.
+Trace arguments, errors, DOM snapshots and network bodies are removed; use the
+waterfall and screenshot alongside the action timeline. Inputs, textareas, code
+and account identity blocks are masked. Authentication/account/security screens
+are excluded. Fixture email, raw server logs and raw traces are never uploaded.
+
+Direct runs write under `test-results/browser/`; isolated runs create a timestamped
+subdirectory there, outside the temporary checkout. `BROWSER_ARTIFACT_DIR` selects
+an explicit output directory. CI uploads `browser-failure-diagnostics` on failure
+for seven days. The test-finished hook retains evidence for Bun runner timeouts
+even if the body later succeeds, and closes outstanding diagnostic contexts.
+Success removes temporary per-context evidence.
+
+## Production measurements
+
+With local infrastructure available and no other verification run active:
+
+```bash
+BROWSER_PERFORMANCE=1 BROWSER_ARTIFACT_DIR=/tmp/browser-production \
+  bun run verify:isolated test:browser -t 'measures production journeys'
+```
+
+The optional measurement journey writes `production-performance.json` after every
+sample. It is excluded from ordinary browser acceptance. Run it independently so
+other browser fixtures do not alter its representative data. It measures opening
+an owned hub, Add a link, a 22-item collection, Settings, following a visible hub
+collection link, and saving a link. Three repetitions use an empty browser HTTP
+cache and then a warm reload, under ordinary conditions and controlled 150ms
+latency, 200,000 bytes/s download, 93,750 bytes/s upload and 4× CPU slowdown.
+Each sample resets request budgets only in its disposable fixture database, and
+rejects failed API reads; this measures individual journeys rather than load-limit
+behavior. Fixture counts are recorded from the database. The server process stays running: “cold” means browser cache, not database or
+server cold start. Save samples add one synthetic resource each.
+
+Results include environment/browser version, document first byte, document/load
+and paint events, shared lifecycle-handler readiness, resource transfer sizes and
+timings, static cache headers, and backend request counts/durations. The shared
+readiness mark does not claim every component is interactive. Reports exclude
+query strings, credentials, headers other than static cache-control, and content.
+This is a loopback fixture with identity encoding and no real metadata/email
+provider; it is a repeatable engineering baseline, not a deployed-user SLO.
+Keep before/after fixtures and conditions identical when assessing an optimization.
+
+## Allocated local host ports
+
+When web 3004 and API 4004 are free, verify the actual defaults and native sign-in
+redirects/code issuance against a disposable database:
+
+```bash
+bun run verify:isolated test:dev --allocated
+bun run verify:isolated test:dev --allocated --built-web
+```
+
+Run sequentially. The second command builds the production web app in the
+isolated checkout, then starts it through the normal local orchestrator. Both
+check exact-origin API CORS, server-rendered links/forms, auth flow cookies and
+owned-process shutdown. They refuse occupied ports. Ordinary `test:dev` retains
+ephemeral ports. For an existing external PostgreSQL volume, pass this host’s
+configured `POSTGRES_VOLUME_NAME` and `POSTGRES_VOLUME_EXTERNAL` to the isolated
+command; do not change mounts or reset data to run acceptance.
+
+If the host mounts `/tmp` with per-user quotas, free space reported by `df` may
+not reflect the available user quota. `EDQUOT` during builds or Chromium resource
+errors can require a different temporary filesystem. Keep owned temporary data
+in an ignored directory on a filesystem with room, without deleting another
+session’s files. Keep the absolute temporary path short (roughly 60 characters
+or fewer) because Chromium creates Unix sockets beneath it:
+
+```bash
+mkdir -p test-results/t
+TMPDIR="$PWD/test-results/t" bun run verify:isolated
+TMPDIR="$PWD/test-results/t" bun run verify:isolated test:browser
+```
+
+The isolated checkout and browser temporary directories respect `TMPDIR`; the
+wrapper cleans its owned checkout when the command finishes.

@@ -1,26 +1,17 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { createServer } from "node:net";
 import { resolve } from "node:path";
-import { resolveApiPort } from "./dev-config";
+import { requireFreePort, resolveApiPort, resolveWebPort } from "./dev-config";
 
 const root = resolve(import.meta.dir, "..");
+const builtWeb = process.argv.includes("--built-web");
 // Pigfarm's pattern: infrastructure first, three host processes, fail together.
 // Refuse occupied ports rather than terminate independently started processes.
-async function requireFree(port: number) {
-  if (!Number.isInteger(port) || port < 1 || port > 65535)
-    throw new Error("Invalid development port");
-  await new Promise<void>((resolve, reject) => {
-    const server = createServer();
-    server.once("error", () =>
-      reject(new Error(`Port ${port} is occupied; stop its server before starting dev.`)),
-    );
-    server.listen(port, "127.0.0.1", () => server.close(() => resolve()));
-  });
-}
-const apiPort = await resolveApiPort(resolve(root, "apps/api"));
-const webPort = Number(process.env.WEB_PORT ?? 3000);
+const [apiPort, webPort] = await Promise.all([
+  resolveApiPort(resolve(root, "apps/api")),
+  resolveWebPort(resolve(root, "apps/web")),
+]);
 if (apiPort === webPort) throw new Error("API and web need different ports");
-await Promise.all([requireFree(apiPort), requireFree(webPort)]);
+await Promise.all([requireFreePort(apiPort), requireFreePort(webPort)]);
 const infra = Bun.spawn(["bun", "run", "infra:up"], {
   cwd: root,
   stdout: "inherit",
@@ -73,12 +64,12 @@ console.log(`Starting API at http://localhost:${apiPort} and web at http://local
 for (const [name, workspace, script] of [
   ["api", "@linkhub/api", "start:dev"],
   ["worker", "@linkhub/api", "email:worker:dev"],
-  ["web", "@linkhub/web", "dev"],
+  ["web", "@linkhub/web", builtWeb ? "start" : "dev"],
 ] as const) {
   console.log(`Starting ${name}: bun run ${script}`);
   const child = spawn("bun", ["run", "--filter", workspace, script], {
     cwd: root,
-    env,
+    env: name === "web" && builtWeb ? { ...env, NODE_ENV: "production" } : env,
     stdio: "inherit",
     detached: true,
   });

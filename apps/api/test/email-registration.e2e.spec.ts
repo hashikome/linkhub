@@ -16,7 +16,7 @@ const config = {
   prisma,
   secret,
   suppressionSecret,
-  baseURL: "http://localhost:4000",
+  baseURL: "http://localhost:4004",
   supportUrl: "https://example.com/support",
 };
 const auth = createDeliveryAuth(config);
@@ -27,10 +27,10 @@ const cookies = (response: Response) =>
     .join("; ");
 function call(path: string, body?: unknown, cookie = "", instance = auth) {
   return instance.handler(
-    new Request(`http://localhost:4000/api/v1/auth${path}`, {
+    new Request(`http://localhost:4004/api/v1/auth${path}`, {
       method: body === undefined ? "GET" : "POST",
       headers: {
-        origin: "http://localhost:4000",
+        origin: "http://localhost:4004",
         "content-type": "application/json",
         ...(cookie ? { cookie } : {}),
       },

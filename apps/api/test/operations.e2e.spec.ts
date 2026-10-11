@@ -19,7 +19,7 @@ describe("service operator authority (HTTP)", () => {
   let app: INestApplication, prisma: PrismaService;
   type Actor = { id: string; cookie: string; token: string; email: string };
   let operator: Actor, owner: Actor, reader: Actor;
-  const origin = process.env.BETTER_AUTH_URL ?? "http://localhost:4000";
+  const origin = process.env.BETTER_AUTH_URL ?? "http://localhost:4004";
   const server = () => app.getHttpServer();
   async function login(name: string): Promise<Actor> {
     const email = `ops-${name}-${randomUUID()}@example.com`;
@@ -590,7 +590,7 @@ describe("service operator authority (HTTP)", () => {
     const c = await create();
     const hub = await prisma.hub.findUniqueOrThrow({ where: { id: c.hubId } });
     for (const link of [
-      `http://localhost:3000/c/${c.id}`,
+      `http://localhost:3004/c/${c.id}`,
       `/c/${c.id}`,
       `https://nslinkhub.dev/@${hub.handle}/${c.slug}`,
     ]) {

@@ -27,10 +27,41 @@ export function TagInput({ id, initial }: { id: string; initial: string }) {
   const [open, setOpen] = useState(() => draft !== "");
   const field = useRef<HTMLInputElement>(null);
   const pressing = useRef(false);
-  useEffect(() => setEnhanced(true), []);
+  const plain = useRef<HTMLInputElement>(null);
+  const disclosure = useRef<HTMLDetailsElement>(null);
+  const preserveDraft = useRef(false);
+  const selection = useRef<{ start: number | null; end: number | null } | null>(null);
   useEffect(() => {
-    if (open) field.current?.focus();
-  }, [open]);
+    const input = plain.current;
+    if (input) {
+      const focused = document.activeElement === input;
+      const parts = split(input.value);
+      preserveDraft.current = focused && input.value.includes(",");
+      // If someone is still typing, keep their literal draft and caret instead
+      // of converting the field underneath them. Blur/Enter can commit it later.
+      setTags(focused ? [] : parts.filter((tag) => tag.length <= maxLength).slice(0, maxTags));
+      setDraft(focused ? input.value : parts.filter((tag) => tag.length > maxLength).join(", "));
+      setOpen(
+        focused ||
+          Boolean(disclosure.current?.open && !input.defaultValue) ||
+          parts.some((tag) => tag.length > maxLength),
+      );
+      if (focused) selection.current = { start: input.selectionStart, end: input.selectionEnd };
+    }
+    setEnhanced(true);
+  }, []);
+  const wasEnhanced = useRef(false);
+  useEffect(() => {
+    if (!enhanced) return;
+    // Preserve focus only when it was in the native editor; mounting another
+    // editor must not steal focus from the URL, destination or Save button.
+    if (open && (wasEnhanced.current || selection.current)) field.current?.focus();
+    if (selection.current) {
+      field.current?.setSelectionRange(selection.current.start, selection.current.end);
+      selection.current = null;
+    }
+    wasEnhanced.current = true;
+  }, [open, enhanced]);
   // Only an open field needs to know whether a pointer press is under way.
   useEffect(() => {
     if (!open) return;
@@ -53,6 +84,7 @@ export function TagInput({ id, initial }: { id: string; initial: string }) {
 
   const tooLong = split(draft).some((tag) => tag.length > maxLength);
   function commit(value: string) {
+    preserveDraft.current = false;
     const parts = split(value);
     const fits = parts.filter(
       (tag) => tag.length <= maxLength && !tags.some((t) => t.toLowerCase() === tag.toLowerCase()),
@@ -63,7 +95,7 @@ export function TagInput({ id, initial }: { id: string; initial: string }) {
 
   if (!enhanced)
     return (
-      <details className="tag-field-plain" open={Boolean(initial)}>
+      <details ref={disclosure} className="tag-field-plain" open={Boolean(initial)}>
         <summary className="text-button tag-add">
           <span aria-hidden="true">+</span> Add tags
         </summary>
@@ -72,6 +104,7 @@ export function TagInput({ id, initial }: { id: string; initial: string }) {
           id={id}
           name="tags"
           maxLength={2430}
+          ref={plain}
           defaultValue={initial}
           placeholder="Separated by commas"
         />
@@ -145,11 +178,13 @@ export function TagInput({ id, initial }: { id: string; initial: string }) {
           value={draft}
           onChange={(event) => {
             const next = event.target.value;
-            if (next.includes(",")) commit(next);
+            // An adopted comma-separated draft stays editable until an explicit
+            // commit; its old commas must not commit the next typed character.
+            if (next.includes(",") && !preserveDraft.current) commit(next);
             else setDraft(next);
           }}
           onKeyDown={(event) => {
-            if (event.key === "Enter") {
+            if (event.key === "Enter" || (event.key === "," && preserveDraft.current)) {
               event.preventDefault();
               commit(draft);
             } else if (event.key === "Escape") {

@@ -133,7 +133,7 @@ from this setting. Keep deployment/local sender configuration consistent.
 
 API and web must share backend `BETTER_AUTH_URL`, browser `WEB_ORIGIN`,
 and the independent `WEB_SOURCE_SECRET`. Local origins use the same hostname
-and scheme with API port 4000 and web port 3000; production ingress serves
+and scheme with API port 4004 and web port 3004; production ingress serves
 both paths on one public origin. Never trust arbitrary forwarding
 headers: configure only actual ingress addresses in the API/web proxy settings.
 The web entry point overwrites read/form attribution; forms verify the browser

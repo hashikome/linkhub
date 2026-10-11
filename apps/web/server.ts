@@ -5,7 +5,9 @@ import { sourceAttribution } from "./server/source";
 
 const config = webServerConfig();
 const dev = process.argv.includes("--dev");
-const port = Number(process.env.WEB_PORT ?? 3000);
+const port = Number(process.env.WEB_PORT ?? 3004);
+if (!Number.isInteger(port) || port < 1 || port > 65535)
+  throw new Error("WEB_PORT must be a TCP port from 1 to 65535");
 const hostname = process.env.WEB_HOST ?? "127.0.0.1";
 const attribute = sourceAttribution(config.sourceSecret, config.trustedProxies);
 const formAttribute = sourceAttribution(config.sourceSecret, config.trustedProxies, "form");
@@ -22,8 +24,14 @@ const server = createServer((request, response) => {
     response.end("Unavailable");
   });
 });
+server.once("error", (error: NodeJS.ErrnoException) => {
+  console.error(
+    `[web] Cannot listen on ${hostname}:${port}: ${error.code ?? "unknown error"}. No alternate port selected.`,
+  );
+  process.exit(1);
+});
 server.listen(port, hostname, () => {
-  if (dev) console.log(`[web] Ready at ${config.publicOrigin} (listening on ${hostname}:${port})`);
+  console.log(`[web] Ready at ${config.publicOrigin} (listening on ${hostname}:${port})`);
 });
 let stopping = false;
 async function stop() {

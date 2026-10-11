@@ -228,21 +228,37 @@ it("preserves validated sharing tasks through sign-in without external returns",
 
 it("separates public backend callbacks from web destinations and private transport", () => {
   const config = webServerConfig({
-    BETTER_AUTH_URL: "http://localhost:4000",
-    WEB_ORIGIN: "http://localhost:3000",
-    API_INTERNAL_ORIGIN: "http://127.0.0.1:4000",
+    BETTER_AUTH_URL: "http://localhost:4004",
+    WEB_ORIGIN: "http://localhost:3004",
+    API_INTERNAL_ORIGIN: "http://127.0.0.1:4004",
     WEB_SOURCE_SECRET: "s".repeat(32),
   });
-  expect(config.authOrigin).toBe("http://localhost:4000");
-  expect(config.publicOrigin).toBe("http://localhost:3000");
-  expect(config.apiOrigin).toBe("http://127.0.0.1:4000");
+  expect(config.authOrigin).toBe("http://localhost:4004");
+  expect(config.publicOrigin).toBe("http://localhost:3004");
+  expect(config.apiOrigin).toBe("http://127.0.0.1:4004");
   for (const web of [
     "http://foreign.test",
-    "https://localhost:3000",
-    "http://localhost:3000/path",
+    "https://localhost:3004",
+    "http://localhost:3004/path",
     "null",
   ])
     expect(() => webServerConfig({ WEB_ORIGIN: web, WEB_SOURCE_SECRET: "s".repeat(32) })).toThrow();
+});
+
+it("defaults local origins to allocated host ports and retains explicit container origins", () => {
+  const local = webServerConfig({ WEB_SOURCE_SECRET: "s".repeat(32) });
+  expect(local.authOrigin).toBe("http://localhost:4004");
+  expect(local.publicOrigin).toBe("http://localhost:3004");
+  expect(local.apiOrigin).toBe("http://127.0.0.1:4004");
+  const production = webServerConfig({
+    NODE_ENV: "production",
+    BETTER_AUTH_URL: "https://app.example.org",
+    API_INTERNAL_ORIGIN: "http://api:4000",
+    WEB_SOURCE_SECRET: "s".repeat(32),
+  });
+  expect(production.authOrigin).toBe("https://app.example.org");
+  expect(production.publicOrigin).toBe("https://app.example.org");
+  expect(production.apiOrigin).toBe("http://api:4000");
 });
 
 it("forwards proof cancellation on failed code issuance without forwarding session cookies", async () => {

@@ -88,6 +88,11 @@ acceptance concerns new requests and stale application/browser state.
 
 ## Runtime and HTTP boundary
 
+Hashed build assets under `/_next/static/` use immutable browser caching. Documents,
+forms and private reads remain no-store. Layout, capture and Settings share the
+profile result only within the current server request, preserving 401/error
+behavior and rechecking authorization on the next request.
+
 Browser requests use one typed adapter under `/api/v1`, addressed directly to
 the validated public backend origin rendered at runtime. Credentialed requests
 use exact-origin CORS locally. No bearer storage or client imports from the API.
@@ -133,7 +138,7 @@ without an Origin requirement; the auth guard still validates the bearer.
 Auth routes retain better-auth's origin checks, including login-CSRF coverage.
 Test all of these cases before shipping browser writes. Keep the raw
 better-auth handler ahead of body parsing. `BETTER_AUTH_URL` uses backend port
-4000 locally; `WEB_ORIGIN` uses web port 3000 for allowed browser requests,
+4004 locally; `WEB_ORIGIN` uses web port 3004 for allowed browser requests,
 redirects and passkeys. Exact-origin credentialed CORS is explicit (ADR-0036).
 Production uses path routing on one HTTPS origin.
 
@@ -469,6 +474,15 @@ announcements, and show static questions with reduced motion or without
 JavaScript. No animation library is needed.
 
 ## Capture and collection lists
+
+
+Capture URL and tag fields accept native input from the first rendered document.
+When JavaScript becomes ready, previews adopt the live URL and the tag editor
+retains early tags, active draft, focus and selection. Native Save remains usable
+throughout; JavaScript-only add/remove actions are disabled until their handlers
+are ready. Deliberately held-script browser coverage protects this transition.
+See [ADR-0054](../engineering-decisions/0054-progressive-input-and-browser-evidence.md).
+
 
 Desktop discovery uses the remaining main-region height to show only complete
 collection rows, with Previous/Next controls. Capacity is recalculated on resize

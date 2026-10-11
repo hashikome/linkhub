@@ -13,8 +13,8 @@ const prisma = new PrismaClient({
 });
 const secret = "security-test-only-secret-independent-32";
 const suppressionSecret = "security-test-only-suppression-independent";
-const baseURL = "http://localhost:4000";
-const webOrigin = "http://localhost:3000";
+const baseURL = "http://localhost:4004";
+const webOrigin = "http://localhost:3004";
 const config = {
   prisma,
   secret,

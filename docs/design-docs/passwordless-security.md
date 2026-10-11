@@ -162,7 +162,7 @@ console setup and real authenticator hardware still require environment acceptan
 BETTER_AUTH_URL addresses the backend. Google returns directly to
 `/api/v1/auth/callback/google` there. WEB_ORIGIN addresses `/sign-in/complete`,
 `/sign-in/factor`, settings and errors, and supplies WebAuthn's origin/RP ID.
-Local development uses backend port 4000 and web port 3000 with exact-origin
+Local development uses backend port 4004 and web port 3004 with exact-origin
 credentialed CORS. Production ingress routes API paths directly to Nest.
 The web never performs Google's token exchange. See ADR-0036 and the local
 runbook for configuration and Google console registration.

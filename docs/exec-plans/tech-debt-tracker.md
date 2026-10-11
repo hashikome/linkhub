@@ -7,6 +7,7 @@ Items below are outstanding work, not claims of completed behavior.
 
 | Area | Debt | Impact | Revisit When |
 | --- | --- | --- | --- |
+| Cold web loading | After immutable asset caching, cold browser loads still transfer roughly 0.5MB of JS plus CSS/font in the identity-encoded fixture; production compression and deployment latency remain unmeasured | Controlled slow cold readiness remains roughly 3.7–4.0s; repeat loads improve substantially | Before release, measure the actual compressed ingress and inspect largest shared chunks/CSS; evaluate selective navigation only with ADR-0048 authorization/history coverage |
 | Local migration history | The applied `people_and_hubs` checksum differs from the committed migration; the username column is restored to varchar(20) | `migrate dev` requests a reset even though new additive migrations deploy and fresh database verification passes | Before the next local schema generation: reconcile history with evidence or use a disposable database; never reset retained data implicitly |
 | Export typography | PDF/Word renderers use library-default styling (Helvetica, default docx heading styles); no user-visible styling options | Exports are readable but plain; no branding or theme choices | Users ask for styled exports |
 | Audit retention review | Verified self-service/admin deletion and 14-day cleanup are implemented; content audit and capture receipts have no scheduled expiry, while auth/service audit retain 90/365 days and delivery metadata 30 days | Retained identifiers outlive account/content deletion | Review retained evidence and receipt retry windows before public exposure; document any purge policy before implementing it |
@@ -74,12 +75,14 @@ existing contributor display and authorship remain unchanged until settled.
 
 ## Page performance investigation
 
-The user reported slow page navigation during development. Measure cold and warm
-production navigation and API timings before attributing it to development
-compilation or sequential server reads. Record query counts and bottlenecks in
-the [internals plan](active/final-pass-internals.md); its query-batching work
-must preserve authorization and visible behavior. No production baseline has
-been established yet.
+The [production baseline](completed/preserve-early-input-and-measure-production.md)
+now records matched cold/warm browser journeys, API counts and resource timings.
+Immutable static-asset caching removes repeated downloads; request-scoped profile
+reuse removes duplicate capture/Settings reads. Cold-load work remains in the
+row above. The [internals plan](active/final-pass-internals.md) may extend query
+batching with fresh evidence while preserving authorization and visible behavior.
+No production-versus-development timing comparison or deployed-user baseline has
+been established.
 
 ## Deferred audit redesign investigation
 

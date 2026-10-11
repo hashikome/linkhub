@@ -18,7 +18,7 @@ describe("canonical sharing descriptors (HTTP)", () => {
   const api = () => request(app.getHttpServer());
   const endpoint = (kind: string, id?: string) =>
     `/api/v1/share/resolve?${new URLSearchParams({ kind, ...(id ? { id } : {}) })}`;
-  const origin = () => new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000").origin;
+  const origin = () => new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3004").origin;
   async function account() {
     const email = `share-${randomUUID()}@example.com`;
     const signed = await signInWithCode(app.getHttpServer(), { email, name: "A sharer" });
@@ -225,7 +225,7 @@ describe("canonical sharing descriptors (HTTP)", () => {
     await api()
       .post("/api/v1/share")
       .set("Cookie", owner.cookie)
-      .set("Origin", new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:4000").origin)
+      .set("Origin", new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:4004").origin)
       .send(body)
       .expect(201);
     for (const query of [

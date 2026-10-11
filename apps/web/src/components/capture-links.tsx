@@ -58,6 +58,8 @@ export function CaptureLinks({
   children?: React.ReactNode;
 }) {
   const next = useRef(initial.length || 1);
+  const fields = useRef(new Map<number, HTMLInputElement>());
+  const [enhanced, setEnhanced] = useState(false);
   const [rows, setRows] = useState<Row[]>(() =>
     (initial.length ? initial : [{ url: "" }]).map((link, key) => ({
       key,
@@ -68,6 +70,17 @@ export function CaptureLinks({
       left: Boolean(link.url),
     })),
   );
+  useEffect(() => {
+    // HTML inputs work before React loads. Adopt their live values rather than
+    // restoring the server props; defaultValue also protects edits during mount.
+    setRows((current) =>
+      current.map((row) => ({
+        ...row,
+        url: fields.current.get(row.key)?.value ?? row.url,
+      })),
+    );
+    setEnhanced(true);
+  }, []);
   const [looking, setLooking] = useState<Set<number>>(new Set());
   const requested = useRef(new Map<number, string>());
   const focusKey = useRef<number | null>(null);
@@ -208,7 +221,11 @@ export function CaptureLinks({
                   type="url"
                   required={index === 0}
                   maxLength={2048}
-                  value={row.url}
+                  ref={(input) => {
+                    if (input) fields.current.set(row.key, input);
+                    else fields.current.delete(row.key);
+                  }}
+                  defaultValue={row.url}
                   onChange={(event) => update(row.key, { url: event.target.value })}
                   onBlur={() => update(row.key, { left: true })}
                   placeholder="https://example.com"
@@ -223,6 +240,7 @@ export function CaptureLinks({
                   <button
                     type="button"
                     className="capture-remove"
+                    disabled={!enhanced}
                     aria-label={`Remove link ${index + 1}`}
                     title="Remove this link"
                     onClick={() => {
@@ -259,9 +277,9 @@ export function CaptureLinks({
       </p>
       {/* Two links keep saving to a couple of copy-and-paste trips; more is
           what bulk import is for, so it takes the place of "Add another link".
-          Rendered from the first paint; hidden only when JavaScript is off. */}
+          Disabled until handlers are ready; hidden when JavaScript is off. */}
       {rows.length < maxCaptureLinks ? (
-        <button type="button" className="button capture-add" onClick={add}>
+        <button type="button" className="button capture-add" disabled={!enhanced} onClick={add}>
           <span aria-hidden="true">+</span> Add another link
         </button>
       ) : (

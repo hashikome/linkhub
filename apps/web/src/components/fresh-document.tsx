@@ -93,6 +93,7 @@ export function FreshDocument() {
     };
     window.addEventListener("keydown", cancelled);
     document.addEventListener("visibilitychange", visibility);
+    performance.mark("app:document-ready");
     return () => {
       clearTimeout(pending);
       window.removeEventListener("keydown", cancelled);

@@ -20,7 +20,7 @@ async function main() {
         method: "POST",
         headers: {
           "content-type": "application/json",
-          origin: "http://localhost:4000",
+          origin: "http://localhost:4004",
           "x-forwarded-for": forwarded,
         },
         body: JSON.stringify(body),

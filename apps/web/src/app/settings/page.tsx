@@ -1,8 +1,8 @@
-import type { Profile } from "@linkhub/types";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { ProfileEditor } from "../../components/profile-editor";
 import { queryValue } from "../../lib/http";
-import { operatorRead } from "../../lib/operator-read";
+import { readOwnProfileResult } from "../../lib/session";
 export const metadata: Metadata = { title: "Settings" };
 export const dynamic = "force-dynamic";
 export default async function Page({
@@ -11,7 +11,8 @@ export default async function Page({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const query = await searchParams;
-  const result = await operatorRead<Profile>("/api/v1/profile", "/settings");
+  const result = await readOwnProfileResult();
+  if (!result.ok && result.status === 401) redirect("/sign-in?returnTo=%2Fsettings");
   return (
     <section className="reader settings-page">
       <div className="page-heading">

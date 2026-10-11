@@ -124,3 +124,7 @@ Current implementation guidance lives in the linked design documents.
 - [0052-mandatory-visitor-attribution.md](0052-mandatory-visitor-attribution.md) — Mandatory source attribution in one server transport, enforced by the web boundary gate.
 
 - [0053-id-only-collection-addresses.md](0053-id-only-collection-addresses.md) — Accepted next milestone: all collection URLs use `/c/<id>`; handles resolve hubs only; remove collection slugs.
+
+- [0054-progressive-input-and-browser-evidence.md](0054-progressive-input-and-browser-evidence.md) — Preserve early native input; pinned browser, sanitized failure artifacts and measured production readiness.
+
+- [0055-allocated-local-host-ports.md](0055-allocated-local-host-ports.md) — Consistent +4 local web/API allocation, env precedence and occupied-port refusal.

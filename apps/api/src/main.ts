@@ -27,10 +27,10 @@ export async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup("/api/docs", app, document);
 
-  // 4000 by default: 3000 belongs to the web app (Next.js dev default). The
+  // 4004 by default: 3004 belongs to the web app (local +4 allocation). The
   // browser calls the API directly in dev; production ingress path-routes /api/*.
   // Local services stay on loopback; containers need a reachable interface.
   const host = process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1";
-  await app.listen(process.env.PORT ?? 4000, host);
+  await app.listen(process.env.PORT ?? 4004, host);
   return app;
 }

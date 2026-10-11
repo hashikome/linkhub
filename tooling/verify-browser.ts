@@ -49,7 +49,13 @@ await withTestDatabase(
     Object.assign(env, { DATABASE_URL: url });
     await run(["bunx", "prisma", "migrate", "deploy"], resolve(root, "apps/api"));
     await run(
-      ["bun", "test", "./test/browser/reading.browser.ts", ...process.argv.slice(2)],
+      [
+        "bun",
+        "test",
+        "./test/browser/reading.browser.ts",
+        "./test/browser/browser-diagnostics.browser.ts",
+        ...process.argv.slice(2),
+      ],
       resolve(root, "apps/api"),
     );
   },

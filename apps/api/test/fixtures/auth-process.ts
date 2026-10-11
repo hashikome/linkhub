@@ -11,13 +11,13 @@ async function main() {
     prisma,
     secret: input.secret,
     suppressionSecret: input.suppressionSecret,
-    baseURL: "http://localhost:4000",
+    baseURL: "http://localhost:4004",
     supportUrl: "https://fixture-links.dev/support",
   });
   const response = await auth.handler(
-    new Request("http://localhost:4000/api/v1/auth/code/verify", {
+    new Request("http://localhost:4004/api/v1/auth/code/verify", {
       method: "POST",
-      headers: { origin: "http://localhost:4000", "content-type": "application/json" },
+      headers: { origin: "http://localhost:4004", "content-type": "application/json" },
       body: JSON.stringify({ email: input.email, code: input.code }),
     }),
   );

@@ -17,7 +17,7 @@ describe("email-entry service invitations (HTTP)", () => {
   let app: INestApplication, p: PrismaService;
   type Actor = { id: string; email: string; cookie: string; token: string };
   let admin: Actor, operator: Actor;
-  const origin = process.env.BETTER_AUTH_URL ?? "http://localhost:4000";
+  const origin = process.env.BETTER_AUTH_URL ?? "http://localhost:4004";
   const email = () => `inv-${randomUUID()}@example.com`;
   const as = (method: "get" | "post", path: string, actor?: Actor) => {
     const r = request(app.getHttpServer())[method](path).set("Origin", origin);

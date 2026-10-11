@@ -34,14 +34,14 @@ Redis on 127.0.0.1:6383, dev better-auth secret). Set `BETTER_AUTH_SECRET` to
 a real value for anything beyond local development.
 
 The workstation registry at `/home/ns/Person/stack/docs/local-port-registry.md`
-assigns this project offset +4: PostgreSQL uses 5436 and Redis uses 6383.
-It explicitly exempts API port 4000 and web port 3000 from the offset. Local
-services bind to `127.0.0.1`; the production API binds to `0.0.0.0` for container
-networking. Pigfarm also defaults to web port 3000, so use an explicit
-`WEB_PORT` when running both projects. `bun run dev` aligns WEB_ORIGIN
-with that port. The Google callback follows the API PORT, independently. Ports are
-never selected automatically. Update the workstation registry if these
-published defaults change.
+assigns this project offset +4: web uses 3004, API uses 4004, PostgreSQL uses
+5436 and Redis uses 6383. Local services bind to `127.0.0.1`; the production API
+binds to `0.0.0.0` for container networking and its image explicitly sets internal
+port 4000. Host defaults do not change container routing. Pigfarm's coordinated
+target is web 3001/API 4001; verify its owning repository before assuming it moved.
+`bun run dev` aligns WEB_ORIGIN with WEB_PORT and BETTER_AUTH_URL/internal API
+transport with PORT. Occupied ports fail with an error; there is no automatic
+fallback and independently started processes are never terminated.
 
 ## Everyday Commands
 
@@ -52,14 +52,16 @@ It delegates to each workspace's script: API
 `start:dev`, worker `email:worker:dev` and web `dev`. It prints the starting
 services and URLs; the custom web server prints `[web] Ready at ...` once it
 has bound its socket. A child failure names the process that stopped the stack.
-Open the printed web URL (normally `http://localhost:3000`); the API's structured
+Open the printed web URL (normally `http://localhost:3004`); the API's structured
 startup logs are separate from web readiness. The first page request compiles
 that route in development.
 It refuses occupied API/web ports and shuts down its owned process groups
 together; independently started apps are never killed. Before checking ports it
-resolves `PORT` in the API's working directory with Bun's `.env`,
-`.env.development`, `.env.local` and inherited environment precedence. It pins
-that effective port for the API child and web API origin. Shell values win.
+resolves `PORT` in the API working directory and `WEB_PORT` in the web working
+directory with Bun’s `.env`, `.env.development`, `.env.local` and inherited
+environment precedence. It pins those effective ports for the children and
+derived origins. Shell values win. Existing runners retain their pinned ports;
+restart them deliberately to adopt changed defaults.
 
 ```bash
 bun run dev              # daily: infra + API/worker + Next.js
@@ -74,11 +76,12 @@ bun run api:test         # API unit + e2e (e2e requires the infra services)
 bun run email:test       # email template tests
 bun run web:dev           # Next.js only (+ infra); start API separately
 bun run web:build         # compile Next.js, no Docker image
+bun run dev --built-web   # API/worker watchers + prebuilt production web on 3004
 bun run test:browser      # isolated real-API production browser journey
 bun run verify           # source checks + unit/e2e tests + API/web builds
 ```
 
-Swagger UI: `http://localhost:4000/api/docs`.
+Swagger UI: `http://localhost:4004/api/docs`.
 
 ## Resetting Local Data
 
@@ -146,14 +149,14 @@ are in [auth delivery](../design-docs/auth-delivery-integration.md).
 
 ## Web development
 
-Open `http://localhost:3000` after `bun run dev` for the landing page. `/discover`
+Open `http://localhost:3004` after `bun run dev` for the landing page. `/discover`
 and `/c/<id>` are available alongside public hubs, profile/settings,
 notifications, passwordless sign-in, capture, collection editing, sections and
 reordering, contextual sharing, discussion, History and `/manage`. Reviewed
 imports are available at `/manage/import-export`; preview cards and notes remain planned. The
-root orchestrator sets `BETTER_AUTH_URL=http://localhost:4000` (or `PORT`),
-`WEB_ORIGIN=http://localhost:3000` (or `WEB_PORT`)
-and the trusted `API_INTERNAL_ORIGIN=http://127.0.0.1:4000` (or `PORT`). Use
+root orchestrator sets `BETTER_AUTH_URL=http://localhost:4004` (or `PORT`),
+`WEB_ORIGIN=http://localhost:3004` (or `WEB_PORT`)
+and the trusted `API_INTERNAL_ORIGIN=http://127.0.0.1:4004` (or `PORT`). Use
 `localhost` for the web entry so browser origin checks match. If starting
 processes separately, give both API and web those same two explicit origin settings,
 and set the same random `WEB_SOURCE_SECRET` (at least 32 characters) for API and
@@ -222,18 +225,19 @@ tracked files, test fixtures or container images. Verification masks both values
 and file overrides.
 
 Register the exact public callback in the Google OAuth web client's authorized
-redirect URIs: `http://localhost:4000/api/v1/auth/callback/google` for the default
+redirect URIs: `http://localhost:4004/api/v1/auth/callback/google` for the default
 local setup; use BETTER_AUTH_URL for other API ports/environments. Google returns
 to the backend, which exchanges the code and redirects to WEB_ORIGIN. Restart
 `bun run dev` after this origin configuration changes.
-Authorized JavaScript origin, if configured, is `http://localhost:3000`. Reusing a
+Authorized JavaScript origin, if configured, is `http://localhost:3004`. Reusing a
 client from another product does not automatically register this callback; check
 consent-screen test-user restrictions too. Google never creates an account on its
 own. Missing accounts explicitly confirm creation from their verified Google identity;
 existing accounts may need first-time email or passkey proof. Google email must
 always match the product account email; mismatches return to email sign-in.
-No Settings step is required. See ADR-0039; existing callback/client credentials
-remain valid.
+No Settings step is required. See ADR-0039. Client credentials need not change,
+but the provider must allow the selected callback and JavaScript origin above.
+Updating repository defaults does not update Google’s console.
 
 Use `localhost`, not a numeric loopback address, for browser passkeys. The RP ID
 is the public hostname. Production needs HTTPS; a credential registered for

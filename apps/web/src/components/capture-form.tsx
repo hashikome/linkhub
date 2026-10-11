@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { webServerConfig } from "@linkhub/config/web-server";
-import type { Collection, Profile } from "@linkhub/types";
+import type { Collection } from "@linkhub/types";
 import type { CaptureDraft } from "../lib/capture-draft";
 import { queryValue, withCursor } from "../lib/http";
 import { serverRead } from "../lib/server-api";
+import { readOwnProfileResult } from "../lib/session";
 import { relativeTime } from "../lib/time";
 import { isUuid } from "../lib/validation";
 import { CaptureLinks } from "./capture-links";
@@ -32,7 +33,7 @@ export async function CaptureForm({
   draft?: CaptureDraft;
   query: Record<string, string | string[] | undefined>;
 }) {
-  const profile = await serverRead<Profile>("/api/v1/profile");
+  const profile = await readOwnProfileResult();
   if (!profile.ok && profile.status !== 401)
     return <Feedback error={profile} resetPath="/capture" />;
   const choices =

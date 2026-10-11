@@ -17,18 +17,18 @@ const config = {
   prisma,
   secret,
   suppressionSecret,
-  baseURL: "http://localhost:4000",
+  baseURL: "http://localhost:4004",
   supportUrl: "https://fixture-links.dev/support",
 };
 const auth = createDeliveryAuth(config);
 const address = () => `delivery-${randomUUID()}@example.com`;
 function call(path: string, body: unknown = {}, token?: string, instance = auth) {
   return instance.handler(
-    new Request(`http://localhost:4000/api/v1/auth${path}`, {
+    new Request(`http://localhost:4004/api/v1/auth${path}`, {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        origin: "http://localhost:4000",
+        origin: "http://localhost:4004",
         ...(token ? { authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify(body),
@@ -158,7 +158,7 @@ describe("transactional codes-only auth", () => {
         DATABASE_URL_FILE: "",
         BETTER_AUTH_SECRET: "production-budget-test-secret-only-32-characters",
         BETTER_AUTH_SECRET_FILE: "",
-        BETTER_AUTH_URL: "http://localhost:4000",
+        BETTER_AUTH_URL: "http://localhost:4004",
         EMAIL_PROVIDER: "capture",
         EMAIL_SUPPRESSION_SECRET: suppressionSecret,
         EMAIL_SUPPRESSION_SECRET_FILE: "",
@@ -338,14 +338,14 @@ describe("transactional codes-only auth", () => {
     expect(
       (
         await auth.handler(
-          new Request("http://localhost:4000/api/v1/auth/code/verify?code=12345678"),
+          new Request("http://localhost:4004/api/v1/auth/code/verify?code=12345678"),
         )
       ).status,
     ).toBe(404);
     expect(
       (
         await auth.handler(
-          new Request("http://localhost:4000/api/v1/auth/code/send", {
+          new Request("http://localhost:4004/api/v1/auth/code/send", {
             method: "POST",
             headers: { origin: "https://evil.example", "content-type": "application/json" },
             body: JSON.stringify({ email: address() }),

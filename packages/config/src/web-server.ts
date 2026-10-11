@@ -10,7 +10,7 @@ export function webServerConfig(env: Record<string, string | undefined> = proces
     throw new Error("API_INTERNAL_ORIGIN is required in production");
   let url: URL;
   try {
-    url = new URL(value || "http://127.0.0.1:4000");
+    url = new URL(value || "http://127.0.0.1:4004");
   } catch {
     throw new Error("Invalid API_INTERNAL_ORIGIN");
   }

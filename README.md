@@ -46,10 +46,10 @@ bun run dev
 hook. `bun run dev` starts PostgreSQL/Redis, the API and background worker,
 and the web app. It does not seed synthetic content into development data.
 
-- Web: `http://localhost:3000`
-- API documentation: `http://localhost:4000/api/docs`
-- Liveness: `http://localhost:4000/api/v1/health`
-- Dependency readiness: `http://localhost:4000/api/v1/status`
+- Web: `http://localhost:3004`
+- API documentation: `http://localhost:4004/api/docs`
+- Liveness: `http://localhost:4004/api/v1/health`
+- Dependency readiness: `http://localhost:4004/api/v1/status`
 
 Local database and Redis configuration is built in; no `.env` is needed for
 the basic stack. Defaults are PostgreSQL on `127.0.0.1:5436` (database

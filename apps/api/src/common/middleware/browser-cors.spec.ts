@@ -5,7 +5,7 @@ import { browserBoundary } from "./browser-boundary";
 import { browserCors } from "./browser-cors";
 
 it("allows only the configured credentialed browser and keeps cookie CSRF checks", async () => {
-  const webOrigin = "http://localhost:3000";
+  const webOrigin = "http://localhost:3004";
   const app = express();
   let calls = 0;
   app.use(browserCors(webOrigin), browserBoundary(webOrigin));
@@ -25,7 +25,7 @@ it("allows only the configured credentialed browser and keeps cookie CSRF checks
   for (const origin of [
     "null",
     "https://evil.test",
-    "http://localhost:4000",
+    "http://localhost:4004",
     "http://localhost:30001",
   ]) {
     const denied = await preflight().set("Origin", origin).expect(403);

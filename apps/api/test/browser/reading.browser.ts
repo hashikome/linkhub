@@ -1,5 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync } from "node:fs";
+import { afterAll, beforeAll, beforeEach, describe, expect, it as test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -18,6 +17,30 @@ import { importJobService } from "../../src/modules/imports/import-jobs";
 import { itemTags } from "../../src/modules/resources/item-tags";
 import { expectSignIns } from "../fixtures/authentication-audit";
 import { signInHubOwner, signInWithCode } from "../fixtures/sign-in";
+import { diagnosticContext, withBrowserDiagnostics } from "./browser-diagnostic-test";
+import { type ApiTiming, measureProduction, routeShape } from "./production-performance";
+
+const apiTimings: ApiTiming[] = [];
+let recordApiTimings = false;
+const it = Object.assign(
+  (name: string, run: () => Promise<void>, timeout?: number) =>
+    test(
+      name,
+      () =>
+        withBrowserDiagnostics({
+          name,
+          output: process.env.BROWSER_ARTIFACT_DIR ?? join(root, "test-results/browser"),
+          metadata: () => ({
+            browser: browser?.version(),
+            webExitCode: web?.exitCode,
+            topology: process.env.TEST_DIRECT_API === "1" ? "direct-api" : "ingress",
+          }),
+          run,
+        }),
+      timeout,
+    ),
+  { skip: test.skip },
+);
 
 const root = resolve(__dirname, "../../../..");
 // Synthetic API responses must preserve the same CORS contract as real responses.
@@ -80,10 +103,11 @@ async function change(id: string, action: string) {
 }
 async function freshPage(js = true, timezoneId?: string) {
   const context = await browser.newContext({ javaScriptEnabled: js, timezoneId });
+  const close = await diagnosticContext(context);
   const page = await context.newPage();
   page.setDefaultTimeout(5000);
   page.setDefaultNavigationTimeout(10000);
-  return { page, close: () => context.close() };
+  return { page, close };
 }
 async function sidebarAlignment(page: Page) {
   return page.locator(".reader-side").evaluate((el) => {
@@ -216,14 +240,27 @@ beforeAll(async () => {
   app = module.createNestApplication({ bodyParser: false, logger: false });
   app.use(
     (
-      req: { url: string; headers: Record<string, string | undefined> },
+      req: { method: string; url: string; headers: Record<string, string | undefined> },
       res: {
         status: (code: number) => { json: (body: unknown) => void };
         setHeader: (name: string, value: string) => void;
         destroy: () => void;
+        statusCode: number;
+        once: (event: string, callback: () => void) => void;
       },
       next: () => void,
     ) => {
+      if (recordApiTimings || process.env.BROWSER_PERFORMANCE === "1") {
+        const start = performance.now();
+        res.once("finish", () =>
+          apiTimings.push({
+            path: routeShape(req.url),
+            method: req.method,
+            ms: performance.now() - start,
+            status: res.statusCode,
+          }),
+        );
+      }
       if (req.url === "/api/v1/capture" && failCapture) {
         res.status(503).json({ error: { code: "service_unavailable" } });
         return;
@@ -384,11 +421,8 @@ beforeAll(async () => {
     await Bun.sleep(100);
   }
   browser = await chromium.launch({
-    executablePath:
-      process.env.BROWSER_CHROME_PATH ??
-      (!process.env.CI && existsSync("/usr/bin/google-chrome-stable")
-        ? "/usr/bin/google-chrome-stable"
-        : undefined),
+    executablePath: process.env.BROWSER_CHROME_PATH,
+    channel: "chromium",
     args: ["--no-sandbox"],
     ignoreDefaultArgs: ["--disable-back-forward-cache"],
   });
@@ -3052,6 +3086,7 @@ describe("account shell and appearance", () => {
           timezoneId: "America/Los_Angeles",
           locale: "en-GB",
         });
+        const closeContext = await diagnosticContext(context);
         try {
           await context.addCookies([savedCookie]);
           const page = await context.newPage();
@@ -3088,13 +3123,14 @@ describe("account shell and appearance", () => {
             javaScriptEnabled: false,
             timezoneId: "Asia/Tokyo",
           });
+          const closeSecond = await diagnosticContext(second);
           try {
             await second.addCookies([savedCookie]);
             const other = await second.newPage();
             await ready(other, "/");
             await browserExpect(other.locator(demoTime).first()).toHaveText("8 Oct 2026, 13:00");
           } finally {
-            await second.close();
+            await closeSecond();
           }
           await ready(page, "/settings");
           await browserExpect(page.getByLabel("Timezone", { exact: true })).toHaveValue(
@@ -3126,7 +3162,7 @@ describe("account shell and appearance", () => {
           if (js)
             await browserExpect(page.locator(demoTime).first()).toHaveText("8 Oct 2026, 03:00");
         } finally {
-          await context.close();
+          await closeContext();
         }
       }
     } finally {
@@ -4960,13 +4996,17 @@ it("shows recorded audit effects, honest legacy gaps, international dates and op
         "unpublished published succeeded",
       );
       await page.getByRole("searchbox", { name: "Search", exact: true }).fill("");
-      await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+      await Promise.all([
+        page.waitForURL((url) => !url.searchParams.get("q"), { waitUntil: "load" }),
+        page.getByRole("button", { name: "Apply filters", exact: true }).click(),
+      ]);
+      await page.evaluate(() => document.fonts.ready);
 
       for (const width of [320, 390, 768, 1280]) {
         await page.setViewportSize({ width, height: 900 });
-        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-          true,
-        );
+        await browserExpect
+          .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
+          .toBe(true);
       }
       await page.screenshot({ path: `/tmp/audit-effects-hub-${js}.png`, fullPage: true });
       await page.emulateMedia({ colorScheme: "dark" });
@@ -6656,10 +6696,15 @@ it("shows handle cooldown and retirement rules and recovers accounts through nat
           await page.setViewportSize({ width, height: 900 });
           await page.screenshot({ path: `/tmp/account-deactivate-${width}.png`, fullPage: true });
         }
+      // Sign-in and account confirmation share the issuance gap. Advance only
+      // this synthetic account, preserving the real application limiter.
+      await prisma.$executeRaw`UPDATE request_budgets SET expires_at = clock_timestamp() WHERE key = ${emailKey(emailConfig().secret, "issue-gap", email)}`;
       await page.getByRole("button", { name: "Send confirmation code" }).click();
+      await browserExpect(page.getByLabel("Verification code")).toBeVisible();
+      expect(new URL(page.url()).searchParams.get("notice")).not.toBe("limited");
       await page.getByLabel("Verification code").fill("00000000");
       await page.getByRole("button", { name: "Confirm: deactivate account" }).click();
-      await browserExpect(page.getByRole("alert")).toContainText("incorrect");
+      await browserExpect(page.locator("main").getByRole("alert")).toContainText("incorrect");
       await page.getByLabel("Verification code").fill(await capturedCode(email));
       await page.getByRole("button", { name: "Confirm: deactivate account" }).click();
       await browserExpect(page.getByRole("status")).toContainText("deactivated");
@@ -6704,7 +6749,7 @@ it("rejects an account confirmation replaced by another tab", async () => {
     // Even a valid code from the newest email must not change the older form's action.
     await page.getByLabel("Verification code").fill(await capturedCode(email));
     await page.getByRole("button", { name: "Confirm: deactivate account" }).click();
-    await browserExpect(page.getByRole("alert")).toContainText("expired");
+    await browserExpect(page.locator("main").getByRole("alert")).toContainText("expired");
     const account = await prisma.user.findUniqueOrThrow({ where: { email } });
     expect(account.accountState).toBe("active");
     expect(account.deletionScheduledFor).toBeNull();
@@ -8559,3 +8604,185 @@ it("keeps transfer slug conflicts out of impact refreshes before and after sign-
     }
   }
 }, 60000);
+
+it("preserves capture input typed before hydration through preview and native save", async () => {
+  const actor = await signInHubOwner(app.getHttpServer(), {
+    email: `early-input-${crypto.randomUUID()}@example.com`,
+    name: "Early input reader",
+  });
+  const hub = await prisma.hub.findUniqueOrThrow({ where: { ownerUserId: actor.body.user.id } });
+  const destination = await prisma.collection.create({
+    data: { hubId: hub.id, title: "Early reference", slug: crypto.randomUUID() },
+  });
+  const session =
+    (actor.headers["set-cookie"] as unknown as string[])
+      .map((raw) => raw.split(";")[0])
+      .find((raw) => raw.startsWith("better-auth.session_token=")) ?? "";
+  for (const hydrate of [true, false]) {
+    const collection = await prisma.collection.create({
+      data: { hubId: hub.id, title: `Early input ${hydrate}`, slug: crypto.randomUUID() },
+    });
+    const collectionId = collection.id;
+    const { page, close } = await freshPage();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let blocked = 0;
+    await page.context().addCookies([
+      {
+        name: "better-auth.session_token",
+        value: session.split("=").slice(1).join("="),
+        url: origin,
+      },
+    ]);
+    await page.route("**/_next/**/*.js*", async (route) => {
+      blocked++;
+      await held;
+      await route.continue();
+    });
+    try {
+      await page.goto(`${origin}/capture?collection=${collectionId}`, { waitUntil: "commit" });
+      const url = `${origin}/c/${destination.id}`;
+      const field = page.getByLabel("Link URL", { exact: true });
+      await field.fill(url);
+      await page.locator(".tag-field-plain summary").click();
+      await page
+        .getByLabel("Tags", { exact: true })
+        .fill(hydrate ? "first, par" : "early, preserved");
+      await browserExpect(page.getByRole("button", { name: "Add another link" })).toBeDisabled();
+      await page
+        .getByLabel("Tags", { exact: true })
+        .evaluate((el) => (el as HTMLInputElement).setSelectionRange(2, 5));
+      expect(blocked).toBeGreaterThan(0);
+      // Held scripts prove these are native fields, before any React handlers.
+      expect(
+        await field.evaluate((el) => Object.keys(el).some((key) => key.startsWith("__reactProps"))),
+      ).toBe(false);
+      if (hydrate) {
+        release();
+        await browserExpect(page.locator(".capture-title")).toHaveText("Collection");
+        await browserExpect(field).toHaveValue(url);
+        await browserExpect(page.getByRole("button", { name: "Add another link" })).toBeEnabled();
+        const tags = page.getByLabel("Tags", { exact: true });
+        await browserExpect(tags).toBeFocused();
+        expect(
+          await tags.evaluate((el) => [
+            (el as HTMLInputElement).selectionStart,
+            (el as HTMLInputElement).selectionEnd,
+          ]),
+        ).toEqual([2, 5]);
+        await tags.press("End");
+        await tags.pressSequentially("tial");
+        await browserExpect(tags).toHaveValue("first, partial");
+        await browserExpect(page.locator('input[type="hidden"][name="tags"]')).toHaveValue(
+          "first, partial",
+        );
+        await tags.press(",");
+        await browserExpect(tags).toHaveValue("");
+        await browserExpect(
+          page.getByRole("button", { name: "Remove tag partial", exact: true }),
+        ).toBeVisible();
+        await tags.pressSequentially("third,");
+        await browserExpect(tags).toHaveValue("");
+        for (const width of [390, 768, 1280, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.screenshot({ path: `/tmp/capture-early-${width}.png`, fullPage: true });
+        }
+      }
+      await page
+        .getByRole("button", { name: "Save link", exact: true })
+        .click({ noWaitAfter: true });
+      await page.waitForURL(new RegExp(`/c/${collectionId}`), { waitUntil: "commit" });
+      const resources = await prisma.resource.findMany({
+        where: { collectionId },
+        include: { tags: { include: { tag: true } } },
+      });
+      expect(resources).toHaveLength(1);
+      expect(resources[0].linkedCollectionId).toBe(destination.id);
+      expect(resources[0].tags.map((entry) => entry.tag.name).sort()).toEqual(
+        hydrate ? ["first", "partial", "third"] : ["early", "preserved"],
+      );
+    } finally {
+      release();
+      await close();
+    }
+  }
+}, 60000);
+
+(process.env.BROWSER_PERFORMANCE === "1" ? it : it.skip)(
+  "measures production journeys",
+  async () => {
+    await measureProduction({
+      browser,
+      origin,
+      cookie,
+      hubId,
+      sourceId,
+      apiTimings,
+      output: process.env.BROWSER_ARTIFACT_DIR ?? directory,
+      resetBudget: () => prisma.requestBudget.deleteMany(),
+      fixture: {
+        collections: await prisma.collection.count({ where: { hubId } }),
+        resources: await prisma.resource.count({ where: { collectionId: sourceId } }),
+      },
+    });
+  },
+  600000,
+);
+
+it("caches only immutable build assets and keeps profile reads request-scoped", async () => {
+  recordApiTimings = true;
+  const { page, close } = await freshPage();
+  try {
+    const assets = new Map<string, string>();
+    page.on("response", (response) => {
+      const path = new URL(response.url()).pathname;
+      if (path.startsWith("/_next/static/"))
+        assets.set(path, response.headers()["cache-control"] ?? "");
+    });
+    for (const index of [0, 1]) {
+      const email = `profile-cache-${index}-${crypto.randomUUID()}@example.com`;
+      const actor = await signInWithCode(app.getHttpServer(), {
+        email,
+        name: `Cache reader ${index}`,
+      });
+      const session =
+        (actor.headers["set-cookie"] as unknown as string[])
+          .map((raw) => raw.split(";")[0])
+          .find((raw) => raw.startsWith("better-auth.session_token=")) ?? "";
+      await page.context().clearCookies();
+      await page.context().addCookies([
+        {
+          name: "better-auth.session_token",
+          value: session.split("=").slice(1).join("="),
+          url: origin,
+        },
+      ]);
+      for (const path of ["/settings", "/capture"]) {
+        apiTimings.length = 0;
+        await ready(page, path);
+        await page.waitForLoadState("load");
+        expect(apiTimings.filter((entry) => entry.path === "/api/v1/profile")).toHaveLength(1);
+        if (path === "/settings") await browserExpect(page.locator("main")).toContainText(email);
+      }
+    }
+    expect([...assets.keys()].some((path) => path.endsWith(".js"))).toBe(true);
+    expect([...assets.keys()].some((path) => path.endsWith(".css"))).toBe(true);
+    for (const value of assets.values()) {
+      expect(value).toContain("immutable");
+      expect(value).not.toContain("no-store");
+    }
+    await page.context().clearCookies();
+    await ready(page, "/settings");
+    expect(new URL(page.url()).pathname).toBe("/sign-in");
+    await page
+      .context()
+      .addCookies([{ name: "better-auth.session_token", value: "invalid-session", url: origin }]);
+    await ready(page, "/settings");
+    expect(new URL(page.url()).pathname).toBe("/sign-in");
+  } finally {
+    recordApiTimings = false;
+    await close();
+  }
+}, 30000);

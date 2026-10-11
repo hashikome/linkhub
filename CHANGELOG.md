@@ -9,6 +9,29 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Allocate local web/API defaults to 3004/4004, align auth and transport origins,
+  and resolve both apps’ local env files before startup. Refuse occupied ports
+  without affecting existing listeners. Keep PostgreSQL 5436, Redis 6383 and
+  container-internal ports unchanged; add local prebuilt-web acceptance (ADR-0055).
+
+- Preserve capture URLs and tags typed before JavaScript attaches, including the
+  active tag draft/caret and native submission before hydration. Enable add/remove
+  controls when their handlers are ready; cover deliberately held scripts and
+  continued typing in an adopted comma-separated draft.
+- Restore immutable caching for hashed web assets while keeping documents/forms
+  private and no-store. Share profile results within each server request on
+  capture and Settings. Matched production measurements retain 120 samples;
+  controlled slow warm capture readiness improved from 3.71s to 0.44s and Settings
+  from 3.95s to 0.60s in the local fixture. Cold-load limitations remain recorded
+  in the performance ExecPlan; these are not deployed-user latency guarantees.
+- Repair account-confirmation cooldown and audit-layout browser races, use pinned
+  Playwright Chromium locally and in CI, and retain sanitized failed-context
+  traces, waterfalls and masked screenshots as CI artifacts, including runner-level
+  timeouts whose async bodies later succeed. Document the separate
+  browser acceptance gate, keep its Chromium diagnostics out of API-test discovery,
+  and provide a repeatable optional production measurement command
+  (ADR-0054).
+
 - Make the discussion recovery browser fixture wait for the configured resend
   window before requesting a fresh code; application rate limits are unchanged.
   Refresh the text-import browser fixture to follow collection drafts and row
