@@ -12,7 +12,7 @@ answer in your own words before continuing. Reading the whole file in one go
 is the failure mode this structure exists to prevent. Every file is a
 clickable link.
 
-**Pin:** verified against commit `0421872`. This is enforced, not honor
+**Pin:** verified against commit `c8e5d6e`. This is enforced, not honor
 system: `check:guide-pin` (part of `bun run verify`) fails when any file this
 guide links changes after the pinned commit. To clear it, reread the affected
 sessions, fix any drift, and move the pin to the latest commit — in a
@@ -107,15 +107,13 @@ Read, in this order:
 3. [tenancy-and-access.md](../design-docs/tenancy-and-access.md) — the access
    model (owner → direct share → active link → published, independently per
    collection) — and [identity-and-handles.md](../design-docs/identity-and-handles.md)
-   for handles and the Web URL scheme (`/c/<id>` permalink vs
-   `/@handle/<slug>` pretty URL). ID-only collection addresses are accepted next
-   work under ADR-0053; slug removal is not implemented yet.
+   for handles and the Web URL scheme: `/c/<id>` is the only collection address;
+   `/@handle` resolves hubs (ADR-0053).
 4. [AGENTS.md](../../AGENTS.md) § Non-Negotiable Invariants — all of them.
 
 **Checkpoint 2** — answer in your own words:
 
-- [ ] Why does `/c/<id>` survive a slug rename and a transfer while
-      `/@handle/<slug>` may not?
+- [ ] Why does `/c/<id>` survive title/handle renames and ownership transfer?
 - [ ] Why does adding a collection reference never grant destination access?
 - [ ] Why does a route never carry `hubId` on writes?
 - [ ] What are the four access sources, and why do references not propagate them?
@@ -148,10 +146,10 @@ curl -s localhost:4004/api/v1/profile -H "Authorization: Bearer $T" | jq
 # Create two explicitly private collections (the default is published), then add a reference
 curl -s localhost:4004/api/v1/collections -H "Authorization: Bearer $T" \
   -H 'content-type: application/json' \
-  -d '{"slug":"se-guide","title":"Software Engineering","published":false}' | jq .data.id
+  -d '{"title":"Software Engineering","published":false}' | jq .data.id
 curl -s localhost:4004/api/v1/collections -H "Authorization: Bearer $T" \
   -H 'content-type: application/json' \
-  -d '{"slug":"essentials","title":"Essentials","published":false}' | jq .data.id
+  -d '{"title":"Essentials","published":false}' | jq .data.id
 export GUIDE="<id1>" TARGET="<id2>"
 curl -s localhost:4004/api/v1/collections/$TARGET/resources/external \
   -H "Authorization: Bearer $T" -H 'content-type: application/json' \
@@ -164,11 +162,11 @@ curl -s localhost:4004/api/v1/collections/$GUIDE/resources/collection \
 # Publish → discovery → the URL-scheme reads
 curl -s -X POST localhost:4004/api/v1/collections/$GUIDE/publish \
   -H "Authorization: Bearer $T" > /dev/null
-curl -s localhost:4004/api/v1/discover | jq '.data[].slug'
+curl -s localhost:4004/api/v1/discover | jq '.data[].id'
 # Read your actual hub handle from /profile; do not assume it matches your name.
 HANDLE=$(curl -s localhost:4004/api/v1/profile -H "Authorization: Bearer $T" | jq -r .data.handle)
 curl -s "localhost:4004/api/v1/hubs/by-handle/$HANDLE" | jq .data.hub
-curl -s localhost:4004/api/v1/collections/$GUIDE | jq .data.slug     # permalink
+curl -s localhost:4004/api/v1/collections/$GUIDE | jq .data.id     # permalink
 curl -s localhost:4004/api/v1/collections/$TARGET | jq .error.code # not_found: target is still private
 
 # Link sharing: enable, note the ONE-TIME token, read anonymously with ?s=
@@ -246,7 +244,7 @@ Now trace why, through five files (read in this order):
    — **the heart of the product's security.** Read `resolve()` and the
    independent grant checks slowly; note `requireRead` throws 404, not 403.
 4. [collections.service.ts](../../apps/api/src/modules/collections/collections.service.ts)
-   — find `readCollectionView` (permalink + slug reads share it) and
+   — find `readCollectionView` (ID reads authorize here) and
    resource references (each destination is authorized separately).
 5. [SECURITY.md](../SECURITY.md) — all of it, especially § Origins, CORS,
    and CSRF (exact-origin credentialed CORS and independent mutation checks).
