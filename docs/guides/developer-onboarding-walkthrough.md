@@ -12,13 +12,15 @@ answer in your own words before continuing. Reading the whole file in one go
 is the failure mode this structure exists to prevent. Every file is a
 clickable link.
 
-**Pin:** verified against commit `6da33eb`. This is enforced, not honor
+**Pin:** verified against commit `48f61e3`. This is enforced, not honor
 system: `check:guide-pin` (part of `bun run verify`) fails when any file this
 guide links changes after the pinned commit. To clear it, reread the affected
 sessions, fix any drift, and move the pin to the latest commit — in a
 guide-only commit, which never re-triggers the check. `docs/exec-plans/` and
 `CHANGELOG.md` are exempt by design: this guide points at them rather than
-restating them.
+restating them. The pre-push hook runs this check; it never edits the guide or
+advances the pin automatically. Review and commit source changes first, then
+review this guide against that commit and record the pin before pushing.
 
 ---
 
@@ -42,6 +44,10 @@ default), so overriding a port is one `.env` line.
 ```bash
 bun run verify           # the canonical gate — must be green
 ```
+
+If this checkout already has a development server running, use
+`bun run verify:isolated` instead: it runs the same gate in a temporary checkout
+without writing into the active server's build directory.
 
 While it runs, skim what it does in
 [verification.md](../runbooks/verification.md) (boundaries, local documentation links,
@@ -86,22 +92,24 @@ happened, in order.
 Read, in this order:
 
 1. [PRODUCT.md](../../PRODUCT.md) — end to end. Hold: at most one hub per user
-   (Drive-style sharing); collections are independent; references grant no
-   access to their destinations; a resource's kind is
-   set by *how it was added*, never URL inspection; tags use normalized relations (API names remain arrays);
+   (Drive-style sharing); collections are independent; references stay within the same owner's hub and grant no
+   access to their destinations; Add a link recognizes readable same-hub collection addresses as references;
+   other collection URLs remain ordinary links. Tags use normalized relations
+   (API names remain arrays);
    sharing = link / direct / publish; export reads like a Google Doc;
    sign-in is passwordless: email codes and explicitly confirmed Google identity
    can create accounts; registered passkeys also sign in. Enrolled protection applies to
    email/Google fallback. Hubs have one owner and never transfer, while
-   collections can. People have usernames and optional hubs; the first successful ownership
-   operation creates a hub.
+   collections can. People have usernames and optional hubs; signup can explicitly
+   create a named hub, or the first successful ownership operation creates one.
 2. [ARCHITECTURE.md](../../ARCHITECTURE.md) — the domain model, codemap,
    runtime and architectural invariants.
 3. [tenancy-and-access.md](../design-docs/tenancy-and-access.md) — the access
    model (owner → direct share → active link → published, independently per
    collection) — and [identity-and-handles.md](../design-docs/identity-and-handles.md)
    for handles and the Web URL scheme (`/c/<id>` permalink vs
-   `/@handle/<slug>` pretty URL).
+   `/@handle/<slug>` pretty URL). ID-only collection addresses are accepted next
+   work under ADR-0053; slug removal is not implemented yet.
 4. [AGENTS.md](../../AGENTS.md) § Non-Negotiable Invariants — all of them.
 
 **Checkpoint 2** — answer in your own words:
@@ -137,13 +145,13 @@ export T="<token>"
 # Profile is the client entry point: username, displayName, optional handle and hubId
 curl -s localhost:4000/api/v1/profile -H "Authorization: Bearer $T" | jq
 
-# Create two independent collections, then add a reference
+# Create two explicitly private collections (the default is published), then add a reference
 curl -s localhost:4000/api/v1/collections -H "Authorization: Bearer $T" \
   -H 'content-type: application/json' \
-  -d '{"slug":"se-guide","title":"Software Engineering"}' | jq .data.id
+  -d '{"slug":"se-guide","title":"Software Engineering","published":false}' | jq .data.id
 curl -s localhost:4000/api/v1/collections -H "Authorization: Bearer $T" \
   -H 'content-type: application/json' \
-  -d '{"slug":"essentials","title":"Essentials"}' | jq .data.id
+  -d '{"slug":"essentials","title":"Essentials","published":false}' | jq .data.id
 export GUIDE="<id1>" TARGET="<id2>"
 curl -s localhost:4000/api/v1/collections/$TARGET/resources/external \
   -H "Authorization: Bearer $T" -H 'content-type: application/json' \
@@ -157,7 +165,9 @@ curl -s localhost:4000/api/v1/collections/$GUIDE/resources/collection \
 curl -s -X POST localhost:4000/api/v1/collections/$GUIDE/publish \
   -H "Authorization: Bearer $T" > /dev/null
 curl -s localhost:4000/api/v1/discover | jq '.data[].slug'
-curl -s localhost:4000/api/v1/hubs/by-handle/paul | jq .data.hub
+# Read your actual hub handle from /profile; do not assume it matches your name.
+HANDLE=$(curl -s localhost:4000/api/v1/profile -H "Authorization: Bearer $T" | jq -r .data.handle)
+curl -s "localhost:4000/api/v1/hubs/by-handle/$HANDLE" | jq .data.hub
 curl -s localhost:4000/api/v1/collections/$GUIDE | jq .data.slug     # permalink
 curl -s localhost:4000/api/v1/collections/$TARGET | jq .error.code # not_found: target is still private
 
@@ -181,12 +191,20 @@ DRAFT=$(curl -s localhost:4000/api/v1/imports -H "Authorization: Bearer $T" \
   -F sourceKind=csv -F file=@/tmp/links.csv | jq -r .data.id)
 curl -s localhost:4000/api/v1/imports/$DRAFT -H "Authorization: Bearer $T" | jq .data
 curl -s localhost:4000/api/v1/imports/$DRAFT/rows -H "Authorization: Bearer $T" | jq .data
-# Let the worker resolve metadata; review destinations and visibility in
-# /manage/import-export/$DRAFT. Then commit ready rows at the latest revision.
+# Let the worker resolve metadata; inspect collections and their ready counts.
+# DRAFT_COLLECTION is a draft collection ID, not a saved collection ID.
+DRAFT_COLLECTION=$(curl -s localhost:4000/api/v1/imports/$DRAFT -H "Authorization: Bearer $T" | jq -r '.data.collections[] | select(.title == "Reading") | .id')
+# Review at /manage/import-export/$DRAFT?collection=$DRAFT_COLLECTION.
+# Once a row is ready, queue this collection at the latest draft revision.
 VERSION=$(curl -s localhost:4000/api/v1/imports/$DRAFT -H "Authorization: Bearer $T" | jq .data.version)
-curl -s localhost:4000/api/v1/imports/$DRAFT/commit -H "Authorization: Bearer $T" \
-  -H 'content-type: application/json' -d "{\"version\":$VERSION}" | jq
-# The bad address stays in the draft. No content is written until commit.
+curl -s localhost:4000/api/v1/imports/$DRAFT/collections/$DRAFT_COLLECTION/commit \
+  -H "Authorization: Bearer $T" -H 'content-type: application/json' \
+  -d "{\"version\":$VERSION,\"published\":false}" | jq .data
+# The worker imports ready rows in batches. Read the collection again for jobState.
+curl -s localhost:4000/api/v1/imports/$DRAFT/collections/$DRAFT_COLLECTION \
+  -H "Authorization: Bearer $T" | jq .data.collections
+# The bad address stays for repair. A later job reuses the saved collection.
+# Drafts stay private until import; this example explicitly keeps the result private.
 
 ```
 
@@ -205,10 +223,10 @@ Goal: see the failure modes, then read the code that decides access.
 
 ```bash
 # Drill 1: degrade the queue Redis — the product keeps working
-docker stop nslinkhub-redis
+docker stop linkhub-redis
 curl -s localhost:4000/api/v1/status | jq        # "degraded"; redisQueue "unavailable"
 curl -s localhost:4000/api/v1/discover | jq '.data | length'   # still serves
-docker start nslinkhub-redis
+docker start linkhub-redis
 curl -s localhost:4000/api/v1/status | jq        # "ready" again
 
 # Drill 2: existence-hiding — unpublish, then read anonymously
@@ -269,10 +287,11 @@ E2E creates, migrates and drops a disposable database per run. Run
 connectivity rather than resetting development data. Read
 [verification.md](../runbooks/verification.md) for test-specific configuration
 and [release.md](../runbooks/release.md) for the separate image rehearsal.
-Migrations start from a single squashed `0_init` (pre-deployment). If your
-development DB predates it, reset it and load the curated demo content
-([local-development.md](../runbooks/local-development.md) § Resetting Local Data,
-then `bun run db:seed`).
+Apply committed migrations with `prisma migrate deploy` from `apps/api`.
+Do not reset or seed an existing development database to complete verification.
+Use the [migration runbook](../runbooks/migrations.md) for schema changes and
+[local development](../runbooks/local-development.md) for intentional data setup.
+With a development server running, use `bun run verify:isolated`.
 
 **Checkpoint 5**:
 
@@ -328,8 +347,8 @@ browser fixtures use their own database and capture email.
 - [ ] Which checks does your next complete journey need?
 
 Apply Impeccable for interface work under the repository design documents.
-Run `bun run verify` before presenting a completed milestone; use
-`bun run test:browser` for browser changes and `bun run test:dev` for launcher
+Run `bun run verify:isolated` before presenting a completed milestone when dev is running; use
+`bun run verify:isolated test:browser` for browser changes and `bun run test:dev` for launcher
 or web-entry changes. Keep builds separate from an active dev server's `.next`
 directory. Current work lives in [active plans](../exec-plans/active/); completed
 plans and the changelog retain evidence rather than instructions to rebuild
@@ -344,7 +363,7 @@ already delivered features.
 - Idempotency, concurrency, jobs, data rules →
   [RELIABILITY.md](../RELIABILITY.md)
 - Engineering principles → [CORE_BELIEFS.md](../CORE_BELIEFS.md)
-- ns-series single sign-on (nsauth, a centralized IAM) →
+- Shared Hashikome sign-on direction (not implemented) →
   [identity-sso.md](../design-docs/identity-sso.md)
 - Observability direction (LogTape/Sentry + shared Alloy) →
   [observability.md](../design-docs/observability.md)
@@ -367,6 +386,7 @@ orchestrator (see `package.json` for the full set):
 | `bun run api:dev` / `api:test` | single-service loop / API tests |
 | `bun run email:test` | email template tests |
 | `bun run verify` | API/web builds, types, boundaries and source/integration tests |
+| `bun run verify:isolated` | The same gate in a temporary checkout, preserving active dev output |
 | `bun run test:browser` | production browser journey with isolated API/data fixtures |
 
 Cleanup after the walkthrough:
