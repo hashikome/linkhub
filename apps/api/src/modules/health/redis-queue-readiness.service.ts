@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { RedisClient } from "bun";
 import { readSecret } from "src/config/secret";
 
-// 6383 = redis default +4, nslinkhub's stack-wide local port offset.
+// 6383 = redis default +4, linkhub's stack-wide local port offset.
 const DEFAULT_REDIS_URL = "redis://127.0.0.1:6383";
 const READINESS_TIMEOUT_MS = 1_500;
 

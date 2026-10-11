@@ -1,196 +1,144 @@
-# NSLinkHub
+# LinkHub
 
-NSLinkHub organizes and shares curated link collections. The NestJS API owns
-the product rules; the Next.js web app reads through its HTTP contracts.
+Save, organize, and share web resources in curated collections. LinkHub is a
+[Hashikome](https://github.com/hashikome) product, developed in this repository:
+[hashikome/linkhub](https://github.com/hashikome/linkhub).
 
-## Working In This Repository
+The application is in development and is not deployed yet. The NestJS API owns
+the product rules; the Next.js web app uses its HTTP contracts.
 
-- **New here?** Walk `docs/guides/developer-onboarding-walkthrough.md` — six
-  hands-on sessions from zero to ready-to-build (commit-pinned; freshness is
-  enforced by `bun run verify`).
-- Then `AGENTS.md` — the contributor/agent map: reading order, toolchain
-  rules, non-negotiable invariants, and documentation conventions (ExecPlans
-  in `docs/exec-plans/`, disposable context in git-ignored `ref/`, completed
-  work in `CHANGELOG.md`).
+## What works today
 
-## Current Documentation
+- Save links into ordered collections with tags, sections, and references to
+  other collections in the same owner's hub. Each person may own one hub.
+- Publish collections, share them directly with viewers or contributors, or
+  enable link sharing. New collections default to published; callers can
+  explicitly choose private. References never grant access to their targets.
+- Review bookmarks HTML, CSV, and plain-text imports before saving them.
+  Each collection draft has its own publication choice and background import
+  job; failed rows remain available for repair. Drafts stay private until import.
+- Export collections as Markdown, PDF, or Word documents, zipped when several
+  collections are selected. Exports are synchronous downloads.
+- Sign in with email codes, configured Google sign-in, or registered passkeys.
+  Account creation requires explicit consent. Account settings include optional
+  TOTP protection, sessions, profile details, and hub identity.
+- Browse Discover, public hubs and profiles; read and discuss collections;
+  manage sharing, imports, notifications, and collection history.
 
-- Product definition: `PRODUCT.md`
-- System architecture (Drive individual model): `ARCHITECTURE.md`
-- Visual design system: `DESIGN.md`
-- Documentation map: `docs/README.md`
-- Onboarding walkthrough: `docs/guides/developer-onboarding-walkthrough.md`
-- ns-series identity direction: `docs/design-docs/identity-sso.md`
-- ns-series deployment direction: `docs/design-docs/infra-deployment.md`
+The [product definition](PRODUCT.md#11-delivery) distinguishes implemented
+features from planned work. Billing, shared company IAM, and the browser
+extension are not implemented. Shared company infrastructure remains planned.
 
-## Implemented So Far
+## Start locally
 
-- **Collection backend:**
-  at most one hub per person, independent collections with references and headings,
-  external resources with canonical URLs + tags, collection-level sharing
-  (link/direct/publish per collection), collection ownership
-  transfer, saves, explore, id permalinks + handle resolution
-- Auth via self-hosted [better-auth](https://better-auth.com) (email codes, DB-backed sessions, bearer tokens for API clients); signup creates a person with a username; first collection ownership creates their optional hub
-- Synchronous export (Markdown/PDF/Word; multi-collection, zipped) and
-  reviewed imports (bookmarks HTML, CSV and TXT, folder mapping and partial commits)
-- `@nslinkhub/types` (wire contracts) and `@nslinkhub/email` (code-email
-  templates); liveness + per-dependency readiness endpoints; `_FILE`
-  deployment-secret contract with zero-config dev
-- Web journeys include Discover, collection reading and discussion, link capture,
-  profiles, settings, notifications and service operations, with native form
-  fallbacks. See `PRODUCT.md` §11 for delivery status and the remaining slices.
-  Swagger stays at `/api/docs`.
-
-## Generated avatars
-
-Generated profile avatars are served by `GET /api/v1/avatars/:seed.svg?size=64`
-(size 16–512) with immutable caching and conditional ETags. Account clients use
-the immutable user UUID as the seed, never email or name.
-`GET /api/v1/users/:id/avatar` redirects a UUID to its generated image without
-looking up an account. The generator's tuned palette, shapes and hash constants
-must not change casually: changing them changes users' avatars and requires a
-versioned image URL. Uploaded photos are not implemented.
-
-## Tech Stack
-
-- Bun (package manager **and** runtime)
-- NestJS API and Next.js/React/Tailwind web
-- PostgreSQL + Prisma (with `@prisma/adapter-pg`)
-- better-auth (sessions, bearer plugin; credentials and sessions; product-owned usernames and hub handles)
-- BullMQ + Redis
-- class-validator/class-transformer
-
-## Prerequisites
-
-- Bun 1.3+
-- Docker (or local PostgreSQL + Redis)
-
-## Environment Variables
-
-Recommended `.env` values:
+Use Bun 1.3.14 (the CI version), Docker with Compose, and Git.
 
 ```bash
-# API port; 3000 belongs to the web app (Next.js dev default).
-PORT=4000
-
-DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5436/nslinkhub
-
-BETTER_AUTH_SECRET=change-me-to-a-long-random-string
-BETTER_AUTH_URL=http://localhost:4000
-
-# Queue Redis (email delivery; checked by /status)
-REDIS_URL=redis://127.0.0.1:6383
+git clone git@github.com:hashikome/linkhub.git
+cd linkhub
+bun install
+bun run infra:up
+(cd apps/api && bunx prisma migrate deploy)
+bun run dev
 ```
 
-When `DATABASE_URL` or `REDIS_URL` is unset, the local dev defaults
-(`postgresql://postgres:postgres@127.0.0.1:5436/nslinkhub`,
-`redis://127.0.0.1:6383`) are used.
+`bun install` generates the Prisma client and installs the repository's pre-push
+hook. `bun run dev` starts PostgreSQL/Redis, the API and background worker,
+and the web app. It does not seed synthetic content into development data.
 
-Deployment secrets use the `_FILE` contract: `DATABASE_URL_FILE`,
-`BETTER_AUTH_SECRET_FILE`, and `REDIS_URL_FILE` point at secret files
-(docker/swarm secrets) and take precedence over the plain variables.
+- Web: `http://localhost:3000`
+- API documentation: `http://localhost:4000/api/docs`
+- Liveness: `http://localhost:4000/api/v1/health`
+- Dependency readiness: `http://localhost:4000/api/v1/status`
 
-## Install
+Local database and Redis configuration is built in; no `.env` is needed for
+the basic stack. Defaults are PostgreSQL on `127.0.0.1:5436` (database
+`nslinkhub`) and Redis on `127.0.0.1:6383`. The Compose project and containers
+use `linkhub`; workspace packages use `@linkhub/*`. The physical database keeps
+its existing name so the rename does not reset development data.
+
+For an existing checkout, keep its PostgreSQL volume through the ignored root
+`.env` settings `POSTGRES_VOLUME_NAME=<existing-volume>` and
+`POSTGRES_VOLUME_EXTERNAL=true`. Fresh checkouts create `linkhub_pgdata`.
+See [local development](docs/runbooks/local-development.md) before switching an
+existing Compose project; never use `down --volumes` for a rename.
+
+For email capture or delivery, optional environment overrides, individual
+processes, and port configuration, use the
+[local development runbook](docs/runbooks/local-development.md). Google sign-in
+requires provider configuration; see
+[passwordless security](docs/design-docs/passwordless-security.md).
+Deployment secrets use `_FILE` inputs; see the
+[release runbook](docs/runbooks/release.md).
+
+## Verification
 
 ```bash
-bun install   # also runs `prisma generate` (postinstall)
+bun run infra:up
+bun run verify:isolated   # full gate without touching an active dev build
+bun run api:test          # API unit tests
+bun run api:test:e2e      # API integration tests with disposable databases
+bun run email:test
 ```
 
-## Local services
+`bun run verify` is the canonical gate: documentation freshness, boundaries,
+formatting, linting, types, tests, and API/web builds. The isolated wrapper runs
+that same gate in a temporary checkout. Browser changes also require
+`bun run verify:isolated test:browser`.
 
-```bash
-bun run infra:up       # PostgreSQL 18 + Redis 7 (docker compose up -d)
-bun run infra:down     # stop them
-```
+The pre-push hook runs verification; it does **not** update the onboarding
+guide's commit pin. If `check:guide-pin` fails, review the affected guide
+sections against the implementation, correct any drift, then refresh the pin
+in a guide-only commit. A passing check before a source commit does not prove
+that the resulting commit has a current pin. See
+[verification](docs/runbooks/verification.md) for the complete workflow.
 
-## Repository Layout
+## Repository map
 
-Bun workspace: the backend is `apps/api` (`@nslinkhub/api`); shared tooling
-config and runtime entry points live in `packages/config`; the web is `apps/web`. Root scripts delegate, so everything below
-runs from the repository root.
+| Location | Purpose |
+| --- | --- |
+| `apps/api` | NestJS API, background worker, Prisma schema and migrations |
+| `apps/web` | Next.js web app with native form fallbacks |
+| `packages/types` | Shared API wire contracts |
+| `packages/email` | Transactional email templates |
+| `packages/config` | Shared configuration and runtime entry points |
+| `tooling` | Development, verification, and release tooling |
+| `docs` | Designs, engineering decisions, runbooks, and execution plans |
 
-## Migrations
+The stack uses Bun, TypeScript, NestJS, Next.js/React/Tailwind, PostgreSQL 18,
+Prisma, Redis/BullMQ, and self-hosted better-auth. Client code uses API contracts
+and never imports backend persistence internals.
 
-Migrations are managed by Prisma Migrate in `apps/api/prisma/migrations`
-(Prisma commands run from `apps/api`, where `prisma.config.ts` lives):
+## Authentication and avatars
 
-```bash
-cd apps/api && bunx prisma migrate deploy
-```
+Browser sessions use HttpOnly cookies. API clients can use the session token
+returned in the `set-auth-token` header as `Authorization: Bearer <token>`.
+Email-code endpoints live under `/api/v1/auth/code/`; verification for a new
+account requires `createAccount: true`. Protected accounts must complete their
+additional factor before receiving a usable session. Swagger and the
+[onboarding walkthrough](docs/guides/developer-onboarding-walkthrough.md)
+cover the request sequence.
 
-To evolve the schema, edit `apps/api/prisma/schema.prisma` and use
-`bunx prisma migrate dev --create-only`, then review the generated SQL —
-several database objects (the `app_uuid_v7()` function, `set_updated_at`
-triggers, CHECK constraints, and partial
-unique indexes) exist only in migration SQL and must never be dropped by an
-auto-generated diff.
+Account avatars use `/api/v1/users/:id/avatar`. The API checks account eligibility
+and proxies Gravatar, falling back to a deterministic generated SVG when no
+eligible picture is available. Browsers do not select a vendor image directly.
+Uploaded profile photos are not implemented.
 
-## Run
+## Contributing and documentation
 
-```bash
-# daily driver (script convention: <service>:<action>; dev = orchestrator)
-bun run dev        # infra up + API/worker watchers + Next.js (:3000)
-bun run api:dev    # API-only loop on :4000
+Start with the [onboarding walkthrough](docs/guides/developer-onboarding-walkthrough.md)
+and [repository guide](AGENTS.md), then read the relevant authorities:
 
-# build + prod
-bun run api:build
-bun run api:prod
+- [Product definition](PRODUCT.md)
+- [Architecture](ARCHITECTURE.md)
+- [Visual design](DESIGN.md)
+- [Documentation map](docs/README.md)
+- [Engineering decisions](docs/engineering-decisions/README.md)
+- [Migration discipline](docs/runbooks/migrations.md)
+- [Planning conventions](PLANS.md)
+- [Changelog](CHANGELOG.md)
 
-# tests
-bun run api:test       # API unit + e2e (e2e needs services running)
-bun run email:test     # email template tests
-```
-
-## Auth
-
-Auth endpoints are served by better-auth under `/api/v1/auth/*`. The main ones:
-
-- `POST /api/v1/auth/code/send` — `{ email }` (request a code)
-- `POST /api/v1/auth/code/verify` — `{ email, code, name? }` (sign in or create a verified account; optional name applies only at creation)
-- `POST /api/v1/auth/sign-out`
-- `GET  /api/v1/auth/get-session`
-
-Browser clients get an HttpOnly session cookie. API clients read the session
-token from the `set-auth-token` response header on sign-in and send it as
-`Authorization: Bearer <token>` (better-auth bearer plugin). Sessions are
-DB-backed and refresh themselves server-side.
-
-Code delivery requires the separate email worker. See
-[local email setup](docs/runbooks/local-development.md#email-delivery) for
-capture/Resend configuration and `bun run --cwd apps/api email:worker`.
-
-## API Docs
-
-When server is running:
-
-- Swagger UI: `http://localhost:4000/api/docs`
-
-## Notes
-
-- Exports are synchronous — the response body is the file (zip when several
-  collections are selected); no queue, nothing stored server-side.
-- Import parsers are MVP-level and intended for hardening in next iterations.
-
-## Web development and browser acceptance
-
-`bun run dev` starts local PostgreSQL/Redis containers, API/worker watchers and
-Next.js. Open `http://localhost:3000` for the landing page; browse published
-collections at `/discover`, or open `/username`, `/@handle`, `/@handle/<slug>` or an authorized `/c/<id>` link.
-Readiness stays available at `/api/v1/status` for monitoring, without a client
-status page. No synthetic content is seeded into dev data.
-See [local development](docs/runbooks/local-development.md) for individual
-process commands, email settings and the same-origin configuration.
-
-`bun run verify` includes API/web compilation and source/integration checks.
-`bun run test:browser` proves the reading journey against isolated fixtures and
-a production web build. Docker image acceptance remains deployment work.
-
-The first reading journey is reviewed and committed.
-[Public hub and pretty-URL reading](docs/exec-plans/completed/deliver-public-hub-reading.md)
-is implemented and reviewed. Both entry points reuse the
-collection reader; copied links retain the immutable `/c/<id>` shape.
-
-[Service status](docs/exec-plans/completed/deliver-service-status.md) is implemented
-and reviewed. It distinguishes confirmed outages from failed
-checks, supports deliberate retry without JavaScript, and keeps internal
-dependency details out of the interface.
+Historical decisions and completed plans retain the earlier NSLinkHub/ns-series
+names. Current ownership and branding are Hashikome/LinkHub; shared IAM and
+infrastructure implementation remain separate work. Application authorization
+stays product-owned.

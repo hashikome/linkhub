@@ -1,6 +1,6 @@
-import type { VerificationPurpose } from "@nslinkhub/types";
+import type { VerificationPurpose } from "@linkhub/types";
 
-export { type VerificationPurpose, verificationPurposes } from "@nslinkhub/types";
+export { type VerificationPurpose, verificationPurposes } from "@linkhub/types";
 
 // Screens and emails share a purpose vocabulary; copy remains surface-specific.
 export interface VerificationCopy {

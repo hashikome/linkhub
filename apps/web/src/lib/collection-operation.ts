@@ -1,11 +1,11 @@
 "use server";
-import { webServerConfig } from "@nslinkhub/config/web-server";
+import { webServerConfig } from "@linkhub/config/web-server";
 import type {
   CreateShareRequest,
   LinkSharingResult,
   SetLinkSharingRequest,
   TransferCollectionRequest,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { CollectionOperationState } from "../components/collection-operation-fields";

@@ -1,4 +1,4 @@
-import type { Collection, CommentThreads, HubPage, HubSummary, Resource } from "@nslinkhub/types";
+import type { Collection, CommentThreads, HubPage, HubSummary, Resource } from "@linkhub/types";
 import { collectionPath, permalink, queryValue, withCursor } from "../lib/http";
 import { serverRead } from "../lib/server-api";
 import { readSession } from "../lib/session";

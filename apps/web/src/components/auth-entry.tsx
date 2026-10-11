@@ -16,7 +16,7 @@ export async function AuthEntry({
   const signup = intent === "sign-up";
   return (
     <section className="account-flow verify auth-entry">
-      <h1>{signup ? "Create your account" : "Sign in to nslinkhub"}</h1>
+      <h1>{signup ? "Create your account" : "Sign in to linkhub"}</h1>
       {reason && <p className="verify-reason">{reason}</p>}
       <FormNotice code={notice} />
       <NativeForm action="/forms/email-start">

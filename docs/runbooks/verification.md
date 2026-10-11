@@ -79,8 +79,10 @@ production browser journey.
 ## Local Enforcement
 
 A versioned `pre-push` hook in `tooling/git-hooks/` runs `bun run verify`
-before every push. Branch protection and rulesets are unavailable on a
-free-plan private repository, so the local hook is the blocking gate.
+before every push. It checks the onboarding pin but never updates it: review
+the guide and make a guide-only pin commit after the source changes it covers.
+The repository is now public under Hashikome; no remote ruleset was configured
+as part of the transfer. The local hook remains the configured blocking gate.
 `bun install` wires it through the root `prepare` script
 (`tooling/setup-git-hooks.ts` sets `core.hooksPath`; it no-ops without a
 `.git` entry, so deployment image builds are unaffected). Deletion-only
@@ -93,7 +95,7 @@ Keep the hook fast enough that nobody is tempted to bypass it by habit.
 If gate duration becomes impractical, split the tiers: keep a fast command (format,
 lint, typechecks, unit tests, static checks) as the pre-push gate and move
 the full suite to hosted CI as the authoritative gate — enforced
-server-side through required status checks once a paid plan is justified.
+server-side through required status checks when remote enforcement is configured.
 This escalation path is the decided design; only its trigger is pending.
 
 ## Expectations

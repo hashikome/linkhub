@@ -1,5 +1,5 @@
 {
-  "name": "@nslinkhub/web",
+  "name": "@linkhub/web",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
     "test": "bun test test"
   },
   "dependencies": {
-    "@nslinkhub/config": "workspace:*",
-    "@nslinkhub/types": "workspace:*",
+    "@linkhub/config": "workspace:*",
+    "@linkhub/types": "workspace:*",
     "@simplewebauthn/browser": "13.2.2",
     "next": "16.3.8",
     "proxy-addr": "2.0.7",

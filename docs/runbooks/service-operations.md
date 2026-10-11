@@ -56,7 +56,7 @@ If the initial invitation expired, was declined, or no active admin remains,
 use a trusted interactive deployment terminal to issue a replacement invitation:
 
 ```bash
-bun run --filter @nslinkhub/api admin:recover person@example.com
+bun run --filter @linkhub/api admin:recover person@example.com
 ```
 
 In a compiled deployment workspace use `admin:recover:prod`. Run with the normal
@@ -127,8 +127,8 @@ Audit persistence failure rolls back the protected action.
 ## Configuration and acceptance
 
 For Resend, `EMAIL_FROM_ADDRESS` includes the sender display name as well as
-the configured mailbox, for example `nslinkhub <no-reply@your-domain.example>`.
-The subject and body come from the nslinkhub templates; the sender name comes
+the configured mailbox, for example `linkhub <no-reply@your-domain.example>`.
+The subject and body come from the linkhub templates; the sender name comes
 from this setting. Keep deployment/local sender configuration consistent.
 
 API and web must share backend `BETTER_AUTH_URL`, browser `WEB_ORIGIN`,

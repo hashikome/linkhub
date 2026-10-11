@@ -1,5 +1,5 @@
 "use client";
-import type { HandleAvailability, Profile, UsernameAvailability } from "@nslinkhub/types";
+import type { HandleAvailability, Profile, UsernameAvailability } from "@linkhub/types";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { browserRead } from "../lib/browser-api";
 import { submitForm } from "../lib/http";

@@ -1,4 +1,4 @@
-import type { Collection, HubPage } from "@nslinkhub/types";
+import type { Collection, HubPage } from "@linkhub/types";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CollectionFeedback } from "../../../components/collection-feedback";

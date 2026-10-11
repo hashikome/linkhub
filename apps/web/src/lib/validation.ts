@@ -1,4 +1,4 @@
-import { maxTagLength, maxTags } from "@nslinkhub/types";
+import { maxTagLength, maxTags } from "@linkhub/types";
 
 // Browser-safe input checks shared by forms, form routes and client components.
 

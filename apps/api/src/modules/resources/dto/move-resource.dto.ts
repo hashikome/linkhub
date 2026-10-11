@@ -1,4 +1,4 @@
-import type { MoveResourceRequest } from "@nslinkhub/types";
+import type { MoveResourceRequest } from "@linkhub/types";
 import { IsIn, IsInt, IsOptional, IsUUID, Min } from "class-validator";
 
 export class MoveResourceDto implements MoveResourceRequest {

@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import type { Profile, UsernameAvailability } from "@nslinkhub/types";
+import type { Profile, UsernameAvailability } from "@linkhub/types";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { User } from "src/generated/prisma/client";

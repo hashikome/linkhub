@@ -5,7 +5,7 @@ import {
   isPublicLinkHost,
   type LinkPreview,
   maxCaptureLinks,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import { useEffect, useRef, useState } from "react";
 import { browserRead } from "../lib/browser-api";
 import { captureUrl } from "../lib/validation";

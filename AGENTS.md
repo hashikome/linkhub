@@ -1,6 +1,6 @@
 # Repository Guide
 
-This repository is the source of truth for the NSLinkHub product and
+This repository is the source of truth for the LinkHub product and
 engineering decisions. External documents are references only. Keep this file
 short: it is a map for contributors and coding agents, not a complete manual.
 
@@ -57,10 +57,10 @@ authoritative.
   and handles, collections and resources, discussion, email verification,
   exports, web experience and interface, operations, and more.
 - `docs/design-docs/conventions.md`: API/persistence casing and envelope rules.
-- `docs/design-docs/identity-sso.md`: ns-series single sign-on — a centralized
-  IAM for all ns products (nsauth); its first slice ships AuthN+SSO;
+- `docs/design-docs/identity-sso.md`: shared Hashikome identity — a centralized
+  IAM direction for company products (scope and final name pending); its first slice ships AuthN+SSO;
   domain authorization stays product-owned; constraints current work respects.
-- `docs/design-docs/infra-deployment.md`: ns-series deployment (namestarlit VPS,
+- `docs/design-docs/infra-deployment.md`: shared Hashikome deployment (company infrastructure,
   Dokploy Stack mode, GHCR images, topology-file conventions).
 - `docs/runbooks/local-development.md`: setup and everyday commands.
 - `docs/runbooks/verification.md`: the canonical verification gate.

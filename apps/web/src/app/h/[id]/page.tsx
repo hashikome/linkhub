@@ -1,4 +1,4 @@
-import type { HubPage } from "@nslinkhub/types";
+import type { HubPage } from "@linkhub/types";
 import type { Metadata } from "next";
 import { Feedback } from "../../../components/feedback";
 import { OwnedHub } from "../../../components/owned-hub";

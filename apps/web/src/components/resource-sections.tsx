@@ -1,5 +1,5 @@
 "use client";
-import type { Resource } from "@nslinkhub/types";
+import type { Resource } from "@linkhub/types";
 import { useState } from "react";
 import { ResourceRow } from "./primitives";
 

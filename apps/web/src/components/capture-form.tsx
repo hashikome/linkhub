@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { webServerConfig } from "@nslinkhub/config/web-server";
-import type { Collection, Profile } from "@nslinkhub/types";
+import { webServerConfig } from "@linkhub/config/web-server";
+import type { Collection, Profile } from "@linkhub/types";
 import type { CaptureDraft } from "../lib/capture-draft";
 import { queryValue, withCursor } from "../lib/http";
 import { serverRead } from "../lib/server-api";

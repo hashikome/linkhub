@@ -2,7 +2,7 @@
 
 ## Purpose
 
-NSLinkHub turns the links people collect into curated, shareable collections.
+LinkHub turns the links people collect into curated, shareable collections.
 Each user may own one hub (their publishing space, the tenant root); collections are
 shared per collection, Google-Drive style, or published to Discover.
 
@@ -36,7 +36,7 @@ implemented until that migration; collection IDs already survive transfers.
 A Bun-managed TypeScript monorepo. The backend is a NestJS modular monolith
 backed by PostgreSQL 18 (Prisma 7 with the pg driver adapter); BullMQ on Redis
 delivers email from a PostgreSQL outbox through a separate worker. Auth is
-self-hosted better-auth (database sessions, bearer plugin, email codes only)
+self-hosted better-auth (database sessions, bearer plugin, email codes, Google and passkeys)
 mounted as raw middleware ahead of body parsing. The Next.js web app is an
 HTTP-only client; an MV3 browser extension is planned. Browser API requests and
 OAuth callbacks reach Nest directly: distinct local ports with exact-origin CORS,
@@ -62,8 +62,8 @@ apps/
   extension/       MV3 capture companion (planned, Track W4)
 packages/
   config/          TypeScript base plus separate web server/browser configuration
-  types/           @nslinkhub/types — shared API wire contracts for clients
-  email/           @nslinkhub/email — backend-owned React Email templates
+  types/           @linkhub/types — shared API wire contracts for clients
+  email/           @linkhub/email — backend-owned React Email templates
 tooling/           boundaries, docs, guide pin, isolated test runner, image rehearsal
 compose.yml        local dev services
 docker-stack.*.yml local Swarm rehearsal and production topology
@@ -151,12 +151,12 @@ Operator tables — OperatorGrant, AdminGrant, ServiceInvitation, CollectionHold
   consumes `AuthUser`.
 - Prisma schema, migrations, generated client, and `PrismaService` are
   backend-private. Clients consume the API over HTTP and the
-  `@nslinkhub/types` wire contract only; `tooling/check-client-boundaries.ts`
+  `@linkhub/types` wire contract only; `tooling/check-client-boundaries.ts`
   (run by `bun run verify`) fails if a client imports `apps/api` internals or
   Prisma.
 - The better-auth handler mounts before body parsers (`app.setup.ts`);
   global middleware must respect that ordering.
-- Packages use the `@nslinkhub/*` scope.
+- Packages use the `@linkhub/*` scope.
 
 ## Client Surfaces
 
@@ -192,7 +192,7 @@ notice; JavaScript only enhances.
 
 ## Deployment Shape
 
-Nothing is deployed yet. The target is the shared namestarlit VPS via Dokploy
+Nothing is deployed yet. The target is shared Hashikome infrastructure via Dokploy
 Stack mode with prebuilt, SHA-pinned GHCR images; nothing builds on the VPS and
 secrets arrive as `_FILE` inputs. See `docs/design-docs/infra-deployment.md`
 and `docs/runbooks/release.md`.
@@ -247,7 +247,7 @@ explicit shared boundary.
 Conventions: Bun toolchain + runtime; Prisma as the
 backend-only persistence boundary behind a Nest `PrismaService`; PostgreSQL 18
 with `app_uuid_v7()` defaults; `timestamptz` UTC; camelCase API / snake_case
-DB; global `ValidationPipe`; self-hosted better-auth with email codes; Biome; `bun test`; committed `bun.lock`.
+DB; global `ValidationPipe`; self-hosted better-auth with passwordless authentication; Biome; `bun test`; committed `bun.lock`.
 
 The non-negotiable invariants for contributors are listed in `AGENTS.md`;
 security and reliability rules in `docs/SECURITY.md` and `docs/RELIABILITY.md`.

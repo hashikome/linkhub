@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { webServerConfig } from "@nslinkhub/config/web-server";
+import { webServerConfig } from "@linkhub/config/web-server";
 import {
   permalink,
   postJson,

@@ -1,4 +1,4 @@
-import type { AccountOperationAction, OperatorAccountDetail, SessionView } from "@nslinkhub/types";
+import type { AccountOperationAction, OperatorAccountDetail, SessionView } from "@linkhub/types";
 import type { Metadata } from "next";
 import { FormNotice } from "../../../../components/form-notice";
 import { InvitationAction } from "../../../../components/invitation-form";

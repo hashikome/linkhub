@@ -83,7 +83,7 @@ are excluded from the build input.
 
 The operator supplies non-secret references for:
 
-- The namestarlit Dokploy project in **Stack** mode and its actual Traefik
+- The Hashikome Dokploy project in **Stack** mode and its actual Traefik
   provider/version, HTTPS entrypoint, certificate resolver and ingress CIDRs.
   The prepared labels use the Traefik Swarm provider. Validate them against
   the installed platform before promotion.

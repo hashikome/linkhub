@@ -1,6 +1,6 @@
 "use server";
-import { webServerConfig } from "@nslinkhub/config/web-server";
-import type { Collection, UpdateCollectionRequest } from "@nslinkhub/types";
+import { webServerConfig } from "@linkhub/config/web-server";
+import type { Collection, UpdateCollectionRequest } from "@linkhub/types";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { CollectionEditState } from "../components/collection-editor";

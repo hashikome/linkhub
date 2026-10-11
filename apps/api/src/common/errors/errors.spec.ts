@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { BadRequestException, HttpException, ServiceUnavailableException } from "@nestjs/common";
-import { isApiErrorCode } from "@nslinkhub/types";
+import { isApiErrorCode } from "@linkhub/types";
 import { errorResponse } from "../filters/all-exceptions.filter";
 import { appError } from "./app-exception";
 

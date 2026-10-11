@@ -15,9 +15,9 @@ export async function bootstrap() {
   configureApp(app);
 
   const config = new DocumentBuilder()
-    .setTitle("NSLinkHub API")
+    .setTitle("LinkHub API")
     .setDescription(
-      "NSLinkHub HTTP API (v1). Browsers authenticate with better-auth cookie " +
+      "LinkHub HTTP API (v1). Browsers authenticate with better-auth cookie " +
         "sessions; API clients and the extension use bearer tokens.",
     )
     .setVersion("1.0")

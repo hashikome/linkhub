@@ -22,7 +22,7 @@ has its own name and @handle; subscriptions are a later slice. See
 
 ## Navigation and entry
 
-The lowercase `nslinkhub` wordmark links to the signed-in person's `/h/<hubId>`
+The lowercase `linkhub` wordmark links to the signed-in person's `/h/<hubId>`
 or the `/hub` entry with explicit Create hub when they have no hub, and `/` when signed out. Discover stays in the header beside account controls.
 Signed-in visitors also have Save a link, the appearance control and an
 avatar-only account menu: Profile, Hub, Notifications, Settings, Manage when
@@ -181,7 +181,7 @@ a missing image is never presented as proof that no provider account exists.
 See [the avatar contract](identity-and-handles.md#profile-pictures).
 Appearance lives only in the header: System → Light → Dark → System. Signed-out
 visitors follow the system preference; saved appearance applies only with a
-valid session. The footer has copyright, “an ns series product”, Share nslinkhub and
+valid session. The footer has copyright, “Good links belong together.”, Share linkhub and
 Support. Readiness is API monitoring, with no client status page.
 
 Notifications currently lists service invitations as expandable messages,

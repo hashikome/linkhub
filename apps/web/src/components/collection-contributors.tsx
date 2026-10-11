@@ -1,4 +1,4 @@
-import type { Collection } from "@nslinkhub/types";
+import type { Collection } from "@linkhub/types";
 import { Avatar } from "./avatar";
 
 export function CollectionContributors({

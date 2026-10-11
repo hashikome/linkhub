@@ -1,4 +1,4 @@
-import type { ImportRowStatus } from "@nslinkhub/types";
+import type { ImportRowStatus } from "@linkhub/types";
 
 export const importStatusLabels: Record<ImportRowStatus, string> = {
   looking_up: "Processing",

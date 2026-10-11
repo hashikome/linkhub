@@ -1,5 +1,5 @@
 "use client";
-import type { CreatedShareEntry, ShareRequest, ShareTarget } from "@nslinkhub/types";
+import type { CreatedShareEntry, ShareRequest, ShareTarget } from "@linkhub/types";
 import { useEffect, useId, useRef, useState } from "react";
 import { submitForm } from "../lib/http";
 

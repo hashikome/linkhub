@@ -1,7 +1,7 @@
 import "server-only";
 import { createHmac } from "node:crypto";
-import { recoveryTtl } from "@nslinkhub/config/action-recovery";
-import { webServerConfig } from "@nslinkhub/config/web-server";
+import { recoveryTtl } from "@linkhub/config/action-recovery";
+import { webServerConfig } from "@linkhub/config/web-server";
 import { cookies } from "next/headers";
 import { recoveryRequest } from "./action-recovery";
 import { serverCookie } from "./cookies";

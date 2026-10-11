@@ -10,7 +10,7 @@ retention. Live sender/domain validation and live webhook
 configuration remain separate acceptance work; no live sending is claimed.
 
 Use Resend as the initial transactional-email provider. It fits the
-namestarlit-VPS deployment model because the application only needs an HTTPS
+Hashikome deployment model because the application only needs an HTTPS
 API, signed webhooks, and restricted deployment secret files — no outbound SMTP
 infrastructure to operate. Keep provider-specific code behind an application
 adapter so switching providers does not change domain workflows.
@@ -40,7 +40,7 @@ binds verification to the app-owned sign-in, invitation or account-action workfl
 
 Concretely, better-auth's OTP send callbacks receive the code from
 better-auth and enqueue an application email-outbox intent. They never call the
-Resend SDK directly and never construct their own tokens. When the ns-series
+Resend SDK directly and never construct their own tokens. When the shared company identity
 identity provider (nsauth) exists, verification delivery may move
 behind the SSO boundary (`docs/design-docs/identity-sso.md`); this adapter is
 the seam that makes that migration a delivery-path change, not a workflow
@@ -145,7 +145,7 @@ Collection-share notification remains separate sharing work. Password reset
 is not a product feature; sign-in uses mailbox codes.
 
 **Visual direction (decided):** Substack-style minimal transactional layout —
-the lowercase `nslinkhub` wordmark (text, no image logo), one large
+the lowercase `linkhub` wordmark (text, no image logo), one large
 letter-spaced code, a short validity line, one bold "do not share" warning, then a muted footer with the
 support route. Use a neutral near-black palette; the web theme is not an email rendering contract.
 
@@ -178,8 +178,7 @@ ordinary logs, Redis payloads, and external telemetry
 Code emails carry one warning line, “Do not share this code with anyone.”, and
 every email (codes and invitations) ends with the same footer as the web: a
 support prompt (“Didn't request this? You can safely ignore this email. Need
-help? Contact <support>”), then “© <year> nslinkhub” over “an ns series
-product”. The prompt always links `EMAIL_SUPPORT_URL`, the web `/support` page,
+help? Contact <support>”), then “© <year> linkhub” over “Good links belong together.”. The prompt always links `EMAIL_SUPPORT_URL`, the web `/support` page,
 which shows the support address (`SUPPORT_EMAIL`, web server config). Emails
 never carry the address themselves, so changing it needs no email change.
 

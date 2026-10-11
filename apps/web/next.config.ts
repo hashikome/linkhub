@@ -4,7 +4,7 @@ export default function config(): NextConfig {
   return {
     poweredByHeader: false,
     agentRules: false,
-    transpilePackages: ["@nslinkhub/types", "@nslinkhub/config"],
+    transpilePackages: ["@linkhub/types", "@linkhub/config"],
     webpack(config) {
       config.resolve.extensionAlias = {
         ...config.resolve.extensionAlias,

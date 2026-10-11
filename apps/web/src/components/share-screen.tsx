@@ -1,4 +1,4 @@
-import type { ShareTarget } from "@nslinkhub/types";
+import type { ShareTarget } from "@linkhub/types";
 import type { ReactNode } from "react";
 import { ShareLink } from "./share-link";
 

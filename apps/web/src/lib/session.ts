@@ -1,5 +1,5 @@
 import "server-only";
-import type { Profile, SessionView } from "@nslinkhub/types";
+import type { Profile, SessionView } from "@linkhub/types";
 import { headers } from "next/headers";
 import { cache } from "react";
 import { sessionCookie } from "./http";

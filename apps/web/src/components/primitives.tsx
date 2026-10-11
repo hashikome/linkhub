@@ -1,4 +1,4 @@
-import type { Collection, PersonRef, Resource } from "@nslinkhub/types";
+import type { Collection, PersonRef, Resource } from "@linkhub/types";
 import { hubPath, permalink, prettyPath } from "../lib/http";
 import { ItemDetails } from "./item-details";
 import { ItemDisclosure } from "./item-disclosure";

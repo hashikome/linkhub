@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
-import type { CaptureResult } from "@nslinkhub/types";
+import type { CaptureResult } from "@linkhub/types";
 import { isUUID } from "class-validator";
 import { appError } from "../../common/errors/app-exception";
 import { AuthUser } from "../../common/interfaces/auth-user.interface";

@@ -1,6 +1,6 @@
-import { browserApiOrigin } from "@nslinkhub/config/web-browser";
-import type { ApiWarning, CursorMeta } from "@nslinkhub/types";
-import { isApiErrorCode, SHARE_ATTRIBUTION_KEYS } from "@nslinkhub/types";
+import { browserApiOrigin } from "@linkhub/config/web-browser";
+import type { ApiWarning, CursorMeta } from "@linkhub/types";
+import { isApiErrorCode, SHARE_ATTRIBUTION_KEYS } from "@linkhub/types";
 
 import { isUuid } from "./validation";
 

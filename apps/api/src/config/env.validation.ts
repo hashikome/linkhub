@@ -1,4 +1,4 @@
-import { publicOrigins } from "@nslinkhub/config/public-origins";
+import { publicOrigins } from "@linkhub/config/public-origins";
 // Startup configuration validation (plain function — no schema dependency).
 // Every variable stays optional with in-code local defaults; validation only
 // rejects values that are present but malformed, so a bad deployment fails

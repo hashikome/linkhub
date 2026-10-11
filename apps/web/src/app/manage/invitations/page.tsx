@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ServiceInvitationView } from "@nslinkhub/types";
+import type { ServiceInvitationView } from "@linkhub/types";
 import type { Metadata } from "next";
 import { FormNotice } from "../../../components/form-notice";
 import { invitationsRows } from "../../../components/manage-rows";

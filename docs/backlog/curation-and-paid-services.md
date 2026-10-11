@@ -90,14 +90,14 @@ policy, and entitlements remain to be designed and implemented.
 The shared **Intake and applications workspace brief**
 (`../workspace/backlog/inquiry-workspace.md`, relative to the repository root)
 is the owning product record for hosted forms, API intake, applications/inquiries,
-team review, assignment, history, follow-up, and a client-facing view. NSLinkHub is
+team review, assignment, history, follow-up, and a client-facing view. LinkHub is
 its first planned integration; the portfolio is another, retaining independent
 API/email delivery. The shared backlog at
 `../workspace/backlog/README.md` provides one entry point with links to both products. The service remains ready to scope;
 no second implementation has started.
 
 The intake service owns configured questions, submissions, and their handling
-workflow. NSLinkHub owns communities, invitation acceptance, membership, and
+workflow. LinkHub owns communities, invitation acceptance, membership, and
 collection authorization. Form submission and approval alone grant nothing.
 Bind an approved application to the intended community and verified account through
 an authorized invitation workflow; retries must not create duplicate invitations
@@ -111,10 +111,10 @@ remain scoping decisions, owned by the shared brief.
 
 ### Community access and intake integration task
 
-**Status:** accepted direction; implementation deferred. This is NSLinkHub's owning
+**Status:** accepted direction; implementation deferred. This is LinkHub's owning
 backlog task, not a second forms-product implementation plan.
 
-**Target:** NSLinkHub for community identity, membership, invitations, collection
+**Target:** LinkHub for community identity, membership, invitations, collection
 policy and integration. The intake product's repository is not selected; its
 shared brief owns service scope. Portfolio changes belong to its repository when
 that integration is selected.

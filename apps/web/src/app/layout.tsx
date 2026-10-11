@@ -1,4 +1,4 @@
-import { webServerConfig } from "@nslinkhub/config/web-server";
+import { webServerConfig } from "@linkhub/config/web-server";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
@@ -22,7 +22,7 @@ const brandFont = localFont({
 });
 
 export const metadata: Metadata = {
-  title: { default: "nslinkhub", template: "%s · nslinkhub" },
+  title: { default: "linkhub", template: "%s · linkhub" },
   description: "Useful links, collected and shared.",
   referrer: "strict-origin",
   robots: { index: false, follow: false },
@@ -59,7 +59,7 @@ export default async function Layout({ children }: { children: ReactNode }) {
                   className="wordmark"
                   href={session && profile ? (profile.hubId ? `/h/${profile.hubId}` : "/hub") : "/"}
                 >
-                  nslinkhub
+                  linkhub
                 </a>
                 <div className="primary-nav">
                   <a href="/discover">Discover</a>
@@ -76,14 +76,14 @@ export default async function Layout({ children }: { children: ReactNode }) {
             <footer className="site-footer">
               <div className="shell footer-content">
                 <div className="footer-identity">
-                  <p className="footer-brand">© {new Date().getFullYear()} nslinkhub</p>
-                  <p className="footer-series">an ns series product</p>
+                  <p className="footer-brand">© {new Date().getFullYear()} linkhub</p>
+                  <p className="footer-tagline">Good links belong together.</p>
                 </div>
                 <nav aria-label="Footer" className="footer-nav">
                   <ShareAction
                     target={{ kind: "site" }}
                     returnTo="/"
-                    label="Share nslinkhub"
+                    label="Share linkhub"
                     className=""
                   />
                   <a href="/support">Support</a>

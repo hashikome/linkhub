@@ -11,7 +11,7 @@ import type {
   OperatorAccount,
   OperatorAccountDetail,
   OperatorCollection,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import { isUUID } from "class-validator";
 import { revokeAccountAccess } from "../../auth/revoke-account";
 import {

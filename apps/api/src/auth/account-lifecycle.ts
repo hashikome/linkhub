@@ -1,4 +1,4 @@
-import { type AccountAction, accountActions } from "@nslinkhub/types";
+import { type AccountAction, accountActions } from "@linkhub/types";
 import { appError } from "../common/errors/app-exception";
 import { emailKey } from "../email/outbox";
 import type { Prisma } from "../generated/prisma/client";

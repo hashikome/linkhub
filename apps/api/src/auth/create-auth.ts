@@ -36,7 +36,7 @@ export function createAuth({
           level === "error" ? "error" : level === "warn" ? "warn" : "info",
         ),
     },
-    appName: "nslinkhub",
+    appName: "linkhub",
     onAPIError: { errorURL: `${webOrigin}/sign-in?notice=google-failed` },
     account: {
       encryptOAuthTokens: true,

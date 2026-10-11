@@ -1,5 +1,5 @@
 import "server-only";
-import { webServerConfig } from "@nslinkhub/config/web-server";
+import { webServerConfig } from "@linkhub/config/web-server";
 import { authenticatedFlow } from "./authenticated-flow";
 import { completeSignIn } from "./complete-sign-in";
 import { serverCookie } from "./cookies";

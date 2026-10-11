@@ -1,5 +1,5 @@
 "use client";
-import type { Resource } from "@nslinkhub/types";
+import type { Resource } from "@linkhub/types";
 import { useEffect, useId, useState } from "react";
 import { LocalTime } from "./local-time";
 

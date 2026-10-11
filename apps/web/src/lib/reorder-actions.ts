@@ -1,6 +1,6 @@
 "use server";
-import { webServerConfig } from "@nslinkhub/config/web-server";
-import type { MoveResourceRequest } from "@nslinkhub/types";
+import { webServerConfig } from "@linkhub/config/web-server";
+import type { MoveResourceRequest } from "@linkhub/types";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";

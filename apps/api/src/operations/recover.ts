@@ -32,7 +32,7 @@ async function main() {
   }
   if (!address || extra.length) {
     process.stderr.write(
-      "Usage: bun run --filter @nslinkhub/api admin:recover <email> (interactive terminal required)\n",
+      "Usage: bun run --filter @linkhub/api admin:recover <email> (interactive terminal required)\n",
     );
     terminalInput?.destroy();
     terminalOutput?.destroy();

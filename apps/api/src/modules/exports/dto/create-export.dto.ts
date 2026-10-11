@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import type { CreateExportRequest } from "@nslinkhub/types";
+import type { CreateExportRequest } from "@linkhub/types";
 import {
   ArrayMaxSize,
   ArrayMinSize,

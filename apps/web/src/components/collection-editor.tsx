@@ -1,5 +1,5 @@
 "use client";
-import type { Collection } from "@nslinkhub/types";
+import type { Collection } from "@linkhub/types";
 import { useActionState } from "react";
 
 export type CollectionEditState = {

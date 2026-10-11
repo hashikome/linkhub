@@ -1,5 +1,5 @@
 "use client";
-import { maxTagLength as maxLength, maxTags } from "@nslinkhub/types";
+import { maxTagLength as maxLength, maxTags } from "@linkhub/types";
 import { useEffect, useRef, useState } from "react";
 import { splitTags as split } from "../lib/validation";
 

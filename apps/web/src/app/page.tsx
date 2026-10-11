@@ -6,7 +6,7 @@ import { ShareOpen } from "../components/share-open";
 import { queryValue } from "../lib/http";
 
 export const metadata: Metadata = {
-  title: { absolute: "nslinkhub · Useful links, collected and shared" },
+  title: { absolute: "linkhub · Good links belong together." },
   description: "Discover useful collections and give your favourite links a place to belong.",
 };
 export const dynamic = "force-dynamic";

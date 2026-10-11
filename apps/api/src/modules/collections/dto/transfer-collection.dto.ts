@@ -1,4 +1,4 @@
-import type { TransferCollectionRequest } from "@nslinkhub/types";
+import type { TransferCollectionRequest } from "@linkhub/types";
 import { IsEmail, MaxLength } from "class-validator";
 
 import { CollectionImpactDto } from "./collection-impact.dto";

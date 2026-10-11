@@ -427,7 +427,7 @@ describe("explore to resource: production browser journey", () => {
         for (const theme of ["dark", "light"] as const) {
           await page.emulateMedia({ colorScheme: theme });
           await ready(page, "/");
-          await browserExpect(page).toHaveTitle("nslinkhub · Useful links, collected and shared");
+          await browserExpect(page).toHaveTitle("linkhub · Good links belong together.");
           await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "system");
           await browserExpect(page.getByRole("figure")).toContainText("Example");
           for (const width of [320, 390, 768, 1280, 1440]) {
@@ -639,7 +639,7 @@ describe("explore to resource: production browser journey", () => {
     try {
       await ready(page);
       await browserExpect(page.locator(".wordmark")).toHaveAttribute("href", "/");
-      await browserExpect(page).toHaveTitle("Discover · nslinkhub");
+      await browserExpect(page).toHaveTitle("Discover · linkhub");
       await browserExpect(
         page
           .getByRole("navigation", { name: "Main navigation" })
@@ -647,15 +647,17 @@ describe("explore to resource: production browser journey", () => {
       ).toHaveAttribute("href", "/discover");
       const footer = page.getByRole("contentinfo");
       await browserExpect(footer.locator(".footer-brand")).toHaveText(
-        `© ${new Date().getFullYear()} nslinkhub`,
+        `© ${new Date().getFullYear()} linkhub`,
       );
-      await browserExpect(footer.locator(".footer-series")).toHaveText("an ns series product");
+      await browserExpect(footer.locator(".footer-tagline")).toHaveText(
+        "Good links belong together.",
+      );
       await browserExpect(footer.getByRole("link", { name: "Discover", exact: true })).toHaveCount(
         0,
       );
       await browserExpect(footer.getByRole("link")).toHaveCount(2);
       await browserExpect(
-        footer.getByRole("link", { name: "Share nslinkhub", exact: true }),
+        footer.getByRole("link", { name: "Share linkhub", exact: true }),
       ).toHaveAttribute("href", /\/share\?kind=site/);
       await browserExpect(
         footer
@@ -775,7 +777,7 @@ describe("explore to resource: production browser journey", () => {
         }
         await ready(page, `/@${handle}?view=public&s=discovery-must-ignore-this`);
         await browserExpect(page.locator("h1")).toHaveText(publicHubName);
-        await browserExpect(page).toHaveTitle(`${publicHubName} · nslinkhub`);
+        await browserExpect(page).toHaveTitle(`${publicHubName} · linkhub`);
         await browserExpect(page.locator(".hub-identity")).toHaveText(`@${handle} by Reader`);
         await browserExpect(page.locator(".hub-collections-heading .meta")).toHaveText("25");
         await browserExpect(page.locator(".hub-heading time")).toHaveCount(0);
@@ -1984,7 +1986,7 @@ describe("management: production browser journey", () => {
             .getByRole("link", { name: "Sign in", exact: true }),
         ).toBeVisible();
         await ready(page, "/manage");
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
       } finally {
         await close();
       }
@@ -2060,7 +2062,7 @@ describe("management: production browser journey", () => {
       await page.screenshot({ path: "/tmp/verify-code.png" });
       await browserExpect(page.locator("h1")).toHaveText("Confirm it's you");
       // A pasted code with a space ("3368 6575") is accepted.
-      const confirmCode = await capturedCode(op.email, "Confirm it's you · nslinkhub");
+      const confirmCode = await capturedCode(op.email, "Confirm it's you · linkhub");
       await page
         .getByLabel("Eight-digit code")
         .fill(`${confirmCode.slice(0, 4)} ${confirmCode.slice(4)}`);
@@ -2662,7 +2664,7 @@ describe("account shell and appearance", () => {
       await browserExpect(page.locator(".page-heading .description")).toHaveText(
         "Resources for curious readers.",
       );
-      await browserExpect(page).toHaveTitle("The Reference Shelf · nslinkhub");
+      await browserExpect(page).toHaveTitle("The Reference Shelf · linkhub");
       await ready(page, `/@${hub.handle}`);
       await browserExpect(page.locator("h1")).toHaveText("The Reference Shelf");
       await browserExpect(page.locator(".page-heading .description")).toHaveText(
@@ -2753,7 +2755,7 @@ describe("account shell and appearance", () => {
           "href",
           /^\/h\/[a-f0-9-]{36}$/,
         );
-        await browserExpect(page).toHaveTitle("Settings · nslinkhub");
+        await browserExpect(page).toHaveTitle("Settings · linkhub");
         await browserExpect(page).toHaveURL(`${origin}/settings`);
         await browserExpect(
           page
@@ -2823,7 +2825,7 @@ describe("account shell and appearance", () => {
             await page.screenshot({ path: `/tmp/own-hub-${width}.png` });
           }
         }
-        await browserExpect(page).toHaveTitle(`${account.hub?.name} · nslinkhub`);
+        await browserExpect(page).toHaveTitle(`${account.hub?.name} · linkhub`);
         await browserExpect(page).toHaveURL(`${origin}/h/${account.hub?.id}`);
         await page.getByLabel("Account menu", { exact: true }).click();
         await browserExpect(
@@ -2883,7 +2885,7 @@ describe("account shell and appearance", () => {
         ).toContainText("Manage");
         await page.getByRole("link", { name: "Settings", exact: true }).click();
         await browserExpect(page.locator("h1")).toHaveText("Settings");
-        await browserExpect(page).toHaveTitle("Settings · nslinkhub");
+        await browserExpect(page).toHaveTitle("Settings · linkhub");
         await ready(page, "/settings?section=appearance");
         await browserExpect(
           page.getByRole("group", { name: "Profile", exact: true }),
@@ -2953,7 +2955,7 @@ describe("account shell and appearance", () => {
           .getByRole("link", { name: "Notifications", exact: true })
           .click();
         await browserExpect(page.locator("h1")).toHaveText("Notifications");
-        await browserExpect(page).toHaveTitle("Notifications · nslinkhub");
+        await browserExpect(page).toHaveTitle("Notifications · linkhub");
         await browserExpect(page.locator("main")).toContainText("You're all caught up");
         const invitation = await prisma.serviceInvitation.create({
           data: {
@@ -3010,7 +3012,7 @@ describe("account shell and appearance", () => {
         ).toBeVisible();
         await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "system");
         await ready(page, "/settings");
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
       } finally {
         await close();
       }
@@ -3226,7 +3228,7 @@ it("saves a first private link through email, preserves retries, then adds and r
       await page.getByLabel("Email address").fill(email);
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
-      await capturedCode(email, "Verify your email to save your first link · nslinkhub");
+      await capturedCode(email, "Verify your email to save your first link · linkhub");
       expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
       await page.getByLabel("Eight-digit code").fill("00000000");
       await page.getByRole("button", { name: "Verify and save" }).click();
@@ -3236,7 +3238,7 @@ it("saves a first private link through email, preserves retries, then adds and r
       await browserExpect(page.locator(".toast")).toContainText("sent a new code");
       await page
         .getByLabel("Eight-digit code")
-        .fill(await capturedCode(email, "Verify your email to save your first link · nslinkhub"));
+        .fill(await capturedCode(email, "Verify your email to save your first link · linkhub"));
       failCapture = js;
       await page.getByRole("button", { name: "Verify and save" }).click();
       if (js) {
@@ -3660,10 +3662,13 @@ describe("collection discussion", () => {
           await discussion.locator(".comment-compose > summary").click();
         await page.getByLabel("Add to the discussion").fill(`After a break (${js})`);
         await page.getByRole("button", { name: "Post", exact: true }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
         await browserExpect(page.locator(".verify-reason")).toContainText("post your comment");
         await page.getByLabel("Email address").fill(discussant);
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
+        // Fast earlier actions can still be inside the harness's two-second
+        // resend window. Recovery must request a fresh code after that guard.
+        await page.waitForTimeout(2100);
         await page.getByRole("button", { name: "Send code", exact: true }).click();
         await browserExpect(page, `resume code issued (JavaScript ${js})`).toHaveURL(
           /\/sign-in\/code\?notice=(?:re)?sent/,
@@ -3688,7 +3693,7 @@ describe("collection discussion", () => {
           await discussion.locator(".comment-compose > summary").click();
         await page.getByLabel("Add to the discussion").fill(`Not theirs (${js})`);
         await page.getByRole("button", { name: "Post", exact: true }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
         const stranger = `stranger-${crypto.randomUUID()}@example.com`;
         await page.getByLabel("Email address").fill(stranger);
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
@@ -3818,7 +3823,7 @@ describe("support page", () => {
         await browserExpect(
           page.getByRole("link", { name: "support@example.com", exact: true }),
         ).toHaveAttribute("href", "mailto:support@example.com");
-        await browserExpect(page).toHaveTitle("Support · nslinkhub");
+        await browserExpect(page).toHaveTitle("Support · linkhub");
       } finally {
         await close();
       }
@@ -5267,9 +5272,9 @@ it("shares profiles, hubs, collections and the site through one contextual page"
           kind: "site",
           path: "/",
           label: "Site link",
-          heading: "Share nslinkhub",
+          heading: "Share linkhub",
           back: "Back to home",
-          trigger: "Share nslinkhub",
+          trigger: "Share linkhub",
         },
       ];
       if (js) await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -5968,7 +5973,7 @@ it("preserves private sharing destinations and resumes access, link and transfer
       for (const label of ["Create share link", "Replace share link", "Turn off link access"]) {
         await expire();
         await page.getByRole("button", { name: label, exact: true }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
         await verify();
         await browserExpect(page.locator("h1")).toHaveText("Share collection");
         const link = new URL(
@@ -6044,7 +6049,7 @@ it("binds resumed collection commands to their account and rechecks current auth
           data: { expiresAt: new Date(0) },
         });
         await page.getByRole("button", { name: "Yes, delete", exact: true }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
         // Ownership changes while the command is waiting. The new owner could
         // delete it, but must never inherit the previous account's pending action.
         const nextHub = await prisma.hub.findUniqueOrThrow({
@@ -7289,7 +7294,7 @@ for (const registration of [false, true]) {
           page.getByRole("button", { name: "Create account", exact: true }),
         ).toBeVisible();
         await browserExpect(
-          page.getByText("There isn’t an nslinkhub account for", {
+          page.getByText("There isn’t a linkhub account for", {
             exact: false,
           }),
         ).toBeVisible();
@@ -7559,7 +7564,7 @@ it("offers deliberate account creation and an optional named hub after email pro
         );
         await browserExpect(
           page.getByRole("heading", {
-            name: withHub ? "Create your account" : "Sign in to nslinkhub",
+            name: withHub ? "Create your account" : "Sign in to linkhub",
             exact: true,
           }),
         ).toBeVisible();
@@ -7758,6 +7763,10 @@ it("requires explicit hub creation before uploading a text import and protects n
       });
       await page.screenshot({ path: `/tmp/import-text-start-${javascript}.png`, fullPage: true });
       await page.getByRole("button", { name: "Review file", exact: true }).click();
+      await page
+        .locator(".import-drafts")
+        .getByRole("link", { name: "Unfiled links", exact: true })
+        .click();
       await browserExpect(page.locator(".import-summary")).toContainText("Needs attention 1");
       await page.getByRole("link", { name: "Needs attention 1", exact: true }).click();
       await page.locator(".import-table tbody tr").first().getByRole("checkbox").check();
@@ -7765,16 +7774,18 @@ it("requires explicit hub creation before uploading a text import and protects n
       await page
         .getByRole("button", { name: /^Set collection for (?:\d+|selected) links?$/ })
         .click();
-      await browserExpect(
-        page.getByRole("button", { name: /^Set collection for (?:\d+|selected) links?$/ }),
-      ).toHaveCount(0);
+      // Moving the last unfiled row removes that draft collection and returns
+      // to the collection list. Open its new destination to keep reviewing it.
+      await page
+        .locator(".import-drafts")
+        .getByRole("link", { name: "My reading", exact: true })
+        .click();
+      await page.getByRole("link", { name: "Needs attention 1", exact: true }).click();
       expect(new URL(page.url()).searchParams.get("status")).toBe("failed");
-      await browserExpect(page.locator(".import-table")).toContainText("My reading");
+      await browserExpect(page.locator(".import-table tbody tr")).toHaveCount(1);
+      await browserExpect(page.locator(".import-table")).toContainText("bad-address");
       await browserExpect(
         page.getByRole("button", { name: "Discard draft", exact: true }),
-      ).toHaveCount(0);
-      await browserExpect(
-        page.getByRole("button", { name: /^Revalidate (?:\d+|selected) links?$/ }),
       ).toHaveCount(0);
 
       const body = new FormData();
@@ -7797,7 +7808,13 @@ it("requires explicit hub creation before uploading a text import and protects n
       await page.locator(".import-discard summary").click();
       await page.getByRole("button", { name: "Confirm discard", exact: true }).click();
       await browserExpect(page.locator(".import-discard")).toHaveCount(0);
-      expect(await prisma.importDraft.count({ where: { userId: signed.body.user.id } })).toBe(0);
+      const discarded = await prisma.importDraft.findFirstOrThrow({
+        where: { userId: signed.body.user.id },
+        include: { rows: true },
+      });
+      expect(discarded.closed).toBe(true);
+      expect(discarded.rows).toHaveLength(1);
+      expect(discarded.rows[0].dropped).toBe(true);
     } finally {
       await close();
     }
@@ -8383,7 +8400,7 @@ it("resumes submitted import corrections after sign-in with and without JavaScri
         data: { expiresAt: new Date(0) },
       });
       await page.getByRole("button", { name: "Save", exact: true }).click();
-      await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
+      await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
       const recovery = (await page.context().cookies()).find((c) => c.name === "pending_action");
       expect(recovery?.value).toMatch(/^ref\.[a-f0-9]{64}$/);
       await verify();

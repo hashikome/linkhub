@@ -1,6 +1,6 @@
 import "server-only";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { webServerConfig } from "@nslinkhub/config/web-server";
+import { webServerConfig } from "@linkhub/config/web-server";
 
 // Operator searches may contain an email address. They travel in page URLs
 // (so results can be paged, refreshed and returned to) only as a short-lived

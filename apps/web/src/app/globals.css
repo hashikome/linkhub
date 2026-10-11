@@ -268,7 +268,7 @@ main:focus-visible {
   font-size: var(--text-meta);
   font-weight: 500;
 }
-.footer-series {
+.footer-tagline {
   margin: 0;
   color: var(--color-muted);
   font-size: 0.8125rem;
@@ -1230,7 +1230,8 @@ html[data-revalidating="true"] .session-nav {
   font-size: 0.9375rem;
   line-height: 1.45;
   box-shadow: var(--elevation);
-  pointer-events: auto;
+  /* This status has no controls; never block the page underneath it. */
+  pointer-events: none;
   animation:
     toast-in 200ms var(--ease-feedback),
     toast-out 300ms ease-in 5s forwards;

@@ -1,5 +1,5 @@
 import { Controller, Get, HttpCode, Post, Req, UseGuards } from "@nestjs/common";
-import type { NotificationView } from "@nslinkhub/types";
+import type { NotificationView } from "@linkhub/types";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { apiOk } from "../../common/utils/response.util";
 import { PrismaService } from "../../database/prisma.service";

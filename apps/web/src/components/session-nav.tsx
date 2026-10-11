@@ -1,4 +1,4 @@
-import type { SessionView } from "@nslinkhub/types";
+import type { SessionView } from "@linkhub/types";
 import { AccountMenu } from "./account-menu";
 import { type Theme, ThemePicker } from "./theme-picker";
 export function SessionNav({ session, theme }: { session: SessionView | null; theme: Theme }) {

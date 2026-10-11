@@ -1,5 +1,5 @@
 import "server-only";
-import { webServerConfig } from "@nslinkhub/config/web-server";
+import { webServerConfig } from "@linkhub/config/web-server";
 import { headers } from "next/headers";
 import { type ApiPath, postJson, readJson, safePath } from "./http";
 import { visitorHeaders } from "./visitor-source";

@@ -1,5 +1,5 @@
 "use client";
-import type { Collection, HubPage, Resource } from "@nslinkhub/types";
+import type { Collection, HubPage, Resource } from "@linkhub/types";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { browserRead } from "../lib/browser-api";
 import { type ApiPath, type Failure, withCursor } from "../lib/http";

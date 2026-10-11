@@ -1,4 +1,4 @@
-import type { ShareTarget as ApiShareTarget } from "@nslinkhub/types";
+import type { ShareTarget as ApiShareTarget } from "@linkhub/types";
 import { safeDocumentReturn } from "./http";
 
 export type ShareTarget = ApiShareTarget & { token?: string };

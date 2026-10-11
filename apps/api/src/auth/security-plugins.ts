@@ -49,7 +49,7 @@ export function securityPlugins(
     return denied();
   };
   const factor = twoFactor({
-    issuer: "nslinkhub",
+    issuer: "linkhub",
     allowPasswordless: true,
     skipVerificationOnEnable: false,
     twoFactorCookieMaxAge: 600,
@@ -131,7 +131,7 @@ export function securityPlugins(
   };
   const webauthn = passkey({
     rpID: new URL(webOrigin).hostname,
-    rpName: "nslinkhub",
+    rpName: "linkhub",
     origin: webOrigin,
     authenticatorSelection: { residentKey: "required", userVerification: "required" },
     registration: {

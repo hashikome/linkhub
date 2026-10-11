@@ -1,4 +1,4 @@
-import type { CaptureLink, CaptureRequest } from "@nslinkhub/types";
+import type { CaptureLink, CaptureRequest } from "@linkhub/types";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,

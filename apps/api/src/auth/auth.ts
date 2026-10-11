@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { publicOrigins } from "@nslinkhub/config/public-origins";
+import { publicOrigins } from "@linkhub/config/public-origins";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { readSecret } from "../config/secret";
 import { emailConfig } from "../email/config";

@@ -1,4 +1,4 @@
-import type { CreateCollectionRequest } from "@nslinkhub/types";
+import type { CreateCollectionRequest } from "@linkhub/types";
 import { IsBoolean, IsOptional, IsString, Matches, MaxLength, MinLength } from "class-validator";
 
 export class CreateCollectionDto implements CreateCollectionRequest {

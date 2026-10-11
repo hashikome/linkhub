@@ -1,10 +1,5 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException } from "@nestjs/common";
-import {
-  type ApiError,
-  type ApiErrorCode,
-  type ApiErrorDetails,
-  apiErrors,
-} from "@nslinkhub/types";
+import { type ApiError, type ApiErrorCode, type ApiErrorDetails, apiErrors } from "@linkhub/types";
 import type { Response } from "express";
 import { AppException } from "../errors/app-exception";
 import type { RequestWithId } from "../middleware/request-id";

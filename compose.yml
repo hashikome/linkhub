@@ -1,17 +1,20 @@
+# A stable project name keeps Compose independent of the checkout directory.
+name: linkhub
+
 services:
   postgres:
     image: postgres:18
-    container_name: nslinkhub-postgres
+    container_name: linkhub-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: nslinkhub
     ports:
-      # nslinkhub = +4 in the stack-wide local port registry
+      # linkhub = +4 in the stack-wide local port registry
       # (/home/ns/Person/stack/docs/local-port-registry.md)
       - '127.0.0.1:5436:5432'
     volumes:
-      - nslinkhub_pgdata:/var/lib/postgresql
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres -d nslinkhub']
       interval: 5s
@@ -20,7 +23,7 @@ services:
 
   redis:
     image: redis:7
-    container_name: nslinkhub-redis
+    container_name: linkhub-redis
     ports:
       - '127.0.0.1:6383:6379'
     healthcheck:
@@ -30,4 +33,6 @@ services:
       retries: 10
 
 volumes:
-  nslinkhub_pgdata:
+  pgdata:
+    name: ${POSTGRES_VOLUME_NAME:-linkhub_pgdata}
+    external: ${POSTGRES_VOLUME_EXTERNAL:-false}

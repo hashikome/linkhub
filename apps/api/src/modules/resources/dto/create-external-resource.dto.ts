@@ -1,4 +1,4 @@
-import type { CreateExternalResourceRequest } from "@nslinkhub/types";
+import type { CreateExternalResourceRequest } from "@linkhub/types";
 import {
   ArrayMaxSize,
   IsArray,

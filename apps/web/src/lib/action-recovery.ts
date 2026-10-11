@@ -1,6 +1,6 @@
 import "server-only";
-import { type RecoveryCommand, recoveryProof } from "@nslinkhub/config/action-recovery";
-import { webServerConfig } from "@nslinkhub/config/web-server";
+import { type RecoveryCommand, recoveryProof } from "@linkhub/config/action-recovery";
+import { webServerConfig } from "@linkhub/config/web-server";
 import { serverSend } from "./server-transport";
 
 export async function recoveryRequest(command: RecoveryCommand) {

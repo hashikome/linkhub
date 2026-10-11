@@ -1,5 +1,5 @@
 import { Controller, Get, Req, UseGuards } from "@nestjs/common";
-import type { SessionView } from "@nslinkhub/types";
+import type { SessionView } from "@linkhub/types";
 import { AuthGuard } from "../../common/guards/auth.guard";
 import { apiOk } from "../../common/utils/response.util";
 import { PrismaService } from "../../database/prisma.service";

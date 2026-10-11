@@ -49,5 +49,5 @@ idea or question -> PRODUCT.md §10 open decisions
 ```
 
 Renames and field changes are changelog material, not decisions. Disposable
-context lives in the git-ignored `ref/`; the shared namestarlit workspace
-mapping is in [PLANS.md](../PLANS.md#shared-namestarlit-workspace).
+context lives in the git-ignored `ref/`; the shared Hashikome workspace
+mapping is in [PLANS.md](../PLANS.md#shared-hashikome-workspace).

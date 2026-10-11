@@ -5,7 +5,7 @@ import type {
   OperatorAccount,
   ServiceInvitationView,
   SessionView,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import {
   accountsRows,
   invitationsRows,

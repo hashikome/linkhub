@@ -21,13 +21,13 @@ that describes the outcome. Move finished plans to `docs/exec-plans/completed/`.
 
 Start from `docs/exec-plans/TEMPLATE.md`.
 
-## Shared namestarlit workspace
+## Shared Hashikome workspace
 
-nslinkhub is listed in the shared planning workspace (`../workspace/`, local and
+LinkHub is listed in the shared planning workspace (`../workspace/`, local and
 not in Git) as one product row that points here; the workspace never holds a copy
 of this product's definition. Until plans are moved there, records map as follows:
 
-| Workspace convention | nslinkhub today |
+| Workspace convention | LinkHub today |
 | --- | --- |
 | Product brief (`backlog/<idea>.md`) | `PRODUCT.md`, linked from the workspace row |
 | Plan `README.md` (scope, state, next actions) | `PRODUCT.md` §11 Delivery |

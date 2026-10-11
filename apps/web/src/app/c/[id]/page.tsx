@@ -1,4 +1,4 @@
-import type { Collection } from "@nslinkhub/types";
+import type { Collection } from "@linkhub/types";
 import type { Metadata } from "next";
 import { CollectionFeedback } from "../../../components/collection-feedback";
 import { CollectionReader } from "../../../components/collection-reader";

@@ -4,7 +4,7 @@ import { readSecret } from "./src/config/secret";
 
 // Same resolution as the app (zero-config dev, _FILE-capable): a fresh clone
 // runs `bunx prisma migrate deploy` with no .env at all. 5436 = postgres
-// default +4, nslinkhub's stack-wide local port offset.
+// default +4, linkhub's stack-wide local port offset.
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {

@@ -1,4 +1,4 @@
-import type { ManagedCollectionAction } from "@nslinkhub/types";
+import type { ManagedCollectionAction } from "@linkhub/types";
 import { sharePath } from "./sharing";
 
 /** Destination for an API-authorized action. Each destination rechecks access. */

@@ -1,6 +1,6 @@
 # Product Definition
 
-NSLinkHub's canonical product definition (the PRD), written to be understood
+LinkHub's canonical product definition (the PRD), written to be understood
 without the conversations behind it. Where this document and older material
 conflict, this document wins on what the product is and must do;
 `ARCHITECTURE.md` and `docs/design-docs/` say how it is built, `DESIGN.md` how
@@ -25,7 +25,9 @@ then continues on a laptop.
 ### Brand Personality
 
 Calm, legible and trustworthy — a dependable personal library. Lowercase
-`nslinkhub`, a personal ns-series product under the namestarlit brand.
+`linkhub`, with the slogan **“Good links belong together.”** Company ownership
+belongs in repository documentation and legal policies, not in the product wordmark
+or its slogan. Hashikome owns the product.
 
 ### Anti-References
 
@@ -57,7 +59,7 @@ Calm, legible and trustworthy — a dependable personal library. Lowercase
 
 ## 1. Product Overview
 
-NSLinkHub turns the links people collect into **collections**: ordered,
+LinkHub turns the links people collect into **collections**: ordered,
 shareable guides with one stable address. A collection can be read by anyone it
 is shared with, published for anyone to discover, followed, discussed, and
 downloaded as a document.
@@ -73,7 +75,7 @@ again. Instead, a person keeps one living collection and shares its address;
 when the collection improves, everyone who has the address sees the
 improvement.
 
-NSLinkHub supports free public curation and paid convenience:
+LinkHub supports free public curation and paid convenience:
 
 - Everyone can create unlimited public collections, share their links, invite
   public contributors, and import bookmarks/CSV for free.
@@ -81,9 +83,9 @@ NSLinkHub supports free public curation and paid convenience:
   sharing and larger private allowances; AI curation and DOCX import are paid
   convenience features (§6.13). Recipients do not need a paid plan.
 
-NSLinkHub is an ns-series product: a personal project under the namestarlit
-brand, built to solve its author's own problem and published for others. It has
-no company affiliation, and nothing is deployed yet (§11).
+LinkHub is a Hashikome product, built from its author's own need to organize
+and share useful resources. It moved from the personal account to the company
+on 11 October 2026. Nothing is deployed yet (§11).
 
 ## 2. Product Goals
 
@@ -485,7 +487,7 @@ saves API only; subscriptions and home tabs Planned
   Communities are planned for paid Curator owners; invited members need no paid
   plan. Membership in one community grants nothing in another. The reusable intake
   service is planned to handle applications, team review, and client follow-up,
-  with NSLinkHub as its first integration; NSLinkHub retains invitations and access.
+  with LinkHub as its first integration; LinkHub retains invitations and access.
   Direct invitations need no form. See
   [ADR-0050](docs/engineering-decisions/0050-community-entities-and-intake-integration.md)
   and the [integration backlog](docs/backlog/curation-and-paid-services.md#community-access-and-intake-integration-task).
@@ -571,7 +573,7 @@ self-service account lifecycle, public Gravatar avatars and passwordless securit
 
 - **Sign-in and signup:** Separate `/sign-in` and `/sign-up` pages share email-first
   authentication, with Continue with Google secondary (ADR-0044). Sign-in reads
-  **Sign in to nslinkhub**; signup reads **Create your account**. Account absence
+  **Sign in to linkhub**; signup reads **Create your account**. Account absence
   is disclosed only after proof. A missing account requires explicit Create account;
   sign-in offers Use a different email, signup offers Already have an account? Sign in.
   Verified email proof is reused without another code. Creation offers optional
@@ -903,7 +905,7 @@ Delivery sequence and remaining work (completed foundations are marked):
     built (ADR-0033/0040).
 14. **Browser extension** (§7).
 15. **Targeted sharing by invitation** (§6.5).
-16. **ns-series single sign-on** (§6.11) — `docs/design-docs/identity-sso.md`.
+16. **Shared Hashikome identity** (§6.11) — `docs/design-docs/identity-sso.md`.
 17. **Audit logging strategy and redesign** — dedicated milestone after the
     fundamental product and service operations above are complete. Start from
     investigative needs and an inventory of real operations; settle event

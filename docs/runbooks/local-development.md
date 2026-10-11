@@ -85,7 +85,7 @@ Swagger UI: `http://localhost:4000/api/docs`.
 The dev database is disposable. To rebuild it from the migration baseline:
 
 ```bash
-docker exec nslinkhub-postgres psql -U postgres \
+docker exec linkhub-postgres psql -U postgres \
   -c "DROP DATABASE nslinkhub" -c "CREATE DATABASE nslinkhub"
 (cd apps/api && bunx prisma migrate deploy)
 ```
@@ -116,7 +116,7 @@ SEED_OFFLINE=1 bun run db:seed                     # no network: curated fallbac
 
 Authentication is email-code-only, with no password signup or fallback. The API commits encrypted
 mail to PostgreSQL; `bun run dev` starts the worker to relay and deliver it. For
-the API-only loop, run `bun run --filter @nslinkhub/api email:worker` separately. Apply migrations before starting the API or worker. Local
+the API-only loop, run `bun run --filter @linkhub/api email:worker` separately. Apply migrations before starting the API or worker. Local
 infrastructure still comes from `bun run infra:up`.
 
 `EMAIL_PROVIDER=capture` (default) uses bounded in-memory capture with no log or
@@ -138,7 +138,7 @@ rotation and database restore. Never rotate it without an operator-reviewed
 suppression rekey/import, since suppression rows do not store raw addresses.
 
 The worker uses the same database, auth secret and Redis configuration as the
-API. Production runs `bun run --filter @nslinkhub/api email:worker:prod` from the API
+API. Production runs `bun run --filter @linkhub/api email:worker:prod` from the API
 image. Do not share queue namespaces between deployments or test runs. Pending
 codes expire after five minutes; delivery stops after expiry. Run the worker
 for cleanup even during provider/Redis outages. Retention and endpoint contracts
@@ -169,7 +169,7 @@ port through a Bun subprocess. Server secrets never enter web props
 or bundles. `bun run dev` starts the email worker, so existing Resend settings
 continue to send real mail when work is queued; tests always force capture.
 
-Start production web with `bun run --filter @nslinkhub/web start`, which runs `server.ts`
+Start production web with `bun run --filter @linkhub/web start`, which runs `server.ts`
 and preserves per-visitor API read/form budgets. Direct `next start` is unsupported.
 Set the same `WEB_SOURCE_SECRET_FILE` on API/web; set `WEB_TRUSTED_PROXY_CIDRS`
 on web and `TRUSTED_PROXY_CIDRS` on API to the actual ingress addresses only.
@@ -240,3 +240,22 @@ is the public hostname. Production needs HTTPS; a credential registered for
 localhost is not a production credential. Configure passkeys and TOTP through
 Settings → Security; store recovery codes outside the account. The additive
 passwordless-security migration must be deployed before running the new API.
+
+## Existing checkout renamed to LinkHub
+
+The Compose project is explicitly `linkhub`, with `linkhub-postgres` and
+`linkhub-redis` containers. PostgreSQL retains the existing database name
+`nslinkhub`; no schema migration or reseed is required for branding.
+
+Before switching an existing `nslinkhub` Compose project, inspect the PostgreSQL
+mount and record its volume name. In the ignored repository-root `.env`, set
+`POSTGRES_VOLUME_NAME` to that existing volume and
+`POSTGRES_VOLUME_EXTERNAL=true`. Stop the local dev runner and remove the old
+project's containers with `docker compose -p nslinkhub down` **without**
+`--volumes`. Then run `bun run dev` from the new checkout. Only one PostgreSQL
+container may mount the data volume at a time. Verify the new container mounts
+the original volume and that existing records remain available.
+
+Fresh checkouts need no volume override and create `linkhub_pgdata`. Rollback
+uses the old Compose definition against the same volume after stopping the new
+project. Never reset the database to complete a project rename.

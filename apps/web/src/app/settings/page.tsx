@@ -1,4 +1,4 @@
-import type { Profile } from "@nslinkhub/types";
+import type { Profile } from "@linkhub/types";
 import type { Metadata } from "next";
 import { ProfileEditor } from "../../components/profile-editor";
 import { queryValue } from "../../lib/http";

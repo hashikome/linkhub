@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
-import type { ImportCommitResult } from "@nslinkhub/types";
+import type { ImportCommitResult } from "@linkhub/types";
 import { appError } from "../../common/errors/app-exception";
 import { AuthUser } from "../../common/interfaces/auth-user.interface";
 import { decodeCursor, encodeCursor } from "../../common/utils/cursor.util";

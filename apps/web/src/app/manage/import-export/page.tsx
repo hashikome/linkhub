@@ -1,4 +1,4 @@
-import type { ImportDraftView } from "@nslinkhub/types";
+import type { ImportDraftView } from "@linkhub/types";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { FormNotice } from "../../../components/form-notice";

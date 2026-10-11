@@ -39,8 +39,8 @@ traffic — never via `depends_on` and never automatically at app boot.
 Migrations must always work from empty. Cheap check against the local server:
 
 ```bash
-docker exec nslinkhub-postgres psql -U postgres -c "CREATE DATABASE scratch"
+docker exec linkhub-postgres psql -U postgres -c "CREATE DATABASE scratch"
 cd apps/api && DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5436/scratch" \
   bunx prisma migrate deploy
-docker exec nslinkhub-postgres psql -U postgres -c "DROP DATABASE scratch"
+docker exec linkhub-postgres psql -U postgres -c "DROP DATABASE scratch"
 ```

@@ -1,4 +1,4 @@
-import { webServerConfig } from "@nslinkhub/config/web-server";
+import { webServerConfig } from "@linkhub/config/web-server";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = { title: "Support" };
@@ -11,13 +11,13 @@ export default function Page() {
     <section className="reader account-flow support-page">
       <h1>Support</h1>
       <p>
-        Questions about nslinkhub, trouble signing in, or an email you didn't expect? We're happy to
+        Questions about linkhub, trouble signing in, or an email you didn't expect? We're happy to
         help.
       </p>
       {email ? (
         <p className="support-contact">
           Write to <a href={`mailto:${email}`}>{email}</a> and include the email address you use
-          with nslinkhub. Never send your sign-in code; we will never ask for it.
+          with linkhub. Never send your sign-in code; we will never ask for it.
         </p>
       ) : (
         <p className="support-contact">
@@ -30,13 +30,13 @@ export default function Page() {
       <h2 id="profile-picture">How do I update my profile picture?</h2>
       <p>
         We use <a href="https://gravatar.com/">Gravatar</a> for profile pictures. Sign in there or
-        create an account, then add and verify the same email address you use for nslinkhub. Upload
-        a picture and choose it for that email address.
+        create an account, then add and verify the same email address you use for linkhub. Upload a
+        picture and choose it for that email address.
       </p>
       <p>
         Your picture is public on your profile and contributions. Gravatar is optional: when no
         picture is available, we show your generated icon. After updating your picture, allow up to
-        an hour for the change to appear, then reload nslinkhub.
+        an hour for the change to appear, then reload linkhub.
       </p>
       <h2 id="passkeys">How do I use a passkey?</h2>
       <p>
@@ -69,7 +69,7 @@ export default function Page() {
       </p>
       <h2 id="google-sign-in">How do I sign in with Google?</h2>
       <p>
-        Choose Continue with Google and use the email for your nslinkhub account. If a first-time
+        Choose Continue with Google and use the email for your linkhub account. If a first-time
         check is needed, verify an email code or use a registered passkey to sign in. Any protection
         you enabled still applies.
       </p>

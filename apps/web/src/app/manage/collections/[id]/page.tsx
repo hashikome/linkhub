@@ -1,4 +1,4 @@
-import type { OperatorCollection } from "@nslinkhub/types";
+import type { OperatorCollection } from "@linkhub/types";
 import type { Metadata } from "next";
 import { FormNotice } from "../../../../components/form-notice";
 import { OperatorFailure } from "../../../../components/operator-failure";

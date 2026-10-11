@@ -1,4 +1,4 @@
-import type { SetLinkSharingRequest } from "@nslinkhub/types";
+import type { SetLinkSharingRequest } from "@linkhub/types";
 import { IsBoolean, IsOptional } from "class-validator";
 
 export class SetLinkSharingDto implements SetLinkSharingRequest {

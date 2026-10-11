@@ -1,4 +1,4 @@
-import type { UpdateResourceRequest } from "@nslinkhub/types";
+import type { UpdateResourceRequest } from "@linkhub/types";
 import {
   ArrayMaxSize,
   IsArray,

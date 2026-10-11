@@ -14,7 +14,7 @@ The [experience](web-product-experience.md) owns journeys and copy direction;
   per save); never crowd fields side by side or drop labels to save space.
 - **Copy scans at a glance.** Short paragraphs with clear space between them;
   emphasis is bold text, not extra panels competing with the actions.
-- **The wordmark is the logo.** Lowercase "nslinkhub" text only; no icon or mark.
+- **The wordmark is the logo.** Lowercase "linkhub" text only; no icon or mark.
 
 ## Layout and hierarchy
 
@@ -48,7 +48,7 @@ Do not make a row containing secondary controls into one enclosing link.
 | Heading resource | Plain section heading in resource order, with spacing rather than a card or separator. |
 | Expanded resource | Keep a persistent neutral surface and fine inset boundary around the title, destination, details and copy action. A small outer gap separates the open item from its neighbors. The grouping follows native `open` state, including without JavaScript; hover is not required, and keyboard focus remains distinct. |
 | Button | Filled accent for the primary action, bordered neutral with ink text for secondary, accent text for low emphasis. Shared primary/secondary button sizing: 32 px with a mouse/trackpad, 44 px touch targets on coarse pointers. Fields remain 38 px with fine pointers. Default/hover/focus/active/disabled/pending states share geometry. Signed-out navigation renders Sign in as a compact secondary button. |
-| Sharing | Profile, hub and collection sharing use contextual controls; Share nslinkhub belongs in the shared footer. Contributors occupy the top of the collection sidebar; Discussion sits directly below them and grows with its own content on wide, tall screens, capped by the available page space above the footer before scrolling internally. Empty discussions stay compact. Its position is independent of the collection header. The footer contains Share nslinkhub and Support beside the product identity. |
+| Sharing | Profile, hub and collection sharing use contextual controls; Share linkhub belongs in the shared footer. Contributors occupy the top of the collection sidebar; Discussion sits directly below them and grows with its own content on wide, tall screens, capped by the available page space above the footer before scrolling internally. Empty discussions stay compact. Its position is independent of the collection header. The footer contains Share linkhub and Support beside the product identity. |
 | Toast | Transient confirmations (saved, resent, signed out, done, copied) appear top-center as a small card in the page's own surface, border and radius, with a tone mark (✓ success, dot info), fitted to the message; they clear after ~5 s and the `?notice=` code is removed afterwards. Errors, warnings and anything needing action stay inline: info (neutral blue), warning (amber), error (red). |
 | Email verification | One flow for every purpose (sign in, first link, continue, resume, confirm, invitation): the start screen (reason line; the known address in bold or an email field; what happens next; Send code, plus Cancel where backing out makes sense) and the code screen (where it went in bold, the code, the purpose's button, "Didn't receive the code? Send a new code"). Short paragraphs with clear space; no extra panels. |
 | Pagination | Visible continuation control with pending state and result-count announcement; prevent duplicate loads; preserve existing results on a retryable page failure. |
@@ -163,7 +163,7 @@ production browser fixtures.
 ## Client architecture
 
 `apps/web` is a separate HTTP client, including its Server Components. It imports
-wire contracts from `@nslinkhub/types` and runtime config from `@nslinkhub/config`;
+wire contracts from `@linkhub/types` and runtime config from `@linkhub/config`;
 it never imports Prisma, Nest modules, database models or backend-owned business
 logic. Database-backed browser fixtures live under `apps/api/test/browser`,
 not in the web application. Backend validation and authorization remain decisive.
@@ -223,7 +223,7 @@ Notifications (`users.notifications_seen_at`); “Clear all” sets
 `notifications_cleared_at`. `GET /api/v1/notifications`, `POST …/seen` and
 `POST …/clear` are account-owned and separate from audited operator APIs.
 The footer stacks the current-year product copyright above a smaller, muted
-“an ns series product” line, with Share nslinkhub and Support links beside
+“Good links belong together.” line, with Share linkhub and Support links beside
 it. Site sharing stays in the footer. Privacy and Terms join it when those pages exist. Service status is reserved for API monitoring and
 has no client page or navigation entry.
 A single icon button beside the avatar cycles System → Light → Dark → System.
@@ -422,7 +422,7 @@ Routine profile-save confirmation is a compact green “Saved” with a check be
 the form; errors remain prominent. Show the public-address preview below the
 handle and only show format/availability guidance when it changes. Keep native
 field values intact through hydration and preserve edits made during a request.
-Page titles use the current surface name followed by “· nslinkhub”; hub titles
+Page titles use the current surface name followed by “· linkhub”; hub titles
 use the public hub display name. Account/private collection data and tokens do not appear
 in metadata titles.
 
@@ -551,7 +551,7 @@ immutable ID. Private listing authorization remains backend-owned.
 
 One self-hosted typeface (Schibsted Grotesk) keeps the brand consistent across
 platforms; the wordmark stays the plain text
-`nslinkhub` with no icon. All routes share one left content edge, one row
+`linkhub` with no icon. All routes share one left content edge, one row
 vocabulary (collections and resources), one button vocabulary and one form
 control style (fields under `main` share border, hover and focus states).
 Accent blue is reserved for primary actions, inline text links, focus and
@@ -660,7 +660,7 @@ only the final deletion confirmation receives destructive emphasis.
 
 Separate `/sign-in` and `/sign-up` share a centered 400px email-first column,
 slightly above the viewport midpoint, with stable placement across subsequent
-screens. Sign-in reads Sign in to nslinkhub; signup reads Create your account.
+screens. Sign-in reads Sign in to linkhub; signup reads Create your account.
 Visible email label/input, full-width primary Continue with email, quiet or, then
 full-width secondary Continue with Google. The footer switches entry while keeping
 the validated destination. Passkeys and factors appear only in subsequent steps.

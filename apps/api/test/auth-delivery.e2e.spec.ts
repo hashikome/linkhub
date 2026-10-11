@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { signInCodePurposes } from "@nslinkhub/types";
+import { signInCodePurposes } from "@linkhub/types";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { CODE_RESEND_SECONDS, createDeliveryAuth } from "../src/auth/delivery-auth";
 import { emailKey, unseal } from "../src/email/outbox";
@@ -109,11 +109,11 @@ describe("transactional codes-only auth", () => {
 
   it("persists purpose-specific copy on issue and resend without changing proof verification", async () => {
     const subjects = {
-      "sign-in": "Your nslinkhub sign-in code",
-      "first-link": "Verify your email to save your first link · nslinkhub",
-      continue: "Your code to continue in nslinkhub",
-      resume: "Sign back in to nslinkhub",
-      confirm: "Confirm it's you · nslinkhub",
+      "sign-in": "Your linkhub sign-in code",
+      "first-link": "Verify your email to save your first link · linkhub",
+      continue: "Your code to continue in linkhub",
+      resume: "Sign back in to linkhub",
+      confirm: "Confirm it's you · linkhub",
     };
     for (const purpose of signInCodePurposes) {
       const email = address();

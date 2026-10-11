@@ -1,10 +1,6 @@
 "use server";
-import { webServerConfig } from "@nslinkhub/config/web-server";
-import type {
-  CreateHeadingResourceRequest,
-  Resource,
-  UpdateResourceRequest,
-} from "@nslinkhub/types";
+import { webServerConfig } from "@linkhub/config/web-server";
+import type { CreateHeadingResourceRequest, Resource, UpdateResourceRequest } from "@linkhub/types";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { SectionEditState } from "../components/section-editor";

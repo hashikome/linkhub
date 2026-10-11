@@ -9,6 +9,22 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Make the discussion recovery browser fixture wait for the configured resend
+  window before requesting a fresh code; application rate limits are unchanged.
+  Refresh the text-import browser fixture to follow collection drafts and row
+  reassignment in the current review flow. Prevent non-interactive confirmation
+  toasts from intercepting clicks on the page beneath them.
+
+- Rename the active project and workspace packages to `linkhub` / `@linkhub/*`;
+  update web, email, API and authentication display names. Use “Good links belong
+  together.” as the slogan; keep Hashikome ownership in repository records.
+  Move the local checkout/shared planning under Hashikome and update references.
+- Use the explicit Compose project `linkhub`, with configurable external
+  PostgreSQL storage so existing development data survives the rename.
+- Refresh the README and onboarding walkthrough for current collection defaults,
+  import jobs, authentication, avatars and verification. The pre-push hook checks
+  the guide pin; the pin advances only after an implementation review.
+
 - Record ID-only collection URLs as the next implementation milestone (ADR-0053):
   handles resolve hubs only, and `/c/<id>` survives ownership transfers. Slug
   removal remains pending. Refresh public-default and attribution documentation.

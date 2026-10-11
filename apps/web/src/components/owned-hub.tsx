@@ -1,4 +1,4 @@
-import type { Collection, Profile } from "@nslinkhub/types";
+import type { Collection, Profile } from "@linkhub/types";
 import { withCursor } from "../lib/http";
 import { operatorRead } from "../lib/operator-read";
 import { Feedback } from "./feedback";

@@ -1,4 +1,4 @@
-import type { HubPage, PersonProfile as PersonProfileData } from "@nslinkhub/types";
+import type { HubPage, PersonProfile as PersonProfileData } from "@linkhub/types";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Feedback } from "../../components/feedback";

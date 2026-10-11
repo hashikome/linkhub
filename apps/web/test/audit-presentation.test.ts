@@ -1,5 +1,5 @@
 import { expect, it } from "bun:test";
-import { type AuditLogEntry, authenticationAuditActions } from "@nslinkhub/types";
+import { type AuditLogEntry, authenticationAuditActions } from "@linkhub/types";
 import { auditActionLabel, auditTarget } from "../src/lib/audit-presentation";
 
 const event: AuditLogEntry = {

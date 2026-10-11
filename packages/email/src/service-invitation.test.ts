@@ -11,7 +11,7 @@ describe("service invitations", () => {
         expiresAt: new Date("2026-10-13T12:00:00Z"),
         supportUrl: "https://links.example/support",
       });
-      expect(mail.subject).toContain(`nslinkhub service ${role}`);
+      expect(mail.subject).toContain(`linkhub service ${role}`);
       expect(mail.html).toContain(url);
       expect(mail.text).toContain(url);
       expect(mail.text).toContain("explicitly accept");
@@ -19,7 +19,7 @@ describe("service invitations", () => {
       expect(mail.html).not.toContain("Pigfarm");
       for (const body of [mail.html, mail.text]) {
         expect(body).toContain("https://links.example/support");
-        expect(body).toContain("an ns series product");
+        expect(body).toContain("Good links belong together.");
       }
     }
   });

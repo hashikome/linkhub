@@ -7,7 +7,7 @@ import {
   type ImportSourceKind,
   importRowStatuses,
   importSourceKinds,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import {
   ArrayMaxSize,
   ArrayMinSize,

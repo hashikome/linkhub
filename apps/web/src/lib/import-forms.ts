@@ -1,10 +1,10 @@
 import "server-only";
-import { webServerConfig } from "@nslinkhub/config/web-server";
+import { webServerConfig } from "@linkhub/config/web-server";
 import {
   type ImportDraftView,
   type ImportSelectionResult,
   importRowStatuses,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import { redirectResponse } from "./form-server";
 import { type ApiPath, sessionCookie } from "./http";
 import { parseImportTags } from "./import-tags";

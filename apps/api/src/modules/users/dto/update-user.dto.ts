@@ -1,4 +1,4 @@
-import type { UpdateProfileRequest } from "@nslinkhub/types";
+import type { UpdateProfileRequest } from "@linkhub/types";
 import { Transform } from "class-transformer";
 import {
   IsBoolean,

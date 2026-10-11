@@ -4,7 +4,7 @@ import type {
   ManagedCollectionAction,
   OperatorAccount,
   ServiceInvitationView,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import { collectionActionPath } from "../lib/collection-action-path";
 import { shortIds } from "../lib/short-id";
 import { ActionPicker } from "./action-picker";

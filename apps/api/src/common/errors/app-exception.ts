@@ -4,7 +4,7 @@ import {
   type ApiErrorDetails,
   apiErrors,
   type EmptyDetails,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 
 // Only this instance type is allowed to carry domain codes/details through the
 // filter. A framework HttpException with a lookalike payload is not trusted.

@@ -1,10 +1,10 @@
-import type { OperationCommand } from "@nslinkhub/types";
+import type { OperationCommand } from "@linkhub/types";
 import {
   type OperationAction,
   type OperationReason,
   operationActions,
   operationReasons,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import { IsIn, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from "class-validator";
 import { CursorQueryDto } from "../../common/dto/cursor-query.dto";
 export class OperationDto implements OperationCommand {

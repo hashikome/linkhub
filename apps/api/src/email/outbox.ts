@@ -4,8 +4,8 @@ import {
   renderEmailChangeConfirmation,
   renderNewEmailVerification,
   renderVerificationCode,
-} from "@nslinkhub/email";
-import type { VerificationPurpose } from "@nslinkhub/types";
+} from "@linkhub/email";
+import type { VerificationPurpose } from "@linkhub/types";
 import type { Prisma } from "../generated/prisma/client";
 
 export type EmailKind = "sign-in" | "current-email" | "new-email";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { collectionAddress, isPublicLinkHost } from "@nslinkhub/types";
+import { collectionAddress, isPublicLinkHost } from "@linkhub/types";
 import { publicLinkUrl } from "./url.util";
 
 describe("public link addresses", () => {

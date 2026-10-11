@@ -1,5 +1,5 @@
 ---
-name: "nslinkhub"
+name: "linkhub"
 description: "A dependable personal library: legible titles, clear destinations, visible structure."
 colors:
   canvas: "oklch(1 0 0)"
@@ -39,7 +39,7 @@ spacing:
   reader-max: "48rem"
 ---
 
-# Design System: nslinkhub
+# Design System: linkhub
 
 ## Overview
 
@@ -55,7 +55,7 @@ fill a page — no counts, decorative covers, recommendations or social proof.
 - Light, Dark and System appearances from one set of semantic OKLCH tokens.
 - One self-hosted sans (Schibsted Grotesk) with fixed rem product typography.
 - Grouping through separators and surface changes, not shadows or panels.
-- The lowercase wordmark `nslinkhub` alone is the logo — no icon.
+- The lowercase wordmark `linkhub` alone is the logo — no icon.
 - UX over compactness; copy in short, scannable paragraphs (see the
   [interface system](docs/design-docs/web-interface-system.md) principles).
 
@@ -217,7 +217,7 @@ Body/muted/feedback pairs exceed 4.5:1; control boundaries exceed 3:1.
 | Expanded item description | `1rem`, line-height `1.6`, weight 400; subordinate to its title, above the smaller metadata |
 | Section heading | `1.25rem / 1.75rem`; weight 650, `-0.015em` |
 | Page heading | `2.125rem / 2.5rem` (`1.875rem` below 640 px); weight 650, `-0.025em` tracking |
-| Wordmark | The text `nslinkhub` alone is the logo (no icon), `1.125rem`; bold, `-0.025em` tracking |
+| Wordmark | The text `linkhub` alone is the logo (no icon), `1.125rem`; bold, `-0.025em` tracking |
 | Spacing unit | `0.25rem`; use 1, 2, 3, 4, 5, 6, 8, 10, 12 units |
 | Page gutters | `1.25rem` below 640 px; `2rem` above |
 | Shell maximum | `70rem` |
@@ -255,9 +255,9 @@ autosave/native Save changes flow.
 
 The header separates the left wordmark from Explore and the avatar-only account menu on the right. The menu groups Profile, Hub (when owned),
 Notifications (with an unread count), Settings and role-gated Manage above
-Sign out. The footer stacks “© <current year> nslinkhub” above the smaller, muted
-"an ns series product" line on the left, with muted, vertically centered Share
-nslinkhub and Support links on the right at the same font size as header
+Sign out. The footer stacks “© <current year> linkhub” above the smaller, muted
+"Good links belong together." line on the left, with muted, vertically centered Share
+linkhub and Support links on the right at the same font size as header
 navigation (wrapping below on phones). The footer sits at the viewport bottom on short pages and follows
 content at the end of long pages; it never stays pinned during document scrolling.
 Site sharing belongs in the footer. There
@@ -287,7 +287,7 @@ controls with opacity; use the pale notice color as decoration.
 
 Sign-in and signup share a roughly 400px column, horizontally centered and slightly
 above the viewport midpoint. Keep the same anchor across proof/creation screens.
-Sign-in heading: Sign in to nslinkhub. Signup heading: Create your account.
+Sign-in heading: Sign in to linkhub. Signup heading: Create your account.
 Email label/input precedes the full-width primary Continue with email; quiet or
 and full-width secondary Continue with Google follow. Footer links switch intent.
 No image or extra marketing copy is needed. Optional hub creation is progressively

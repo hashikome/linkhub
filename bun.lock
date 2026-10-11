@@ -10,10 +10,13 @@
       },
     },
     "apps/api": {
-      "name": "@nslinkhub/api",
+      "name": "@linkhub/api",
       "version": "0.0.1",
       "dependencies": {
         "@better-auth/passkey": "1.6.23",
+        "@linkhub/config": "workspace:*",
+        "@linkhub/email": "workspace:*",
+        "@linkhub/types": "workspace:*",
         "@logtape/logtape": "2.3.0",
         "@logtape/sentry": "2.3.0",
         "@nestjs/common": "^11.0.1",
@@ -21,9 +24,6 @@
         "@nestjs/core": "^11.0.1",
         "@nestjs/platform-express": "^11.0.1",
         "@nestjs/swagger": "^11.2.0",
-        "@nslinkhub/config": "workspace:*",
-        "@nslinkhub/email": "workspace:*",
-        "@nslinkhub/types": "workspace:*",
         "@prisma/adapter-pg": "^7.8.0",
         "@prisma/client": "^7.8.0",
         "@sentry/bun": "10.69.0",
@@ -57,11 +57,11 @@
       },
     },
     "apps/web": {
-      "name": "@nslinkhub/web",
+      "name": "@linkhub/web",
       "version": "0.0.1",
       "dependencies": {
-        "@nslinkhub/config": "workspace:*",
-        "@nslinkhub/types": "workspace:*",
+        "@linkhub/config": "workspace:*",
+        "@linkhub/types": "workspace:*",
         "@simplewebauthn/browser": "13.2.2",
         "next": "16.3.8",
         "proxy-addr": "2.0.7",
@@ -83,29 +83,29 @@
       },
     },
     "packages/config": {
-      "name": "@nslinkhub/config",
+      "name": "@linkhub/config",
       "version": "0.0.1",
     },
     "packages/email": {
-      "name": "@nslinkhub/email",
+      "name": "@linkhub/email",
       "version": "0.0.1",
       "dependencies": {
-        "@nslinkhub/types": "workspace:*",
+        "@linkhub/types": "workspace:*",
         "@react-email/components": "^0.5.6",
         "react": "^19.0.0",
       },
       "devDependencies": {
-        "@nslinkhub/config": "workspace:*",
+        "@linkhub/config": "workspace:*",
         "@types/bun": "^1.3.14",
         "@types/react": "^19.0.0",
         "typescript": "^6.0.3",
       },
     },
     "packages/types": {
-      "name": "@nslinkhub/types",
+      "name": "@linkhub/types",
       "version": "0.0.1",
       "devDependencies": {
-        "@nslinkhub/config": "workspace:*",
+        "@linkhub/config": "workspace:*",
         "typescript": "^6.0.3",
       },
     },
@@ -291,6 +291,16 @@
 
     "@levischuck/tiny-cbor": ["@levischuck/tiny-cbor@0.2.11", "", {}, "sha512-llBRm4dT4Z89aRsm6u2oEZ8tfwL/2l6BwpZ7JcyieouniDECM5AqNgr/y08zalEIvW3RSK4upYyybDcmjXqAow=="],
 
+    "@linkhub/api": ["@linkhub/api@workspace:apps/api"],
+
+    "@linkhub/config": ["@linkhub/config@workspace:packages/config"],
+
+    "@linkhub/email": ["@linkhub/email@workspace:packages/email"],
+
+    "@linkhub/types": ["@linkhub/types@workspace:packages/types"],
+
+    "@linkhub/web": ["@linkhub/web@workspace:apps/web"],
+
     "@logtape/logtape": ["@logtape/logtape@2.3.0", "", {}, "sha512-s/pxCgf9Gg75ypTV/bRUq355Dy/JP/zUJWfgJQPO5pTkXC23X2AXBcmBBgFiWH+bSi4yiX/G06qGV8CdAWD3SA=="],
 
     "@logtape/sentry": ["@logtape/sentry@2.3.0", "", { "peerDependencies": { "@logtape/logtape": "^2.3.0", "@sentry/core": ">=8.0.0" } }, "sha512-THBEtR1Y/9d9JQPS2C7SYsqZUz3kmhMfXMCPO3E71b5QsAIqINskYNmnG+8lnBTUangH+NMO/37/96MuRFcR4g=="],
@@ -350,16 +360,6 @@
     "@noble/ciphers": ["@noble/ciphers@2.2.0", "", {}, "sha512-Z6pjIZ/8IJcCGzb2S/0Px5J81yij85xASuk1teLNeg75bfT07MV3a/O2Mtn1I2se43k3lkVEcFaR10N4cgQcZA=="],
 
     "@noble/hashes": ["@noble/hashes@2.2.0", "", {}, "sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg=="],
-
-    "@nslinkhub/api": ["@nslinkhub/api@workspace:apps/api"],
-
-    "@nslinkhub/config": ["@nslinkhub/config@workspace:packages/config"],
-
-    "@nslinkhub/email": ["@nslinkhub/email@workspace:packages/email"],
-
-    "@nslinkhub/types": ["@nslinkhub/types@workspace:packages/types"],
-
-    "@nslinkhub/web": ["@nslinkhub/web@workspace:apps/web"],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.1", "", {}, "sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q=="],
 

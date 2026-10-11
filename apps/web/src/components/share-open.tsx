@@ -1,5 +1,5 @@
 "use client";
-import { createShareOpenEvent, type ShareKind, shareAttributionFromParams } from "@nslinkhub/types";
+import { createShareOpenEvent, type ShareKind, shareAttributionFromParams } from "@linkhub/types";
 import { useEffect, useRef } from "react";
 import { submitForm } from "../lib/http";
 import { isUuid } from "../lib/validation";

@@ -1,5 +1,5 @@
 "use client";
-import type { Resource } from "@nslinkhub/types";
+import type { Resource } from "@linkhub/types";
 import { useActionState, useRef, useState } from "react";
 
 type MoveAction = (previous: string, data: FormData) => Promise<string>;

@@ -10,8 +10,8 @@ import type {
   ShareDescriptor,
   SharedCollection,
   Collection as WireCollection,
-} from "@nslinkhub/types";
-import { type ActivityEntry, auditActions, contentActions } from "@nslinkhub/types";
+} from "@linkhub/types";
+import { type ActivityEntry, auditActions, contentActions } from "@linkhub/types";
 import { isUUID } from "class-validator";
 import { CursorQueryDto } from "src/common/dto/cursor-query.dto";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";

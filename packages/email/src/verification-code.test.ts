@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { verificationPurposes } from "@nslinkhub/types";
+import { verificationPurposes } from "@linkhub/types";
 import type { CodeEmailBaseInput } from "./code-email.js";
 import { renderEmailChangeConfirmation } from "./email-change-confirm.js";
 import { renderVerificationCode } from "./verification-code.js";
@@ -30,12 +30,12 @@ describe("code emails", () => {
         expect(body).toContain(valid.supportUrl);
         expect(body).toContain("Do not share this code with anyone.");
         expect(body).not.toContain("Do not forward this email");
-        expect(body).toContain("an ns series product");
+        expect(body).toContain("Good links belong together.");
         expect(body).not.toContain("mailto:");
       }
       // Subjects never carry the code.
       expect(email.subject).not.toContain(valid.code);
-      expect(email.subject.toLowerCase()).toContain("nslinkhub");
+      expect(email.subject.toLowerCase()).toContain("linkhub");
     }
   });
 

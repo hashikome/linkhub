@@ -1,4 +1,4 @@
-import type { OperatorAccount } from "@nslinkhub/types";
+import type { OperatorAccount } from "@linkhub/types";
 import type { Metadata } from "next";
 import { FormNotice } from "../../../components/form-notice";
 import { teamRows } from "../../../components/manage-rows";

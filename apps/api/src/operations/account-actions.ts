@@ -1,4 +1,4 @@
-import type { AccountOperationAction, OperatorAccount } from "@nslinkhub/types";
+import type { AccountOperationAction, OperatorAccount } from "@linkhub/types";
 
 export function availableAccountActions(
   account: Pick<

@@ -312,7 +312,7 @@ function request(
         signal,
         headers: {
           accept: accepted[kind][0],
-          "user-agent": "nslinkhub-link-metadata/1.0 (+metadata lookup for saved links)",
+          "user-agent": "linkhub-link-metadata/1.0 (+metadata lookup for saved links)",
         },
         // Pin the vetted address; TLS still verifies the original host name.
         lookup: (_host, options, callback) => {

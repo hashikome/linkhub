@@ -62,7 +62,7 @@ describe("email-entry service invitations (HTTP)", () => {
     });
     const payload = unseal(mail.payload as string, emailConfig().secret);
     if (invitation) {
-      expect(payload.subject).toBe("Verify your email to accept your nslinkhub invitation");
+      expect(payload.subject).toBe("Verify your email to accept your linkhub invitation");
       expect(payload.text).toContain("activate your invited role");
     }
     const code = payload.text.match(/^\d{8}$/m)?.[0];

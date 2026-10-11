@@ -64,10 +64,9 @@ Each document distinguishes implemented contracts from planned behavior.
   templates, PostgreSQL outbox and BullMQ worker, signed webhooks.
 - [observability.md](observability.md): LogTape/Sentry boundary, telemetry and
   PII rules.
-- [infra-deployment.md](infra-deployment.md): namestarlit VPS, Dokploy Stack
+- [infra-deployment.md](infra-deployment.md): shared Hashikome infrastructure, Dokploy Stack
   mode, GHCR images and topology files.
-- [identity-sso.md](identity-sso.md): ns-series IAM direction ("Continue with
-  namestarlit").
+- [identity-sso.md](identity-sso.md): shared Hashikome IAM direction (integration and final naming pending).
 - [monetization.md](monetization.md): accepted free public curation and paid private sharing, AI/DOCX and
   monitoring; billing, quotas and public creation defaults await implementation.
 

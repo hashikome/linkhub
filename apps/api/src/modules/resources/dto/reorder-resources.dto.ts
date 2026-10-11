@@ -1,4 +1,4 @@
-import type { ReorderResourcesRequest } from "@nslinkhub/types";
+import type { ReorderResourcesRequest } from "@linkhub/types";
 import { Type } from "class-transformer";
 import {
   ArrayMinSize,

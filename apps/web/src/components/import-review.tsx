@@ -4,7 +4,7 @@ import type {
   ImportRowStatus,
   ImportRowView,
   ImportSelectionResult,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { browserRead } from "../lib/browser-api";

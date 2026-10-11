@@ -20,7 +20,7 @@ export async function renderServiceInvitation(input: {
   if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
     throw new Error("Invalid invitation URL");
   const role = input.role === "admin" ? "service admin" : "service operator";
-  const subject = `You're invited to be an nslinkhub ${role}`;
+  const subject = `You're invited to be a linkhub ${role}`;
   const html = await render(
     <Html lang="en">
       <Head />
@@ -29,7 +29,7 @@ export async function renderServiceInvitation(input: {
         style={{ backgroundColor: "#ffffff", color: "#1a1a1a", fontFamily: "Arial, sans-serif" }}
       >
         <Container style={{ maxWidth: "560px", padding: "40px 24px", margin: "0 auto" }}>
-          <Text style={{ fontSize: "22px", fontWeight: 700 }}>nslinkhub</Text>
+          <Text style={{ fontSize: "22px", fontWeight: 700 }}>linkhub</Text>
           <Text style={{ fontSize: "18px", lineHeight: "28px" }}>
             You have been invited to be a {role}.
           </Text>
@@ -69,6 +69,6 @@ export async function renderServiceInvitation(input: {
   return {
     subject,
     html,
-    text: `${subject}\n\nOpen the invitation and explicitly accept if you want this role. New users enter their name to create an account. Everyone must then verify a fresh email code before the role becomes active, including people who are already signed in. Opening the link does not grant access.\n\n${url.href}\n\nExpires ${input.expiresAt.toISOString()} (UTC). You can decline or ignore this invitation. Sign in with the email that received it.\n\nNot expecting this invitation? You can ignore it; nothing changes. Need help? Visit ${input.supportUrl}\n\n© ${new Date().getUTCFullYear()} nslinkhub\nan ns series product`,
+    text: `${subject}\n\nOpen the invitation and explicitly accept if you want this role. New users enter their name to create an account. Everyone must then verify a fresh email code before the role becomes active, including people who are already signed in. Opening the link does not grant access.\n\n${url.href}\n\nExpires ${input.expiresAt.toISOString()} (UTC). You can decline or ignore this invitation. Sign in with the email that received it.\n\nNot expecting this invitation? You can ignore it; nothing changes. Need help? Visit ${input.supportUrl}\n\n© ${new Date().getUTCFullYear()} linkhub\nGood links belong together.`,
   };
 }

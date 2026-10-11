@@ -1,6 +1,6 @@
 import "server-only";
-import { webServerConfig } from "@nslinkhub/config/web-server";
-import type { CaptureRequest, CaptureResult } from "@nslinkhub/types";
+import { webServerConfig } from "@linkhub/config/web-server";
+import type { CaptureRequest, CaptureResult } from "@linkhub/types";
 import { cookies } from "next/headers";
 import { type CaptureDraft, draftTtl, fitDraft, openDraft } from "./capture-draft";
 import { serverCookie } from "./cookies";

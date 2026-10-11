@@ -11,7 +11,7 @@ import type {
   Resource,
   SavedCollection,
   SharedCollection,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";

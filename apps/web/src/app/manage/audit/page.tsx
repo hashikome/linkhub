@@ -1,4 +1,4 @@
-import type { AuditLogEntry, SessionView } from "@nslinkhub/types";
+import type { AuditLogEntry, SessionView } from "@linkhub/types";
 import type { Metadata } from "next";
 import { AuditEvents } from "../../../components/audit-events";
 import { AuditFilters } from "../../../components/audit-filters";

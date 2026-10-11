@@ -1,4 +1,4 @@
-import type { UpdateCollectionRequest } from "@nslinkhub/types";
+import type { UpdateCollectionRequest } from "@linkhub/types";
 import {
   IsBoolean,
   IsInt,

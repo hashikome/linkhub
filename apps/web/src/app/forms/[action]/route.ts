@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { webServerConfig } from "@nslinkhub/config/web-server";
+import { webServerConfig } from "@linkhub/config/web-server";
 import type {
   CaptureLink,
   CreateCommentRequest,
@@ -11,7 +11,7 @@ import type {
   UpdateCommentRequest,
   UpdateProfileRequest,
   VerifySignInCodeRequest,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import {
   accountActions,
   collectionAddress,
@@ -20,7 +20,7 @@ import {
   operationActions,
   operationReasons,
   signInCodePurposes,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import { auditContinuation, auditQuery } from "../../../lib/audit-query";
 import type { CaptureDraft } from "../../../lib/capture-draft";
 import { draftCookie, draftRoom, readDraft, saveDraft } from "../../../lib/capture-server";

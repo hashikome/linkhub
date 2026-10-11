@@ -1,5 +1,5 @@
-import { publicOrigins } from "@nslinkhub/config/public-origins";
-import { collectionAddress, isPublicLinkHost } from "@nslinkhub/types";
+import { publicOrigins } from "@linkhub/config/public-origins";
+import { collectionAddress, isPublicLinkHost } from "@linkhub/types";
 import { appError } from "../errors/app-exception";
 
 export function canonicalizeUrl(url: string) {

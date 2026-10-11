@@ -1,4 +1,4 @@
-import { type SignInCodePurpose, signInCodePurposes } from "@nslinkhub/types";
+import { type SignInCodePurpose, signInCodePurposes } from "@linkhub/types";
 import { emailOTP } from "better-auth/plugins";
 import { AppException, appError } from "../common/errors/app-exception";
 import { AUTHORITY_LOCK } from "../database/authority-context";

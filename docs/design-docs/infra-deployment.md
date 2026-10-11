@@ -1,19 +1,21 @@
-# Infrastructure & Deployment Direction (ns series)
+# Infrastructure & Deployment Direction (Hashikome)
 
 Status: API/worker release artifacts and local rehearsals exist; the web image
 and live deployment acceptance are pending. Nothing is deployed.
 The [release runbook](../runbooks/release.md) owns commands, required operator
 inputs, local evidence limits, migration ordering and outstanding live proof.
 
-The deployment model is shared across the ns series and recorded here as
-NSLinkHub's own: the ns series is personal work under the namestarlit brand and
-runs on its **own** VPS and Dokploy instance — completely separate
-infrastructure from anything the author's company operates.
+The owner confirmed a shared Hashikome foundation on 11 October 2026. This
+supersedes the earlier direction of a separate personal namestarlit VPS/Dokploy
+instance and an nsinfra repository. LinkHub is now a company product; WorkLog and
+the portfolio remain personal. This ownership change does not deploy anything.
 
 ## Direction
 
-All ns products (nslinkhub, nsworklog, later nsauth, future ns*) deploy to a
-single namestarlit VPS managed by **self-hosted Dokploy**:
+Use Hashikome's shared self-hosted Dokploy administration and the existing
+`hashikome/infra` repository for company infrastructure. Host topology, capacity,
+shared identity scope, and implementation remain separate planning work. The
+product-owned release contracts below remain the intended approach:
 
 - **GitHub Actions owns verification and builds.** It runs the repository's
   verify workflow, builds immutable production images from the reviewed
@@ -27,7 +29,7 @@ single namestarlit VPS managed by **self-hosted Dokploy**:
   product on the production host.
 - **Swarm stack mode, not standalone compose.** Dokploy runs on Docker Swarm
   underneath, and its Compose service type offers an explicit **Stack** mode
-  (`docker stack deploy`); ns products use it. Production topology files are
+  (`docker stack deploy`); company products use it. Production topology files are
   written in the swarm dialect from day one: no `build:` (unavailable in
   stack mode — which mechanically enforces the prebuilt-image rule), no
   reliance on `depends_on` (ignored by swarm; migration-before-serve ordering
@@ -46,7 +48,7 @@ single namestarlit VPS managed by **self-hosted Dokploy**:
   - `docker-stack.local.yml` — a required artifact, not a contingency: the
     local single-node-swarm simulation of the production topology
     (`docker swarm init` + `docker stack deploy`), the established practice
-    in other namestarlit projects. It is how stack-dialect behavior
+    in other projects. It is how stack-dialect behavior
     (secrets, `deploy.*` policies, ordering without `depends_on`) is
     rehearsed before anything reaches the VPS.
   - `docker-stack.stag.yml` only if a dedicated staging environment ever
@@ -60,8 +62,7 @@ single namestarlit VPS managed by **self-hosted Dokploy**:
   secret-file contracts, migration commands, and release ordering. Dokploy
   values are deployment inputs; durable runtime decisions stay documented in
   source control.
-- **A private ns infrastructure repository (working name: nsinfra) owns the
-  shared operational layer**: VPS provisioning, host hardening, firewall and
+- **The private `hashikome/infra` repository owns the shared operational layer**: VPS provisioning, host hardening, firewall and
   SSH policy, pinned Dokploy installation/upgrades/backup/recovery, DNS and
   TLS policy, registry integration, shared backup destinations with
   restore-drill automation, and shared observability/uptime services. It
@@ -75,19 +76,18 @@ GitHub Actions (per product repo)
   -> push immutable SHA-tagged images to GHCR
   -> update release inputs and trigger Dokploy
 
-namestarlit VPS
+Hashikome infrastructure
   -> Dokploy management services and deployment queue
   -> Dokploy-managed Traefik
-       -> nslinkhub web + api
-       -> nsworklog
-       -> nsauth (when it exists)
-  -> product workers (the nslinkhub email and link-metadata worker)
+       -> linkhub web + api
+       -> shared identity (when implemented)
+  -> product workers (the linkhub email and link-metadata worker)
   -> PostgreSQL 18 (one instance, one database per product)
   -> dedicated queue Redis per product that needs one
-  -> shared services (uptime/observability) as nsinfra adds them
+  -> shared services (uptime/observability) as company infrastructure adds them
 ```
 
-Defaults, revisitable when load or isolation needs justify it: one PostgreSQL
+Candidate initial topology, to review with company infrastructure planning: one PostgreSQL
 instance with per-product databases; a dedicated queue Redis per product that
 runs queues (AOF persistence, `noeviction`, never reused as a cache). The VPS
 is one failure domain: apply explicit resource limits, monitor disk and
@@ -123,7 +123,7 @@ credentials and authorization remain backend-owned. See
   values are never logged and never baked into images.
 - Health and readiness endpoints are part of each product's API contract.
 - Migrations run as an explicit release step owned by the product repo
-  (`prisma migrate deploy` for nslinkhub), ordered before the new app
+  (`prisma migrate deploy` for linkhub), ordered before the new app
   version serves traffic.
 - Dokploy project/environment names stay configurable — operational naming is
   not a durable contract (the naming-boundaries rule).

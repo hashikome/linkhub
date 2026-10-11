@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { auditReadActions } from "@nslinkhub/types";
+import { auditReadActions } from "@linkhub/types";
 import { isUUID } from "class-validator";
 import type { PrismaService } from "../database/prisma.service";
 import type { AuditLogQueryDto } from "./dto/audit-query.dto";

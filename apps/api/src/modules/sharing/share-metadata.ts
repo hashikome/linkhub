@@ -4,7 +4,7 @@ import {
   SHARE_ATTRIBUTION_KEYS,
   type ShareAttribution,
   type ShareContext,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import { isISO8601 } from "class-validator";
 
 export function ignored(warnings: ApiWarning[], field: string, message: string) {

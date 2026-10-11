@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type { HandleAvailability } from "@nslinkhub/types";
+import type { HandleAvailability } from "@linkhub/types";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { recordAudit } from "../../common/audit";

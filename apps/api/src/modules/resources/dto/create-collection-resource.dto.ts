@@ -1,7 +1,4 @@
-import type {
-  CreateCollectionResourceRequest,
-  CreateHeadingResourceRequest,
-} from "@nslinkhub/types";
+import type { CreateCollectionResourceRequest, CreateHeadingResourceRequest } from "@linkhub/types";
 import {
   ArrayMaxSize,
   IsArray,

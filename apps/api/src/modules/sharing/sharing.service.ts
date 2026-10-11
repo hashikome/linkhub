@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { BadRequestException, HttpException, Injectable } from "@nestjs/common";
-import { publicOrigins } from "@nslinkhub/config/public-origins";
+import { publicOrigins } from "@linkhub/config/public-origins";
 import type {
   ApiWarning,
   CreatedShareEntry,
@@ -10,7 +10,7 @@ import type {
   ShareDescriptor,
   ShareEntry,
   ShareKind,
-} from "@nslinkhub/types";
+} from "@linkhub/types";
 import { isUUID } from "class-validator";
 import { appError } from "../../common/errors/app-exception";
 import type { AuthUser } from "../../common/interfaces/auth-user.interface";
@@ -410,7 +410,7 @@ export class SharingService {
   ): Promise<ShareDescriptor> {
     const id = query.id ?? "";
     let path = "/",
-      name = "nslinkhub";
+      name = "linkhub";
     let access: ShareDescriptor["access"] = "public";
     let canManageAccess = false;
     let resourceId: string | null = null;

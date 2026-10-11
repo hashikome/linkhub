@@ -2,7 +2,7 @@
 
 Status: implemented for profiles, hubs, collections and the site. Social destinations remain deferred.
 
-The site-wide “Share nslinkhub” entry lives in the shared footer alongside Support.
+The site-wide “Share linkhub” entry lives in the shared footer alongside Support.
 
 One `/share` page renders the resource name, share heading, labeled URL, Copy link
 and a contextual return link below. Copy link is visible but disabled before
@@ -238,7 +238,7 @@ an acceptance/rejection rule. It is not returned as a public credential. No open
 identity, IP or user agent is automatically recorded. Clients choose their metadata
 and should not submit secrets or private access tokens in context.
 
-`createShareOpenEvent(payload)` in `@nslinkhub/types` snapshots the payload, generates
+`createShareOpenEvent(payload)` in `@linkhub/types` snapshots the payload, generates
 a UUID event ID and defaults occurredAt to the current time. Call it once per open
 and reuse the complete returned object on retries; a fresh visit/reload gets a new
 event. `shareAttributionFromParams` explicitly selects recognized URL parameters.

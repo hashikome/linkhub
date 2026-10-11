@@ -1,4 +1,4 @@
-import type { Collection, Resource } from "@nslinkhub/types";
+import type { Collection, Resource } from "@linkhub/types";
 import { CollectionMeta, Tags } from "./primitives";
 import { ResourceSections } from "./resource-sections";
 

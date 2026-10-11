@@ -1,4 +1,4 @@
-# ns-series identity and single sign-on
+# Shared Hashikome identity and single sign-on
 
 Status: accepted direction; integration is not built. Local email codes,
 user-verified passkeys, Google sign-in and confirmed account creation and optional TOTP/recovery are
@@ -8,26 +8,30 @@ explicitly amends delivery order to ship these methods before nsauth. Delivery o
 
 ## Scope and ownership
 
-**nsauth** is the internal name for the ns-series identity provider. The public
-account brand is **namestarlit**, lowercase, with **Continue with namestarlit**
-as the sign-in action. Branding belongs in configuration and copy, never in
-schemas, API fields or environment-variable names.
+The 11 October company direction supersedes the earlier personal **namestarlit**
+account brand and “Continue with namestarlit” action. Hashikome will own the shared
+identity foundation. Its final name, provider and first integration scope remain
+open; **nsauth** in older records is a working name, not a deployed service.
+Branding belongs in configuration and copy, never in schemas, API fields or
+environment-variable names.
 
-The ns series serves individuals. Its identity scope is users, single sign-on,
-profile, MFA and federated login. Organizations, business tenants, groups and
+The existing product-user proposal covers users, single sign-on, profile, MFA
+and federated login. Operator access may also be considered during the shared
+platform review; no cross-product grants are introduced by this rename.
+Organizations, business tenants, groups and
 service accounts are outside this scope. Product authorization stays in each
-product: NSLinkHub owns hub ownership, collection grants and service-operator
+product: LinkHub owns hub ownership, collection grants and service-operator
 permissions. An identity-provider claim never grants access to a collection or
 creates an operator grant.
 
 ```text
-nsauth (separate service)
+Shared identity (separate service)
   owns: credentials, immutable identity subject, identity sessions,
         MFA/recovery, basic profile, consent and connected services
   authenticates through OIDC
-    -> NSLinkHub: local user ID, product sessions, onboarding,
+    -> LinkHub: local user ID, product sessions, onboarding,
                   hub ownership, collection policy and product data
-    -> other ns products: their own users, sessions, policies and data
+    -> other company products: their own users, sessions, policies and data
 ```
 
 Account management is one lightweight center for shared identity concerns:
@@ -42,7 +46,7 @@ stay in the product.
    and foreign keys continue to use the local UUIDv7 user ID.
 2. **Require product enrollment.** SSO authenticates a person; it does not
    silently enroll them in every product. First use requires that product's
-   explicit signup and app-owned onboarding. NSLinkHub's
+   explicit signup and app-owned onboarding. LinkHub's
    [people-and-hubs design](people-and-hubs.md) creates a hub only on first
    save, collection creation or receipt of a collection transfer.
 3. **Keep product sessions local.** The IdP authenticates; the product issues
@@ -57,7 +61,7 @@ stay in the product.
    boundary. Onboarding is callable from any supported authentication path.
 
 Account disable/delete and identity-wide logout are low-frequency
-identity signals delivered through authenticated HTTP callbacks. The ns-series
+identity signals delivered through authenticated HTTP callbacks. The shared identity
 direction does not require a message broker; product background jobs use their
 own BullMQ/Redis queues. Callback authentication, replay protection and failure
 recovery must be specified and tested in the integration plan. Product email
@@ -76,7 +80,7 @@ Keep `resolveSessionUser` in
 `apps/api/src/common/guards/auth.guard.ts`, app-owned onboarding, immutable
 local identities and `CollectionPolicyService` independent of provider details.
 The raw better-auth handler continues to mount before body parsers. Deployment
-uses the [ns-series platform](infra-deployment.md).
+uses the [Hashikome platform](infra-deployment.md).
 
 ## Service-operator authority
 
