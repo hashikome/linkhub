@@ -12,7 +12,7 @@ answer in your own words before continuing. Reading the whole file in one go
 is the failure mode this structure exists to prevent. Every file is a
 clickable link.
 
-**Pin:** verified against commit `48f61e3`. This is enforced, not honor
+**Pin:** verified against commit `0421872`. This is enforced, not honor
 system: `check:guide-pin` (part of `bun run verify`) fails when any file this
 guide links changes after the pinned commit. To clear it, reread the affected
 sessions, fix any drift, and move the pin to the latest commit — in a
@@ -55,24 +55,24 @@ this guide's freshness pin, typechecks, format/lint, tooling/email tests,
 build, unit tests, isolated database lifecycle checks and e2e).
 
 ```bash
-bun run dev              # infra + API :4000 + worker + web :3000
+bun run dev              # infra + API :4004 + worker + web :3004
 ```
 
 In a second terminal:
 
 ```bash
-curl -s localhost:4000/api/v1/health | jq     # { status: "ok" }  (liveness)
-curl -s localhost:4000/api/v1/status | jq     # postgres + redisQueue "ready"
+curl -s localhost:4004/api/v1/health | jq     # { status: "ok" }  (liveness)
+curl -s localhost:4004/api/v1/status | jq     # postgres + redisQueue "ready"
 ```
 
-Open http://localhost:4000/api/docs — Swagger for every route you will use
+Open http://localhost:4004/api/docs — Swagger for every route you will use
 in Session 3.
 
 **Checkpoint 1** — you should have observed:
 
 - [ ] `bun run verify` green end to end.
 - [ ] `/health` and `/status` return different shapes — why do both exist?
-- [ ] The API runs on 4000. What runs on 3000, and how does it reach the API?
+- [ ] The API runs on 4004. What runs on 3004, and how does it reach the API?
 
 ---
 
@@ -132,53 +132,53 @@ until its additional proof completes.
 ```bash
 # Request a code. For real mail, configure Resend and run the email worker
 # (see local-development.md); this intentionally sends to your own mailbox.
-curl -si localhost:4000/api/v1/auth/code/send \
+curl -si localhost:4004/api/v1/auth/code/send \
   -H 'content-type: application/json' \
   -d '{"email":"me@example.com"}'
 # Enter the received code and explicitly consent to creating an account without a hub.
-curl -si localhost:4000/api/v1/auth/code/verify \
+curl -si localhost:4004/api/v1/auth/code/verify \
   -H 'content-type: application/json' \
   -d '{"email":"me@example.com","code":"<received-code>","name":"Paul","createAccount":true}' \
   | grep -i set-auth-token
 export T="<token>"
 
 # Profile is the client entry point: username, displayName, optional handle and hubId
-curl -s localhost:4000/api/v1/profile -H "Authorization: Bearer $T" | jq
+curl -s localhost:4004/api/v1/profile -H "Authorization: Bearer $T" | jq
 
 # Create two explicitly private collections (the default is published), then add a reference
-curl -s localhost:4000/api/v1/collections -H "Authorization: Bearer $T" \
+curl -s localhost:4004/api/v1/collections -H "Authorization: Bearer $T" \
   -H 'content-type: application/json' \
   -d '{"slug":"se-guide","title":"Software Engineering","published":false}' | jq .data.id
-curl -s localhost:4000/api/v1/collections -H "Authorization: Bearer $T" \
+curl -s localhost:4004/api/v1/collections -H "Authorization: Bearer $T" \
   -H 'content-type: application/json' \
   -d '{"slug":"essentials","title":"Essentials","published":false}' | jq .data.id
 export GUIDE="<id1>" TARGET="<id2>"
-curl -s localhost:4000/api/v1/collections/$TARGET/resources/external \
+curl -s localhost:4004/api/v1/collections/$TARGET/resources/external \
   -H "Authorization: Bearer $T" -H 'content-type: application/json' \
   -d '{"url":"https://roadmap.sh","position":0,"tags":["Tool"]}' | jq .data.tags
-curl -s localhost:4000/api/v1/collections/$GUIDE/resources/collection \
+curl -s localhost:4004/api/v1/collections/$GUIDE/resources/collection \
   -H "Authorization: Bearer $T" -H 'content-type: application/json' \
   -d "{\"linkedCollectionId\":\"$TARGET\",\"position\":0}" | jq
 # Tags come back lowercased. Reuse/cycles are allowed; permissions stay independent.
 
 # Publish → discovery → the URL-scheme reads
-curl -s -X POST localhost:4000/api/v1/collections/$GUIDE/publish \
+curl -s -X POST localhost:4004/api/v1/collections/$GUIDE/publish \
   -H "Authorization: Bearer $T" > /dev/null
-curl -s localhost:4000/api/v1/discover | jq '.data[].slug'
+curl -s localhost:4004/api/v1/discover | jq '.data[].slug'
 # Read your actual hub handle from /profile; do not assume it matches your name.
-HANDLE=$(curl -s localhost:4000/api/v1/profile -H "Authorization: Bearer $T" | jq -r .data.handle)
-curl -s "localhost:4000/api/v1/hubs/by-handle/$HANDLE" | jq .data.hub
-curl -s localhost:4000/api/v1/collections/$GUIDE | jq .data.slug     # permalink
-curl -s localhost:4000/api/v1/collections/$TARGET | jq .error.code # not_found: target is still private
+HANDLE=$(curl -s localhost:4004/api/v1/profile -H "Authorization: Bearer $T" | jq -r .data.handle)
+curl -s "localhost:4004/api/v1/hubs/by-handle/$HANDLE" | jq .data.hub
+curl -s localhost:4004/api/v1/collections/$GUIDE | jq .data.slug     # permalink
+curl -s localhost:4004/api/v1/collections/$TARGET | jq .error.code # not_found: target is still private
 
 # Link sharing: enable, note the ONE-TIME token, read anonymously with ?s=
-curl -s -X PUT localhost:4000/api/v1/collections/$GUIDE/link-sharing \
+curl -s -X PUT localhost:4004/api/v1/collections/$GUIDE/link-sharing \
   -H "Authorization: Bearer $T" -H 'content-type: application/json' \
   -d '{"enabled":true}' | jq
-curl -s "localhost:4000/api/v1/collections/$GUIDE?s=<token>" | jq .data.title
+curl -s "localhost:4004/api/v1/collections/$GUIDE?s=<token>" | jq .data.title
 
 # Export: the response IS the file (-OJ honors Content-Disposition)
-curl -s -OJ localhost:4000/api/v1/exports -H "Authorization: Bearer $T" \
+curl -s -OJ localhost:4004/api/v1/exports -H "Authorization: Bearer $T" \
   -H 'content-type: application/json' \
   -d "{\"format\":\"pdf\",\"collectionIds\":[\"$GUIDE\"],\"expand\":true}"
 ls *.pdf   # open it: H1 guide, H2 section, hyperlinked lines
@@ -187,21 +187,21 @@ ls *.pdf   # open it: H1 guide, H2 section, hyperlinked lines
 
 # Import: stage a creation CSV; bad addresses await repair
 printf 'collection,section,url,tags\nReading,References,https://xyproblem.info,reference\nReading,References,not-a-url,\n' > /tmp/links.csv
-DRAFT=$(curl -s localhost:4000/api/v1/imports -H "Authorization: Bearer $T" \
+DRAFT=$(curl -s localhost:4004/api/v1/imports -H "Authorization: Bearer $T" \
   -F sourceKind=csv -F file=@/tmp/links.csv | jq -r .data.id)
-curl -s localhost:4000/api/v1/imports/$DRAFT -H "Authorization: Bearer $T" | jq .data
-curl -s localhost:4000/api/v1/imports/$DRAFT/rows -H "Authorization: Bearer $T" | jq .data
+curl -s localhost:4004/api/v1/imports/$DRAFT -H "Authorization: Bearer $T" | jq .data
+curl -s localhost:4004/api/v1/imports/$DRAFT/rows -H "Authorization: Bearer $T" | jq .data
 # Let the worker resolve metadata; inspect collections and their ready counts.
 # DRAFT_COLLECTION is a draft collection ID, not a saved collection ID.
-DRAFT_COLLECTION=$(curl -s localhost:4000/api/v1/imports/$DRAFT -H "Authorization: Bearer $T" | jq -r '.data.collections[] | select(.title == "Reading") | .id')
+DRAFT_COLLECTION=$(curl -s localhost:4004/api/v1/imports/$DRAFT -H "Authorization: Bearer $T" | jq -r '.data.collections[] | select(.title == "Reading") | .id')
 # Review at /manage/import-export/$DRAFT?collection=$DRAFT_COLLECTION.
 # Once a row is ready, queue this collection at the latest draft revision.
-VERSION=$(curl -s localhost:4000/api/v1/imports/$DRAFT -H "Authorization: Bearer $T" | jq .data.version)
-curl -s localhost:4000/api/v1/imports/$DRAFT/collections/$DRAFT_COLLECTION/commit \
+VERSION=$(curl -s localhost:4004/api/v1/imports/$DRAFT -H "Authorization: Bearer $T" | jq .data.version)
+curl -s localhost:4004/api/v1/imports/$DRAFT/collections/$DRAFT_COLLECTION/commit \
   -H "Authorization: Bearer $T" -H 'content-type: application/json' \
   -d "{\"version\":$VERSION,\"published\":false}" | jq .data
 # The worker imports ready rows in batches. Read the collection again for jobState.
-curl -s localhost:4000/api/v1/imports/$DRAFT/collections/$DRAFT_COLLECTION \
+curl -s localhost:4004/api/v1/imports/$DRAFT/collections/$DRAFT_COLLECTION \
   -H "Authorization: Bearer $T" | jq .data.collections
 # The bad address stays for repair. A later job reuses the saved collection.
 # Drafts stay private until import; this example explicitly keeps the result private.
@@ -224,15 +224,15 @@ Goal: see the failure modes, then read the code that decides access.
 ```bash
 # Drill 1: degrade the queue Redis — the product keeps working
 docker stop linkhub-redis
-curl -s localhost:4000/api/v1/status | jq        # "degraded"; redisQueue "unavailable"
-curl -s localhost:4000/api/v1/discover | jq '.data | length'   # still serves
+curl -s localhost:4004/api/v1/status | jq        # "degraded"; redisQueue "unavailable"
+curl -s localhost:4004/api/v1/discover | jq '.data | length'   # still serves
 docker start linkhub-redis
-curl -s localhost:4000/api/v1/status | jq        # "ready" again
+curl -s localhost:4004/api/v1/status | jq        # "ready" again
 
 # Drill 2: existence-hiding — unpublish, then read anonymously
-curl -s -X POST localhost:4000/api/v1/collections/$GUIDE/unpublish \
+curl -s -X POST localhost:4004/api/v1/collections/$GUIDE/unpublish \
   -H "Authorization: Bearer $T" > /dev/null
-curl -s localhost:4000/api/v1/collections/$GUIDE | jq .error.code   # not_found (not 403)
+curl -s localhost:4004/api/v1/collections/$GUIDE | jq .error.code   # not_found (not 403)
 ```
 
 Now trace why, through five files (read in this order):
@@ -327,7 +327,12 @@ Read:
    owns settled rationale; [PRODUCT.md §11](../../PRODUCT.md#11-delivery)
    owns delivery status and order.
 
-With `bun run dev` running, open the web on port 3000. Browse Discover, a public
+Install the browser for local acceptance with `bunx playwright install chromium`.
+Local and CI browser checks use the Chromium pinned by Playwright;
+`BROWSER_CHROME_PATH` is an explicit diagnostic override. The pre-push hook runs
+`verify`; the separate browser gate below is required for web milestones and CI.
+
+With `bun run dev` running, open the web on port 3004. Browse Discover, a public
 hub and a collection. Follow an independent reference. With a configured local
 sender and your own test account, save a link, edit the collection's details,
 read History and update Settings. These actions use development data; automated
@@ -381,7 +386,7 @@ orchestrator (see `package.json` for the full set):
 
 | Command | Does |
 | --- | --- |
-| `bun run dev` | infra up + API/worker watchers + Next.js on :3000 |
+| `bun run dev` | infra up + API/worker watchers + Next.js on :3004 |
 | `bun run infra:up` / `infra:down` | local PostgreSQL + Redis |
 | `bun run api:dev` / `api:test` | single-service loop / API tests |
 | `bun run email:test` | email template tests |
