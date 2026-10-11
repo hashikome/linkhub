@@ -116,6 +116,22 @@ export interface ManagedCollection {
   availableActions: ManagedCollectionAction[];
 }
 
-export interface TransferCollectionRequest {
+export interface CollectionImpactRequest {
+  impactToken?: string;
+}
+
+export interface CollectionImpact {
+  action: "delete" | "transfer";
+  token: string;
+  referenceCount: number;
+  collections: {
+    collectionId: string;
+    title: string;
+    referenceCount: number;
+    removedSections: { id: string; title: string }[];
+  }[];
+}
+
+export interface TransferCollectionRequest extends CollectionImpactRequest {
   email: string;
 }

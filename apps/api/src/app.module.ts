@@ -13,6 +13,7 @@ import { HealthModule } from "./modules/health/health.module";
 import { HubsModule } from "./modules/hubs/hubs.module";
 import { ImportsModule } from "./modules/imports/imports.module";
 import { OperationsModule } from "./modules/operations/operations.module";
+import { RecoveryModule } from "./modules/recovery/recovery.controller";
 import { ResourcesModule } from "./modules/resources/resources.module";
 import { SharingModule } from "./modules/sharing/sharing.module";
 import { UsersModule } from "./modules/users/users.module";
@@ -31,6 +32,7 @@ import { UsersModule } from "./modules/users/users.module";
     OperationsModule,
     CollectionsModule,
     ResourcesModule,
+    RecoveryModule,
     SharingModule,
     CommentsModule,
     ImportsModule,

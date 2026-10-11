@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { webServerConfig } from "@nslinkhub/config/web-server";
 import type { Collection, Profile } from "@nslinkhub/types";
 import type { CaptureDraft } from "../lib/capture-draft";
 import { queryValue, withCursor } from "../lib/http";
@@ -47,7 +48,7 @@ export async function CaptureForm({
   const selected = draft?.destination ?? (isUuid(target) ? target : "");
   if (profile.ok && isUuid(selected) && !collections.some((c) => c.id === selected)) {
     const targetCollection = await serverRead<Collection>(`/api/v1/collections/${selected}`);
-    if (targetCollection.ok && targetCollection.data.capabilities?.canManage)
+    if (targetCollection.ok && targetCollection.data.capabilities?.canEdit)
       collections.unshift(targetCollection.data);
   }
   const id = draft?.id ?? randomUUID();
@@ -56,13 +57,13 @@ export async function CaptureForm({
       <h1>{profile.ok ? "Save a link" : "Save your first link"}</h1>
       <p>
         {profile.ok
-          ? "Keep useful links together in one of your collections."
-          : "Start with a useful link. Your first collection will be private."}
+          ? "Keep useful links together in a collection."
+          : "Start with a useful link. Your first collection will be published."}
       </p>
       <FormNotice code={queryValue(query.notice)} />
       <NativeForm action="/forms/capture-save">
         <input type="hidden" name="draftId" value={id} />
-        <CaptureLinks initial={draft?.links ?? []}>
+        <CaptureLinks initial={draft?.links ?? []} origin={webServerConfig().publicOrigin}>
           {!profile.ok && (
             <p className="meta">
               Next, verify your email to save. No name or collection title needed.
@@ -80,7 +81,7 @@ export async function CaptureForm({
                 <option value="" disabled>
                   Choose a collection
                 </option>
-                <option value="new">New private collection</option>
+                <option value="new">New collection</option>
                 {collections.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.title} · updated{" "}
@@ -97,7 +98,7 @@ export async function CaptureForm({
                 ))}
               </select>
               <p className="meta">Links follow the chosen collection's sharing settings.</p>
-              {/* Shown by CSS only while "New private collection" is chosen. */}
+              {/* Shown by CSS only while "New collection" is chosen. */}
               <div className="capture-new-name">
                 <label htmlFor="collectionTitle">Name for the new collection</label>
                 <input
@@ -106,14 +107,30 @@ export async function CaptureForm({
                   maxLength={255}
                   defaultValue={draft?.collectionTitle ?? suggestedName(collections)}
                 />
+                <label>
+                  Publish new collection
+                  <select name="published" defaultValue={String(draft?.published ?? true)}>
+                    <option value="true">Yes</option>
+                    <option value="false">No</option>
+                  </select>
+                </label>
               </div>
             </>
           ) : (
-            <input
-              type="hidden"
-              name="destination"
-              value={draft?.destination === "new" ? "new" : "first"}
-            />
+            <>
+              <input
+                type="hidden"
+                name="destination"
+                value={draft?.destination === "new" ? "new" : "first"}
+              />
+              <label>
+                Publish new collection
+                <select name="published" defaultValue={String(draft?.published ?? true)}>
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </select>
+              </label>
+            </>
           )}
         </CaptureLinks>
       </NativeForm>

@@ -92,6 +92,7 @@ const resourceShape = {
   collectionId: uuid,
   kind: (v) => v === "external_link" || v === "collection_link" || v === "heading",
   url: string,
+  collectionHint: (v) => v === undefined || typeof v === "boolean",
   linkedCollectionId: (v) => v === null || uuid(v),
   linkedCollection: (v) =>
     v === undefined ||
@@ -164,6 +165,7 @@ function shape(
     "hub",
     "capabilities",
     "linkedCollection",
+    "collectionHint",
     "creator",
     "contributors",
   ],
@@ -281,7 +283,7 @@ describe("W3 serialized contracts and safe HTTP errors", () => {
     const child = await request(server)
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${owner}`)
-      .send({ slug: `child-${suffix}`, title: "Child" })
+      .send({ published: false, slug: `child-${suffix}`, title: "Child" })
       .expect(201);
     await request(server)
       .post(`/api/v1/collections/${cid}/resources/collection`)
@@ -292,7 +294,7 @@ describe("W3 serialized contracts and safe HTTP errors", () => {
       .get(`/api/v1/collections/${cid}/resources`)
       .expect(200);
     const reference = withReference.body.data.find((r: Resource) => r.kind === "collection_link");
-    shape(reference, resourceShape, ["url"]);
+    shape(reference, resourceShape, ["url", "collectionHint"]);
     expect(reference.url).toBeUndefined();
   });
 

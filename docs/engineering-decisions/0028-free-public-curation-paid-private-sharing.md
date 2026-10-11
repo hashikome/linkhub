@@ -1,6 +1,6 @@
 # ADR-0028: Free public curation and paid private sharing
 
-**Status:** accepted; implementation pending
+**Status:** accepted; published creation defaults implemented, billing and entitlements pending
 
 **Date:** 2026-10-10
 

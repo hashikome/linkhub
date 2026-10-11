@@ -1,6 +1,13 @@
 import { Toast } from "./toast";
 
 const messages: Record<string, string> = {
+  "import-saved": "Ready links saved. Review any links still waiting below.",
+  "import-queued": "Import queued. You can review another collection while it finishes.",
+  "import-invalid":
+    "Check the file format and limits. For CSV, use the template’s four columns and keep collections and sections together.",
+  "import-large": "This file is too large. Use a file up to 10 MB.",
+  "import-limited":
+    "Finish one of your three open drafts, or wait for your daily lookup allowance to renew.",
   "registration-expired":
     "This account creation step expired. Start again to verify your identity.",
   "registration-invalid":
@@ -20,8 +27,10 @@ const messages: Record<string, string> = {
   "too-many-links": "Save up to 2 links at a time, or shorten very long addresses.",
   "link-invalid":
     "Check the links: each must be a full http:// or https:// address without a username or password.",
-  "choose-destination": "Choose where to save your link, or create a private collection.",
+  "choose-destination": "Choose where to save your link, or create a collection.",
   "save-failed": "We couldn't confirm the save. Your link is still here. Try saving it again.",
+  "impact-changed":
+    "The collection or its references changed. Review the updated details before confirming again.",
   "collection-saved": "Collection saved.",
   "profile-saved": "Your profile has been saved.",
   "profile-invalid": "Check your profile fields, then try again.",

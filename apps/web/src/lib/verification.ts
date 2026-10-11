@@ -39,7 +39,7 @@ export function verificationCopy(
     case "first-link":
       return {
         title: "Verify your email to save this link",
-        reason: "Your first link goes into a private collection in your new hub.",
+        reason: "Your first link goes into a published collection in your new hub.",
         after: "Enter the code we email you and your link is saved.",
         codeTitle: "Check your email",
         codeButton: "Verify and save",

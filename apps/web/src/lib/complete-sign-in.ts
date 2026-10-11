@@ -20,19 +20,18 @@ export async function completeSignIn(
   // Confirmed: run the action that asked for it, with the new session.
   if (flow.purpose === "confirm" || flow.purpose === "resume") {
     const pending = await readPendingAction();
-    const done = [
-      ...(result.setCookies ?? []),
-      flowCookie("", 0),
-      pendingActionCookie(null),
-      lastAccountCookie(flow.email),
-    ];
+    const done = [...(result.setCookies ?? []), flowCookie("", 0), lastAccountCookie(flow.email)];
+    // Keep shared recovery data until replay returns, including if this request
+    // is interrupted before the API command can run.
+    const finish = async (target: string) =>
+      redirectResponse(target, [...done, await pendingActionCookie(null)]);
     // A waiting action runs only for the person it belongs to.
     if (
       !pending ||
       pending.target !== flow.returnTo ||
       pending.owner !== accountFingerprint(flow.email)
     )
-      return redirectResponse(flow.returnTo, done);
+      return finish(flow.returnTo);
     const headers = new Headers(request.headers);
     headers.set("cookie", verified);
     const replay = await formPost<{ token?: string }>(
@@ -46,8 +45,18 @@ export async function completeSignIn(
       const destination = new URL(pending.target, "http://local.invalid");
       destination.searchParams.set("s", replay.data.token);
       destination.searchParams.set("notice", "done");
-      return redirectResponse(destination.pathname + destination.search, done);
+      return finish(destination.pathname + destination.search);
     }
+    const lifecycle = /^\/api\/v1\/collections\/([a-f0-9-]{36})(\/transfer)?$/.exec(pending.path);
+    if (
+      !replay.ok &&
+      replay.code === "version_conflict" &&
+      lifecycle &&
+      (pending.method === "DELETE" || lifecycle[2])
+    )
+      return finish(
+        `/c/${lifecycle[1]}/actions?action=${lifecycle[2] ? "transfer" : "delete"}&notice=impact-changed`,
+      );
     const join = pending.target.includes("?") ? "&" : "?";
     const notice = replay.ok
       ? (pending.success ?? "done")
@@ -58,9 +67,8 @@ export async function completeSignIn(
           : replay.status === 429
             ? "limited"
             : "unavailable";
-    return redirectResponse(
+    return finish(
       `${pending.target}${join}notice=${notice}${pending.anchor ? `#${pending.anchor}` : ""}`,
-      done,
     );
   }
   const captureId = /^\/capture\/([a-f0-9-]{36})$/.exec(flow.returnTo)?.[1];

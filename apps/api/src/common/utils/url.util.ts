@@ -1,4 +1,5 @@
-import { isPublicLinkHost } from "@nslinkhub/types";
+import { publicOrigins } from "@nslinkhub/config/public-origins";
+import { collectionAddress, isPublicLinkHost } from "@nslinkhub/types";
 import { appError } from "../errors/app-exception";
 
 export function canonicalizeUrl(url: string) {
@@ -35,4 +36,14 @@ export function publicLinkUrl(url: string) {
   const canonical = canonicalizeUrl(url);
   if (!isPublicLinkHost(new URL(canonical).hostname)) throw appError("link_not_public");
   return canonical;
+}
+
+export function localCollectionAddress(url: string) {
+  return collectionAddress(url, publicOrigins(process.env).webOrigin);
+}
+
+// Only recognized application routes bypass public-host validation in local
+// development. They are never fetched by the metadata worker.
+export function savableLinkUrl(url: string) {
+  return localCollectionAddress(url) ? canonicalizeUrl(url) : publicLinkUrl(url);
 }

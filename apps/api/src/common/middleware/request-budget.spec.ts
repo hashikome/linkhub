@@ -91,3 +91,32 @@ it.each([
     requestBudgetKey("auth", "127.0.0.1", "budget"),
   ]);
 });
+
+it("keeps import polling and draft edits outside the upload budget", async () => {
+  const keys: string[] = [];
+  const prisma = {
+    $queryRaw: async (_sql: unknown, key: string) => {
+      keys.push(key);
+      return [{ count: 1 }];
+    },
+  } as unknown as PrismaService;
+  const middleware = requestBudget(prisma, "budget");
+  for (const [method, path] of [
+    ["POST", "/API/V1/IMPORTS/"],
+    ["GET", "/api/v1/imports"],
+    ["GET", "/api/v1/imports/id/rows"],
+    ["PATCH", "/api/v1/imports/id"],
+    ["POST", "/api/v1/imports/id/commit"],
+  ]) {
+    await middleware(
+      { method, path, ip: "192.0.2.1", get: () => undefined } as unknown as Request,
+      {} as Response,
+      () => {},
+    );
+  }
+  expect(keys).toEqual(
+    ["file", "read", "read", "write", "write"].map((scope) =>
+      requestBudgetKey(scope, "192.0.2.1", "budget"),
+    ),
+  );
+});

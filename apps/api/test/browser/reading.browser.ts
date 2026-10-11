@@ -14,6 +14,7 @@ import { emailConfig } from "../../src/email/config";
 import { emailKey, unseal } from "../../src/email/outbox";
 import type { AvatarImage } from "../../src/modules/avatars/gravatar.service";
 import { ensurePersonalHub } from "../../src/modules/hubs/hub-onboarding";
+import { importJobService } from "../../src/modules/imports/import-jobs";
 import { itemTags } from "../../src/modules/resources/item-tags";
 import { expectSignIns } from "../fixtures/authentication-audit";
 import { signInHubOwner, signInWithCode } from "../fixtures/sign-in";
@@ -293,7 +294,7 @@ beforeAll(async () => {
   await request(app.getHttpServer())
     .post("/api/v1/collections")
     .auth(otherToken, { type: "bearer" })
-    .send({ slug: "private-reading", title: "Other private collection" })
+    .send({ slug: "private-reading", title: "Other private collection", published: false })
     .expect(201);
   for (let i = 0; i < 23; i++)
     publicIds.push(await create(`Reading collection ${i + 1}`, `reading-${i}`, true));
@@ -652,7 +653,10 @@ describe("explore to resource: production browser journey", () => {
       await browserExpect(footer.getByRole("link", { name: "Discover", exact: true })).toHaveCount(
         0,
       );
-      await browserExpect(footer.getByRole("link")).toHaveCount(1);
+      await browserExpect(footer.getByRole("link")).toHaveCount(2);
+      await browserExpect(
+        footer.getByRole("link", { name: "Share nslinkhub", exact: true }),
+      ).toHaveAttribute("href", /\/share\?kind=site/);
       await browserExpect(
         footer
           .getByRole("navigation", { name: "Footer" })
@@ -681,6 +685,25 @@ describe("explore to resource: production browser journey", () => {
           const released = new Promise<void>((resolve) => {
             release = resolve;
           });
+          await page.waitForLoadState("networkidle");
+          const protocol = await page.context().newCDPSession(page);
+          await page.evaluate(() => {
+            window.addEventListener(
+              "click",
+              () => {
+                setTimeout(() => {
+                  document.body.dataset.navigationObservation = JSON.stringify({
+                    heading: document.querySelector("h1")
+                      ? getComputedStyle(document.querySelector("h1") as HTMLElement).visibility
+                      : "missing",
+                    feedback:
+                      document.querySelector(".navigation-recovery, .navigation-loading") !== null,
+                  });
+                }, 400);
+              },
+              { once: true },
+            );
+          });
           delayedDocument = { path: `/c/${targetId}`, started, released };
           const aborted = page.waitForEvent("requestfailed", {
             predicate: (req) =>
@@ -690,15 +713,22 @@ describe("explore to resource: production browser journey", () => {
             .getByRole("link", { name: "A useful collection", exact: true })
             .click({ noWaitAfter: true });
           await waiting;
+          // Allow the old document's timer to observe the delayed response. Playwright
+          // evaluations during pending navigation wait for the replacement document.
+          await Bun.sleep(600);
           await page.keyboard.press("Escape");
-          // Headless key dispatch does not invoke Chromium's browser-chrome
-          // Stop command. Drive that native cancellation explicitly as well.
-          const protocol = await page.context().newCDPSession(page);
+          // Headless key dispatch does not invoke Chromium's browser-chrome Stop command.
           await protocol.send("Page.stopLoading");
           await protocol.detach();
           expect((await aborted).failure()?.errorText).toContain("ERR_ABORTED");
-          await browserExpect(page.locator(".navigation-loading .skeleton-row")).toHaveCount(0);
-          await browserExpect(page.getByRole("status")).toHaveText("Loading page…");
+          expect(
+            await page.evaluate(() =>
+              JSON.parse(document.body.dataset.navigationObservation ?? "null"),
+            ),
+          ).toEqual({ heading: "visible", feedback: false });
+          await browserExpect(page.locator(".navigation-recovery")).toContainText(
+            "Navigation was interrupted.",
+          );
           expect(page.url()).toBe(origin + entry);
           await browserExpect(page.locator("h1")).toBeHidden();
           if (revoke) {
@@ -718,7 +748,7 @@ describe("explore to resource: production browser journey", () => {
           await browserExpect(page.locator("h1")).toHaveText(
             revoke ? "This collection isn't available." : longTitle,
           );
-          await browserExpect(page.locator(".navigation-loading")).toBeHidden();
+          await browserExpect(page.locator(".navigation-recovery")).toBeHidden();
           if (revoke) {
             await browserExpect(page.locator(".resource-row")).toHaveCount(0);
             await change(sourceId, "publish");
@@ -1427,7 +1457,7 @@ describe("explore to resource: production browser journey", () => {
             });
           await feedback.getByRole("link", { name: "Sign in", exact: true }).click();
           await browserExpect(
-            page.locator('form[action="/forms/code-send"] input[name="returnTo"]'),
+            page.locator('form[action="/forms/email-start"] input[name="returnTo"]'),
           ).toHaveValue(path);
           await browserExpect(
             page.locator('form[action="/forms/google-start"] input[name="returnTo"]'),
@@ -2333,7 +2363,7 @@ describe("account shell and appearance", () => {
       await page.goBack();
       await browserExpect(name).toBeVisible();
       await browserExpect(name).toHaveValue("Draft retained");
-      await browserExpect(page.locator(".navigation-loading")).toBeHidden();
+      await browserExpect(page.locator(".navigation-recovery")).toBeHidden();
       await page.unroute("**/forms/profile-save");
       await page.getByRole("button", { name: "Retry", exact: true }).click();
       await browserExpect(page.locator(".profile-save-status.success")).toContainText("Saved");
@@ -2987,21 +3017,32 @@ describe("account shell and appearance", () => {
     }
   }, 60000);
   it("persists account timezone across devices and renders saved dates before hydration", async () => {
+    // Earlier journeys deliberately revoke shared sessions; own this fixture.
+    const signed = await signInHubOwner(app.getHttpServer(), {
+      email: `timezone-${crypto.randomUUID()}@example.com`,
+      name: "Timezone reader",
+    });
+    const timezoneToken = signed.headers["set-auth-token"];
+    const timezoneCookie =
+      (signed.headers["set-cookie"] as unknown as string[])
+        .map((value) => value.split(";")[0])
+        .find((value) => value.startsWith("better-auth.session_token=")) ?? "";
+    expect(timezoneCookie).not.toBe("");
     const profile = (
       await request(app.getHttpServer())
         .get("/api/v1/profile")
-        .auth(owner, { type: "bearer" })
+        .auth(timezoneToken, { type: "bearer" })
         .expect(200)
     ).body.data;
     const at = "2026-10-08T10:00:00.000Z";
     const demoTime = `.item-context time[datetime="${at}"]`;
-    const [name, ...value] = cookie.split("=");
+    const [name, ...value] = timezoneCookie.split("=");
     const savedCookie = { name, value: value.join("="), url: origin };
     try {
       for (const js of [true, false]) {
         await request(app.getHttpServer())
           .patch("/api/v1/profile")
-          .auth(owner, { type: "bearer" })
+          .auth(timezoneToken, { type: "bearer" })
           .send({ timeZone: null })
           .expect(200);
         const context = await browser.newContext({
@@ -3075,7 +3116,7 @@ describe("account shell and appearance", () => {
           // A guest still follows the device even if the account prefers elsewhere.
           await request(app.getHttpServer())
             .patch("/api/v1/profile")
-            .auth(owner, { type: "bearer" })
+            .auth(timezoneToken, { type: "bearer" })
             .send({ timeZone: "Asia/Tokyo" })
             .expect(200);
           await context.clearCookies();
@@ -3089,7 +3130,7 @@ describe("account shell and appearance", () => {
     } finally {
       await request(app.getHttpServer())
         .patch("/api/v1/profile")
-        .auth(owner, { type: "bearer" })
+        .auth(timezoneToken, { type: "bearer" })
         .send({ timeZone: profile.timeZone })
         .expect(200);
     }
@@ -3171,6 +3212,8 @@ it("saves a first private link through email, preserves retries, then adds and r
       await ready(page, "/");
       await page.getByRole("link", { name: "Save your first link", exact: true }).click();
       await page.getByLabel("Link URL", { exact: true }).fill(url);
+      await browserExpect(page.getByLabel("Publish new collection")).toHaveValue("true");
+      await page.getByLabel("Publish new collection").selectOption("false");
       await page.getByRole("button", { name: "Save link", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Verify your email to save this link");
       expect(page.url()).not.toContain("fixture-links.dev");
@@ -3293,11 +3336,13 @@ it("saves a first private link through email, preserves retries, then adds and r
         .click();
       await page.getByRole("link", { name: "Add a link", exact: true }).click();
       await page.getByLabel("Link URL", { exact: true }).fill("https://fixture-links.dev/second");
-      if (js)
+      if (js) {
+        await page.waitForTimeout(2100);
         await prisma.session.updateMany({
           where: { userId: account.id },
           data: { expiresAt: new Date(0) },
         });
+      }
       await page.getByRole("button", { name: "Save link", exact: true }).click();
       if (js) {
         await browserExpect(page.locator("h1")).toHaveText("Verify your email to save this link");
@@ -3384,7 +3429,7 @@ it("saves several links with tags into a newly named collection, typing no title
     await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(token, { type: "bearer" })
-      .send({ slug: `existing-${crypto.randomUUID()}`, title: "Existing shelf" })
+      .send({ published: false, slug: `existing-${crypto.randomUUID()}`, title: "Existing shelf" })
       .expect(201);
     await browserSignIn(page, email, "/hub");
     await browserExpect(page.getByLabel("Account menu", { exact: true })).toBeVisible();
@@ -3436,10 +3481,9 @@ it("saves several links with tags into a newly named collection, typing no title
     await browserExpect(
       page.getByRole("button", { name: "Add another link", exact: true }),
     ).toHaveCount(0);
-    const bulk = page.getByRole("button", { name: "Bulk import links", exact: true });
-    await browserExpect(page.locator(".capture-bulk-note")).toBeHidden();
-    await bulk.click();
-    await browserExpect(page.locator(".capture-bulk-note")).toContainText("coming soon");
+    await browserExpect(
+      page.getByRole("link", { name: "Bulk import links", exact: true }),
+    ).toHaveAttribute("href", "/manage/import-export");
     // The same link twice is flagged and blocks saving.
     await rows
       .nth(1)
@@ -3616,13 +3660,21 @@ describe("collection discussion", () => {
           await discussion.locator(".comment-compose > summary").click();
         await page.getByLabel("Add to the discussion").fill(`After a break (${js})`);
         await page.getByRole("button", { name: "Post", exact: true }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to continue");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
         await browserExpect(page.locator(".verify-reason")).toContainText("post your comment");
         await page.getByLabel("Email address").fill(discussant);
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
+        await browserExpect(page, `resume code issued (JavaScript ${js})`).toHaveURL(
+          /\/sign-in\/code\?notice=(?:re)?sent/,
+        );
         await page.getByLabel("Eight-digit code").fill(await capturedCode(discussant));
         await page.getByRole("button", { name: "Verify and continue" }).click();
+        await browserExpect
+          .poll(() => new URL(page.url()).pathname, {
+            message: `resumed discussion (JavaScript ${js})`,
+          })
+          .toBe(`/c/${id}`);
         await browserExpect(page.locator("h1")).toHaveText("Discussion guide");
         await browserExpect(page.locator(".toast")).toContainText("Comment posted");
         await browserExpect(discussion).toContainText(`After a break (${js})`);
@@ -3636,13 +3688,17 @@ describe("collection discussion", () => {
           await discussion.locator(".comment-compose > summary").click();
         await page.getByLabel("Add to the discussion").fill(`Not theirs (${js})`);
         await page.getByRole("button", { name: "Post", exact: true }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to continue");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
         const stranger = `stranger-${crypto.randomUUID()}@example.com`;
         await page.getByLabel("Email address").fill(stranger);
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
+        await browserExpect(page, `new account code issued (JavaScript ${js})`).toHaveURL(
+          /\/sign-in\/code\?notice=(?:re)?sent/,
+        );
         await page.getByLabel("Eight-digit code").fill(await capturedCode(stranger));
         await page.getByRole("button", { name: "Verify and continue" }).click();
+        await page.getByRole("button", { name: "Create account", exact: true }).click();
         await browserExpect(page.locator("h1")).toHaveText("Discussion guide");
         await browserExpect(discussion).not.toContainText(`Not theirs (${js})`);
         expect(
@@ -3815,7 +3871,7 @@ it("continues replies on an older question page with the share token and answer 
   const result = await request(app.getHttpServer())
     .post("/api/v1/collections")
     .auth(bearer, { type: "bearer" })
-    .send({ title: "Reply pages", slug: `replies-${crypto.randomUUID()}` })
+    .send({ published: false, title: "Reply pages", slug: `replies-${crypto.randomUUID()}` })
     .expect(201);
   const id = result.body.data.id as string;
   const sharing = await request(app.getHttpServer())
@@ -4011,7 +4067,11 @@ describe("activity and attribution", () => {
     const created = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(owner.token, { type: "bearer" })
-      .send({ slug: `history-${crypto.randomUUID().slice(0, 8)}`, title: "Shared guide" })
+      .send({
+        published: false,
+        slug: `history-${crypto.randomUUID().slice(0, 8)}`,
+        title: "Shared guide",
+      })
       .expect(201);
     const id = created.body.data.id as string;
     await request(app.getHttpServer())
@@ -4265,7 +4325,11 @@ it("shares Manage across owner and service contexts without exposing service con
   const created = await request(app.getHttpServer())
     .post("/api/v1/collections")
     .auth(token, { type: "bearer" })
-    .send({ slug: `manage-${crypto.randomUUID()}`, title: "My private managed collection" })
+    .send({
+      slug: `manage-${crypto.randomUUID()}`,
+      title: "My private managed collection",
+      published: false,
+    })
     .expect(201);
   const colleagueEmail = `manage-colleague-${crypto.randomUUID()}@example.com`;
   const colleague = await signInWithCode(app.getHttpServer(), {
@@ -4288,6 +4352,14 @@ it("shares Manage across owner and service contexts without exposing service con
       await browserExpect(page.locator(".ops-table")).toContainText(
         "My private managed collection",
       );
+      const importSection = nav.locator(".manage-nav-section");
+      const originalUrl = page.url();
+      await importSection.locator("summary").click();
+      await browserExpect(importSection.getByRole("link")).toHaveText(["New import", "Review"]);
+      expect(page.url()).toBe(originalUrl);
+      await importSection.locator("summary").click();
+      await browserExpect(importSection.getByRole("link")).toHaveCount(0);
+      expect(page.url()).toBe(originalUrl);
       await nav.getByRole("link", { name: "Access", exact: true }).click();
       await browserExpect(page.locator(".ops-table")).toContainText(person.username);
       await nav.getByRole("link", { name: "Audit Log", exact: true }).click();
@@ -4492,6 +4564,16 @@ it("appends Manage table pages with fixed headers, retry and native fallback", a
           rows.evaluateAll((elements) =>
             elements.map((element) => {
               const row = element.cloneNode(true) as HTMLElement;
+              // With scripting enabled, an unhydrated noscript contains the
+              // literal fallback markup; normalize its immutable date too.
+              for (const fallback of row.querySelectorAll("noscript")) {
+                const parsed = new DOMParser().parseFromString(
+                  fallback.textContent ?? "",
+                  "text/html",
+                );
+                const time = parsed.querySelector("time");
+                if (time) fallback.replaceWith(time);
+              }
               for (const time of row.querySelectorAll("time")) time.textContent = time.dateTime;
               return row.textContent;
             }),
@@ -4793,7 +4875,11 @@ it("shows recorded audit effects, honest legacy gaps, international dates and op
   const created = await request(app.getHttpServer())
     .post("/api/v1/collections")
     .auth(op.token, { type: "bearer" })
-    .send({ title: "Audit evidence fixture", slug: `audit-evidence-${crypto.randomUUID()}` })
+    .send({
+      published: false,
+      title: "Audit evidence fixture",
+      slug: `audit-evidence-${crypto.randomUUID()}`,
+    })
     .expect(201);
   const id = created.body.data.id as string;
   for (let i = 0; i < 2; i++)
@@ -4913,7 +4999,11 @@ it("uses action dialogs and owner collection operations with native fallback", a
     const made = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(actor.token, { type: "bearer" })
-      .send({ title: "Collection action fixture", slug: `actions-${crypto.randomUUID()}` })
+      .send({
+        published: false,
+        title: "Collection action fixture",
+        slug: `actions-${crypto.randomUUID()}`,
+      })
       .expect(201);
     const id = made.body.data.id;
     const { page, close } = await freshPage(js);
@@ -5099,7 +5189,7 @@ it("uses action dialogs and owner collection operations with native fallback", a
       await ready(page, `/manage/collections?q=${id}`);
       await chooseAction(page, "delete", page.locator(".ops-table tbody tr"));
       await browserExpect(page.getByText(/This cannot be undone/)).toBeVisible();
-      await page.getByRole("button", { name: "Delete collection", exact: true }).click();
+      await page.getByRole("button", { name: "Yes, delete", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Collections");
       expect(await prisma.collection.findUnique({ where: { id } })).toBeNull();
     } finally {
@@ -5335,7 +5425,11 @@ it("records authenticated copy links and successful opens across all share targe
       await request(app.getHttpServer())
         .post("/api/v1/collections")
         .auth(signed.headers["set-auth-token"], { type: "bearer" })
-        .send({ title: "Private tracked collection", slug: `private-cycle-${crypto.randomUUID()}` })
+        .send({
+          title: "Private tracked collection",
+          slug: `private-cycle-${crypto.randomUUID()}`,
+          published: false,
+        })
         .expect(201)
     ).body.data;
     const privateEntry = (
@@ -5510,6 +5604,7 @@ describe("item details routes", () => {
         .post("/api/v1/collections")
         .auth(owner, { type: "bearer" })
         .send({
+          published: false,
           title: "Item route guide",
           slug,
           description: "A guide with enough context to fold while reading its items.",
@@ -5819,7 +5914,7 @@ it("preserves private sharing destinations and resumes access, link and transfer
       await request(app.getHttpServer())
         .post("/api/v1/collections")
         .auth(signed.headers["set-auth-token"], { type: "bearer" })
-        .send({ title: "Resume sharing", slug: `resume-${crypto.randomUUID()}` })
+        .send({ published: false, title: "Resume sharing", slug: `resume-${crypto.randomUUID()}` })
         .expect(201)
     ).body.data.id as string;
     const path = `/share?${new URLSearchParams({ kind: "collection", id, returnTo: `/c/${id}` })}`;
@@ -5873,7 +5968,7 @@ it("preserves private sharing destinations and resumes access, link and transfer
       for (const label of ["Create share link", "Replace share link", "Turn off link access"]) {
         await expire();
         await page.getByRole("button", { name: label, exact: true }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to continue");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
         await verify();
         await browserExpect(page.locator("h1")).toHaveText("Share collection");
         const link = new URL(
@@ -5908,7 +6003,7 @@ it("preserves private sharing destinations and resumes access, link and transfer
       await ready(page, `/c/${id}/actions?action=transfer`);
       await page.getByLabel("New owner's email").fill(receiverEmail);
       await expire();
-      await page.getByRole("button", { name: "Transfer ownership", exact: true }).click();
+      await page.getByRole("button", { name: "Yes, transfer ownership", exact: true }).click();
       await browserExpect(page.locator(".verify-reason")).toContainText("transfer this collection");
       await verify();
       await browserExpect(page).toHaveURL(`${origin}/manage/collections?notice=done`);
@@ -5948,8 +6043,8 @@ it("binds resumed collection commands to their account and rechecks current auth
           where: { userId: person.id },
           data: { expiresAt: new Date(0) },
         });
-        await page.getByRole("button", { name: "Delete collection", exact: true }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to continue");
+        await page.getByRole("button", { name: "Yes, delete", exact: true }).click();
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
         // Ownership changes while the command is waiting. The new owner could
         // delete it, but must never inherit the previous account's pending action.
         const nextHub = await prisma.hub.findUniqueOrThrow({
@@ -5960,6 +6055,9 @@ it("binds resumed collection commands to their account and rechecks current auth
           data: { hubId: nextHub.id },
         });
         const verifyingEmail = switchAccount ? nextEmail : email;
+        // A new sign-in immediately follows the fixture's consumed code. Keep
+        // the real two-second resend guard, rather than submitting the old code.
+        await page.waitForTimeout(2100);
         await page.getByLabel("Email address").fill(verifyingEmail);
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
@@ -6158,7 +6256,7 @@ it("tracks copies and opens of newly created and repeatedly rotated collection l
   const created = await request(app.getHttpServer())
     .post("/api/v1/collections")
     .auth(signed.headers["set-auth-token"], { type: "bearer" })
-    .send({ title: "Issued link guide", slug: `issued-${crypto.randomUUID()}` })
+    .send({ published: false, title: "Issued link guide", slug: `issued-${crypto.randomUUID()}` })
     .expect(201);
   const id = created.body.data.id as string;
   const { page, close } = await freshPage();
@@ -6229,7 +6327,11 @@ describe("section authoring", () => {
         await request(app.getHttpServer())
           .post("/api/v1/collections")
           .auth(token, { type: "bearer" })
-          .send({ title: "A practical guide", slug: `sections-${crypto.randomUUID()}` })
+          .send({
+            published: false,
+            title: "A practical guide",
+            slug: `sections-${crypto.randomUUID()}`,
+          })
           .expect(201)
       ).body.data.id as string;
       await prisma.resource.createMany({
@@ -6584,6 +6686,9 @@ it("rejects an account confirmation replaced by another tab", async () => {
   try {
     await browserOwnerSettings(page, email);
     await ready(page, "/account?action=deactivate");
+    // This test replaces proofs across tabs; the preceding signup may still be
+    // inside its issuance gap. Expire only this fixture's cooldown first.
+    await prisma.$executeRaw`UPDATE request_budgets SET expires_at = clock_timestamp() WHERE key = ${emailKey(emailConfig().secret, "issue-gap", email)}`;
     await page.getByRole("button", { name: "Send confirmation code" }).click();
     await browserExpect(page.getByLabel("Verification code")).toBeVisible();
     await prisma.$executeRaw`UPDATE request_budgets SET expires_at = clock_timestamp() WHERE key = ${emailKey(emailConfig().secret, "issue-gap", email)}`;
@@ -7530,5 +7635,910 @@ it("keeps centered authentication entries consistent across viewports and themes
     await page.screenshot({ path: "/tmp/explicit-auth-error.png", fullPage: true });
   } finally {
     await close();
+  }
+}, 60000);
+
+it("reviews bookmark collection drafts, edits in place and imports in the background with and without JavaScript", async () => {
+  for (const javascript of [true, false]) {
+    const signed = await signInHubOwner(app.getHttpServer(), {
+      email: `collection-review-${crypto.randomUUID()}@example.com`,
+      name: "Importer",
+    });
+    const userId = signed.body.user.id;
+    const { page, close } = await freshPage(javascript);
+    try {
+      for (const raw of signed.headers["set-cookie"] as unknown as string[]) {
+        const [name, ...value] = raw.split(";")[0].split("=");
+        await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
+      }
+      await ready(page, "/manage/import-export");
+      const stem = `https://fixture-links.dev/collection-review-${crypto.randomUUID()}`;
+      await page.getByLabel("Bookmarks, CSV or text file").setInputFiles({
+        name: "bookmarks.html",
+        mimeType: "text/html",
+        buffer: Buffer.from(
+          `<DL><DT><H3>Design library</H3><DL><DT><A HREF="${stem}/a">A</A><DT><A HREF="fix-me">Fix me</A></DL><DT><H3>Useful tools</H3><DL><DT><A HREF="${stem}/b">B</A></DL></DL>`,
+        ),
+      });
+      await page.getByRole("button", { name: "Review file", exact: true }).click();
+      await browserExpect(page.locator("h1")).toHaveText("Review collections");
+      await browserExpect(page.locator(".import-drafts li")).toHaveCount(2);
+      await page
+        .locator(".import-drafts")
+        .getByRole("link", { name: "Design library", exact: true })
+        .click();
+      await browserExpect(page.locator("h1")).toHaveText("Design library");
+      await browserExpect(page.locator(".import-table tbody tr")).toHaveCount(2);
+      await browserExpect(page.getByLabel("Publish when imported")).toHaveValue("true");
+      await page.getByRole("link", { name: "Edit fix-me", exact: true }).click();
+      await page.getByLabel("Address", { exact: true }).fill(`${stem}/fixed`);
+      await page.getByLabel("Tags, one per line").fill("reference\ndesign");
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await browserExpect(page.getByLabel("Address", { exact: true })).toHaveCount(0);
+      await prisma.linkMetadata.updateMany({
+        where: { url: { in: [`${stem}/a`, `${stem}/fixed`, `${stem}/b`] } },
+        data: { state: "ready", fetchedAt: new Date(), title: "Useful reference" },
+      });
+      await page.getByRole("button", { name: "Refresh", exact: true }).click();
+      for (const width of [390, 768, 1280, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+        await page.screenshot({
+          path: `/tmp/collection-review-${javascript}-${width}.png`,
+          fullPage: true,
+        });
+      }
+      // Unsubmitted publishing selection is part of Import itself.
+      await page.getByLabel("Publish when imported").selectOption("false");
+      await page.getByRole("button", { name: "Import", exact: true }).click();
+      await browserExpect(
+        page.locator(".notice").filter({ hasText: "Import queued" }).first(),
+      ).toBeVisible();
+      expect(await prisma.resource.count({ where: { addedByUserId: userId } })).toBe(0);
+      await page.getByRole("link", { name: "All collections to review", exact: true }).click();
+      await page
+        .locator(".import-drafts")
+        .getByRole("link", { name: "Useful tools", exact: true })
+        .click();
+      await browserExpect(page.locator(".import-table tbody tr")).toHaveCount(1);
+      await page.getByRole("button", { name: "Import", exact: true }).click();
+      await browserExpect(
+        page.locator(".notice").filter({ hasText: "Import queued" }).first(),
+      ).toBeVisible();
+      const worker = importJobService(prisma);
+      await worker.runJobBatch();
+      await worker.runJobBatch();
+      await page.getByRole("button", { name: "Refresh", exact: true }).click();
+      await browserExpect(
+        page.getByRole("link", { name: "View collection", exact: true }),
+      ).toBeVisible();
+      const hub = await prisma.hub.findUniqueOrThrow({ where: { ownerUserId: userId } });
+      const collections = await prisma.collection.findMany({
+        where: { hubId: hub.id },
+        include: { resources: true },
+      });
+      expect(collections.find((c) => c.title === "Design library")?.published).toBe(false);
+      expect(collections.find((c) => c.title === "Useful tools")?.published).toBe(true);
+      expect(collections.flatMap((c) => c.resources)).toHaveLength(3);
+    } finally {
+      await close();
+    }
+  }
+}, 90000);
+
+it("requires explicit hub creation before uploading a text import and protects native uploads from foreign origins", async () => {
+  for (const javascript of [true, false]) {
+    const signed = await signInWithCode(app.getHttpServer(), {
+      email: `hubless-import-${crypto.randomUUID()}@example.com`,
+      name: "New collector",
+    });
+    const { page, close } = await freshPage(javascript);
+    try {
+      for (const raw of signed.headers["set-cookie"] as unknown as string[]) {
+        const [name, ...value] = raw.split(";")[0].split("=");
+        await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
+      }
+      await ready(page, "/manage/import-export");
+      await browserExpect(
+        page.getByRole("heading", { name: "Bring your links together" }),
+      ).toBeVisible();
+      expect(await prisma.hub.count({ where: { ownerUserId: signed.body.user.id } })).toBe(0);
+      await page.getByRole("button", { name: "Create hub", exact: true }).click();
+      await browserExpect(
+        page.getByRole("heading", { name: "New import", exact: true, level: 1 }),
+      ).toBeVisible();
+      await browserExpect(page.getByText("Paste links instead", { exact: true })).toHaveCount(0);
+      await page.getByLabel("File format").selectOption("text");
+      await page.getByLabel("Bookmarks, CSV or text file").setInputFiles({
+        name: "links.txt",
+        mimeType: "text/plain",
+        buffer: Buffer.from("bad-address"),
+      });
+      await page.screenshot({ path: `/tmp/import-text-start-${javascript}.png`, fullPage: true });
+      await page.getByRole("button", { name: "Review file", exact: true }).click();
+      await browserExpect(page.locator(".import-summary")).toContainText("Needs attention 1");
+      await page.getByRole("link", { name: "Needs attention 1", exact: true }).click();
+      await page.locator(".import-table tbody tr").first().getByRole("checkbox").check();
+      await page.getByLabel("Collection for selected links").fill("My reading");
+      await page
+        .getByRole("button", { name: /^Set collection for (?:\d+|selected) links?$/ })
+        .click();
+      await browserExpect(
+        page.getByRole("button", { name: /^Set collection for (?:\d+|selected) links?$/ }),
+      ).toHaveCount(0);
+      expect(new URL(page.url()).searchParams.get("status")).toBe("failed");
+      await browserExpect(page.locator(".import-table")).toContainText("My reading");
+      await browserExpect(
+        page.getByRole("button", { name: "Discard draft", exact: true }),
+      ).toHaveCount(0);
+      await browserExpect(
+        page.getByRole("button", { name: /^Revalidate (?:\d+|selected) links?$/ }),
+      ).toHaveCount(0);
+
+      const body = new FormData();
+      body.set("sourceKind", "text");
+      body.set("file", new File(["bad-address"], "links.txt", { type: "text/plain" }));
+      expect(
+        (
+          await fetch(`${origin}/forms/import-start`, {
+            method: "POST",
+            headers: { Origin: "https://foreign.invalid" },
+            body,
+            redirect: "manual",
+          })
+        ).status,
+      ).toBe(403);
+      await page
+        .getByRole("navigation", { name: "Import", exact: true })
+        .getByRole("link", { name: "Review", exact: true })
+        .click();
+      await page.locator(".import-discard summary").click();
+      await page.getByRole("button", { name: "Confirm discard", exact: true }).click();
+      await browserExpect(page.locator(".import-discard")).toHaveCount(0);
+      expect(await prisma.importDraft.count({ where: { userId: signed.body.user.id } })).toBe(0);
+    } finally {
+      await close();
+    }
+  }
+}, 60000);
+
+it("saves collection URLs through Add a link for owners and contributors with and without JavaScript", async () => {
+  for (const javascript of [true, false]) {
+    const signed = await signInHubOwner(app.getHttpServer(), {
+      email: `link-reference-${crypto.randomUUID()}@example.com`,
+      name: "Library owner",
+    });
+    const contributor = await signInHubOwner(app.getHttpServer(), {
+      email: `link-contributor-${crypto.randomUUID()}@example.com`,
+      name: "Contributor",
+    });
+    const hub = await prisma.hub.findUniqueOrThrow({ where: { ownerUserId: signed.body.user.id } });
+    const otherHub = await prisma.hub.findUniqueOrThrow({
+      where: { ownerUserId: contributor.body.user.id },
+    });
+    const target = await prisma.collection.create({
+      data: { hubId: hub.id, title: "C programming", slug: crypto.randomUUID(), published: true },
+    });
+    const foreign = await prisma.collection.create({
+      data: {
+        hubId: otherHub.id,
+        title: "Another library",
+        slug: crypto.randomUUID(),
+        published: true,
+      },
+    });
+    for (const actor of [signed, contributor]) {
+      const source = await prisma.collection.create({
+        data: { hubId: hub.id, title: "Software Engineering", slug: crypto.randomUUID() },
+      });
+      if (actor === contributor)
+        await prisma.collectionShare.create({
+          data: {
+            collectionId: source.id,
+            userId: contributor.body.user.id,
+            source: "direct",
+            role: "contributor",
+          },
+        });
+      const { page, close } = await freshPage(javascript);
+      try {
+        for (const raw of actor.headers["set-cookie"] as unknown as string[]) {
+          const [name, ...value] = raw.split(";")[0].split("=");
+          await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
+        }
+        for (const [index, destination] of [target, foreign].entries()) {
+          await ready(page, `/c/${source.id}/edit`);
+          await page.getByRole("link", { name: "Add a link", exact: true }).click();
+          await browserExpect(page.getByLabel("Save to", { exact: true })).toHaveValue(source.id);
+          await page.getByLabel("Link URL", { exact: true }).fill(`${origin}/c/${destination.id}`);
+          if (javascript)
+            await browserExpect(page.locator(".capture-title")).toHaveText("Collection");
+          await page.getByRole("button", { name: "Save link", exact: true }).click();
+          await page.waitForURL(new RegExp(`/c/${source.id}`));
+          const rows = await prisma.resource.findMany({
+            where: { collectionId: source.id },
+            orderBy: { position: "asc" },
+          });
+          expect(rows).toHaveLength(index + 1);
+          expect(rows[index].kind).toBe(index === 0 ? "collection_link" : "external_link");
+          expect(rows[index].linkedCollectionId).toBe(index === 0 ? target.id : null);
+          await browserExpect(
+            page.locator(".resource-kind", { hasText: "Collection" }),
+          ).toHaveCount(index + 1);
+        }
+      } finally {
+        await close();
+      }
+    }
+  }
+}, 180_000);
+
+it("confirms owner reference cleanup and refreshes changed impact with and without JavaScript", async () => {
+  for (const javascript of [true, false]) {
+    const signed = await signInHubOwner(app.getHttpServer(), {
+      email: `reference-preview-${crypto.randomUUID()}@example.com`,
+      name: "Reference owner",
+    });
+    const hub = await prisma.hub.findUniqueOrThrow({ where: { ownerUserId: signed.body.user.id } });
+    const token = signed.headers["set-auth-token"] as string;
+    const recipientEmail = `reference-recipient-${crypto.randomUUID()}@example.com`;
+    const recipient = await signInHubOwner(app.getHttpServer(), {
+      email: recipientEmail,
+      name: "Recipient",
+    });
+    const { page, close } = await freshPage(javascript);
+    const create = (title: string) =>
+      prisma.collection.create({ data: { hubId: hub.id, slug: crypto.randomUUID(), title } });
+    try {
+      for (const raw of signed.headers["set-cookie"] as unknown as string[]) {
+        const [name, ...value] = raw.split(";")[0].split("=");
+        await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
+      }
+      for (const action of ["delete", "transfer"] as const) {
+        const target = await create("C programming"),
+          parent = await create("Software Engineering"),
+          extra = await create("Learning roadmap");
+        await prisma.resource.create({
+          data: {
+            collectionId: parent.id,
+            kind: "heading",
+            titleOverride: "C resources",
+            position: 0,
+          },
+        });
+        await request(app.getHttpServer())
+          .post(`/api/v1/collections/${parent.id}/resources/collection`)
+          .auth(token, { type: "bearer" })
+          .send({ linkedCollectionId: target.id, position: 1 })
+          .expect(201);
+        if (action === "transfer") {
+          await prisma.collectionShare.create({
+            data: {
+              collectionId: target.id,
+              userId: recipient.body.user.id,
+              role: "contributor",
+              source: "direct",
+            },
+          });
+          await request(app.getHttpServer())
+            .post(`/api/v1/collections/${target.id}/resources/collection`)
+            .auth(token, { type: "bearer" })
+            .send({ linkedCollectionId: extra.id, position: 0 })
+            .expect(201);
+        }
+        await ready(page, `/c/${target.id}/actions?action=${action}`);
+        await browserExpect(page.getByRole("heading", { name: "What will change" })).toBeVisible();
+        await browserExpect(page.locator(".collection-impact-list")).toContainText(
+          "Software Engineering",
+        );
+        await browserExpect(page.locator(".collection-impact-list")).toContainText("C resources");
+        const confirm = action === "delete" ? "Yes, delete" : "Yes, transfer ownership";
+        if (action === "transfer") await page.getByLabel("New owner's email").fill(recipientEmail);
+        await page.getByRole("link", { name: "Keep collection", exact: true }).click();
+        expect(await prisma.collection.findUnique({ where: { id: target.id } })).not.toBeNull();
+        await ready(page, `/c/${target.id}/actions?action=${action}`);
+        if (action === "transfer") await page.getByLabel("New owner's email").fill(recipientEmail);
+        await request(app.getHttpServer())
+          .post(`/api/v1/collections/${extra.id}/resources/collection`)
+          .auth(token, { type: "bearer" })
+          .send({ linkedCollectionId: target.id, position: 0 })
+          .expect(201);
+        await page.getByRole("button", { name: confirm, exact: true }).click();
+        await browserExpect(
+          page.getByText(
+            "The collection or its references changed. Review the updated details before confirming again.",
+          ),
+        ).toBeVisible();
+        await browserExpect(page.locator(".collection-impact-list")).toContainText(
+          "Learning roadmap",
+        );
+        expect(await prisma.collection.findUnique({ where: { id: target.id } })).not.toBeNull();
+        if (action === "transfer") await page.getByLabel("New owner's email").fill(recipientEmail);
+        for (const width of [390, 768, 1280, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.screenshot({
+            path: `/tmp/collection-impact-${action}-${javascript}-${width}.png`,
+            fullPage: true,
+          });
+        }
+        await page.getByRole("button", { name: confirm, exact: true }).click();
+        await page.waitForURL(/\/manage\/collections\?notice=done/);
+        expect(
+          await prisma.resource.count({ where: { collectionId: { in: [parent.id, extra.id] } } }),
+        ).toBe(0);
+        expect(
+          await prisma.collection.count({ where: { id: { in: [parent.id, extra.id] } } }),
+        ).toBe(2);
+        if (action === "delete")
+          expect(await prisma.collection.findUnique({ where: { id: target.id } })).toBeNull();
+        else {
+          expect(
+            (await prisma.collection.findUniqueOrThrow({ where: { id: target.id } })).hubId,
+          ).not.toBe(hub.id);
+          expect(await prisma.resource.count({ where: { collectionId: target.id } })).toBe(0);
+        }
+      }
+    } finally {
+      await close();
+    }
+  }
+}, 60000);
+
+it("bounds import review tables and loads links by status", async () => {
+  for (const javascript of [true, false]) {
+    const signed = await signInHubOwner(app.getHttpServer(), {
+      email: `review-table-${crypto.randomUUID()}@example.com`,
+      name: "Importer",
+    });
+    const token = signed.headers["set-auth-token"] as string;
+    const stem = `https://fixture-links.dev/review-${crypto.randomUUID()}`;
+    const folders = Array.from(
+      { length: 30 },
+      (_, i) =>
+        `<DT><H3>Software Engineering ${i + 1}</H3><DL>${Array.from({ length: 2 }, (_, j) => `<DT><A HREF="${stem}/${i * 2 + j}">Resource</A>`).join("")}</DL>`,
+    ).join("");
+    const html = `<DL><DT><H3>Engineering library</H3><DL><DT><A HREF="invalid-address">Invalid</A>${folders}</DL></DL>`;
+    const draft = (
+      await request(app.getHttpServer())
+        .post("/api/v1/imports")
+        .auth(token, { type: "bearer" })
+        .field("sourceKind", "bookmarks")
+        .attach("file", Buffer.from(html), "bookmarks.html")
+        .expect(201)
+    ).body.data;
+    await prisma.linkMetadata.updateMany({
+      where: { url: { in: Array.from({ length: 30 }, (_, i) => `${stem}/${i}`) } },
+      data: {
+        state: "ready",
+        title:
+          "Practical software engineering: resources, exercises and reference material for a growing personal library",
+        fetchedAt: new Date(),
+      },
+    });
+    const { page, close } = await freshPage(javascript);
+    try {
+      for (const raw of signed.headers["set-cookie"] as unknown as string[]) {
+        const [name, ...value] = raw.split(";")[0].split("=");
+        await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
+      }
+      const here = `/manage/import-export/${draft.id}?collection=${draft.collections.find((c) => c.title === "Engineering library").id}`;
+      await ready(page, here);
+      await browserExpect(page.locator(".import-table thead th")).toHaveText([
+        "Select",
+        "Link",
+        "Tags",
+        "Section",
+        "Collection",
+        "Status",
+        "Edit",
+      ]);
+      await browserExpect(page.locator(".import-table tbody tr")).toHaveCount(25);
+      await browserExpect(page.getByRole("link", { name: /^Imported/ })).toHaveCount(0);
+      await browserExpect(
+        page.getByRole("link", { name: "Processing 30", exact: true }),
+      ).toBeVisible();
+      await browserExpect(
+        page
+          .getByRole("navigation", { name: "Manage", exact: true })
+          .locator(".manage-nav-section > summary"),
+      ).toBeVisible();
+      const region = page.getByRole("region", { name: "Import links", exact: true });
+      for (const theme of ["light", "dark"] as const) {
+        await page.emulateMedia({ colorScheme: theme });
+        for (const width of [390, 768, 1280, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+          expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(
+            1600,
+          );
+          if (width >= 1024) {
+            const box = await region.boundingBox();
+            expect((box?.y ?? 0) + (box?.height ?? 0)).toBeLessThan(860);
+            expect(await region.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+          }
+          const manageMenu = page.locator(".manage-mobile-nav");
+          const manageNav = page.getByRole("navigation", { name: "Manage", exact: true });
+          if (width < 1024) {
+            await browserExpect(manageMenu).toBeVisible();
+            await browserExpect(manageNav).toHaveCount(0);
+            await manageMenu.locator(":scope > summary").click();
+            await browserExpect(
+              manageNav.getByRole("link", { name: "Review", exact: true }),
+            ).toHaveAttribute("aria-current", "page");
+            await page.screenshot({
+              path: `/tmp/manage-menu-${javascript}-${theme}-${width}.png`,
+              fullPage: true,
+            });
+            await manageMenu.locator(":scope > summary").click();
+          } else {
+            const navBox = await manageNav.boundingBox();
+            const contentBox = await page.locator(".manage-content").boundingBox();
+            expect((navBox?.x ?? 0) + (navBox?.width ?? 0)).toBeLessThan(contentBox?.x ?? 0);
+          }
+          await page.screenshot({
+            path: `/tmp/import-review-${javascript}-${theme}-${width}.png`,
+            fullPage: true,
+          });
+        }
+      }
+      await page.emulateMedia({ colorScheme: "light" });
+      await browserExpect(page.getByRole("button", { name: /^Import$/ })).toBeVisible();
+      await browserExpect(
+        page.getByRole("button", { name: "Discard draft", exact: true }),
+      ).toHaveCount(0);
+      if (javascript) {
+        let finishLoad: () => void = () => {};
+        const waiting = new Promise<void>((resolve) => {
+          finishLoad = resolve;
+        });
+        await page.route(`**/api/v1/imports/${draft.id}/rows?*`, async (route) => {
+          await waiting;
+          await route.fulfill({
+            status: 503,
+            contentType: "application/json",
+            body: JSON.stringify({ error: { code: "unavailable" } }),
+          });
+        });
+        await page.getByRole("link", { name: "Load more", exact: true }).click();
+        await browserExpect(
+          page.getByRole("link", { name: "Loading…", exact: true }),
+        ).toHaveAttribute("aria-disabled", "true");
+        await page.screenshot({ path: "/tmp/import-review-loading.png", fullPage: true });
+        finishLoad();
+        await browserExpect(
+          page.getByText("Couldn't load more links. Your current results are still here."),
+        ).toBeVisible();
+        await browserExpect(page.locator(".import-table tbody tr")).toHaveCount(25);
+        await page.getByRole("button", { name: "Try again", exact: true }).scrollIntoViewIfNeeded();
+        await page.screenshot({ path: "/tmp/import-review-load-error.png", fullPage: true });
+        await page.unroute(`**/api/v1/imports/${draft.id}/rows?*`);
+        await page.getByRole("button", { name: "Try again", exact: true }).click();
+        await browserExpect(page.locator(".import-table tbody tr")).toHaveCount(50);
+        const last = page.locator(".import-table tbody tr").last();
+        await last.locator('[data-label="Link"]').click();
+        await browserExpect(last.getByRole("checkbox")).toBeChecked();
+        await browserExpect(page.getByText("1 selected", { exact: true })).toHaveCount(0);
+        await browserExpect(page.locator(".import-remove summary")).toHaveText("Remove 1 link");
+        await page.locator(".import-table tbody tr").first().getByRole("checkbox").check();
+        await browserExpect(page.locator(".import-remove summary")).toHaveText("Remove 2 links");
+        await browserExpect(
+          page
+            .locator(".import-footer > form")
+            .first()
+            .getByRole("button", { name: "Refresh", exact: true }),
+        ).toBeVisible();
+        await browserExpect(
+          page.locator(".import-footer").getByRole("button", { name: "Refresh", exact: true }),
+        ).toBeVisible();
+        await page.getByRole("button", { name: "Clear selection", exact: true }).click();
+        await browserExpect(last.getByRole("checkbox")).not.toBeChecked();
+        await page
+          .getByRole("checkbox", { name: "Select visible links (up to 50)", exact: true })
+          .check();
+        await browserExpect(page.getByText("50 selected", { exact: true })).toHaveCount(0);
+        await browserExpect(
+          page.getByRole("button", { name: /^Revalidate (?:\d+|selected) links?$/ }),
+        ).toHaveCount(0);
+        await page.screenshot({ path: "/tmp/import-review-selection.png", fullPage: true });
+        await page.getByRole("button", { name: "Clear selection", exact: true }).click();
+        await last.getByRole("link", { name: /^Edit/ }).click();
+        await page.getByLabel("Tags, one per line").fill("reference\ntesting");
+        await page.route("**/forms/import-row", (route) =>
+          route.fulfill({
+            status: 503,
+            contentType: "application/json",
+            body: JSON.stringify({ ok: false, code: "unavailable" }),
+          }),
+        );
+        await page.getByRole("button", { name: "Save", exact: true }).click();
+        await browserExpect(page.locator(".import-reason[role=alert]")).toContainText(
+          "Could not save these changes",
+        );
+        await browserExpect(page.getByLabel("Tags, one per line")).toHaveValue(
+          "reference\ntesting",
+        );
+        await page.screenshot({ path: "/tmp/import-inline-error.png", fullPage: true });
+        await page.unroute("**/forms/import-row");
+        await page.getByRole("button", { name: "Save", exact: true }).click();
+        await browserExpect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
+        await browserExpect(page.locator(".import-table tbody tr")).toHaveCount(50);
+        await browserExpect(last.locator('[data-label="Tags"]')).toContainText(
+          "reference, testing",
+        );
+      } else {
+        await page.getByRole("link", { name: "Load more", exact: true }).click();
+        await browserExpect(
+          page.getByRole("link", { name: "First links", exact: true }),
+        ).toBeVisible();
+        await browserExpect(page.locator(".import-table tbody tr")).toHaveCount(25);
+      }
+      await page.getByRole("link", { name: "Ready 30", exact: true }).click();
+      await browserExpect(
+        page.getByRole("button", { name: "Drop failed links", exact: true }),
+      ).toHaveCount(0);
+      await browserExpect(
+        page.getByRole("button", { name: "Revalidate failed", exact: true }),
+      ).toHaveCount(0);
+      await browserExpect(page.getByRole("button", { name: /^Import$/ })).toBeVisible();
+      await page.locator(".import-table tbody tr").first().getByRole("checkbox").check();
+      await browserExpect(page.getByRole("button", { name: /^Import$/ })).toBeVisible();
+      await page.getByRole("button", { name: "Clear selection", exact: true }).click();
+      await browserExpect(page.getByRole("button", { name: /^Import$/ })).toBeVisible();
+      await browserExpect(page.locator(".import-status")).toHaveText(Array(25).fill("Ready"));
+      await page.getByRole("link", { name: "Load more", exact: true }).click();
+      await browserExpect(page.locator(".import-table tbody tr")).toHaveCount(javascript ? 30 : 5);
+      await page.getByRole("link", { name: "Needs attention 1", exact: true }).click();
+      await browserExpect(page.getByRole("button", { name: /^Import .*ready/ })).toHaveCount(0);
+      await browserExpect(
+        page.getByRole("button", { name: "Discard draft", exact: true }),
+      ).toHaveCount(0);
+      await browserExpect(page.locator(".import-table tbody tr")).toHaveCount(1);
+      await browserExpect(page.locator(".import-table")).toContainText("invalid-address");
+      await page.getByRole("link", { name: "Edit invalid-address", exact: true }).click();
+      await page.getByLabel("Address", { exact: true }).focus();
+      await page.screenshot({ path: `/tmp/import-review-edit-${javascript}.png`, fullPage: true });
+      await ready(page, `${here}&status=imported`);
+      await browserExpect(
+        page.getByText("No links match this status.", { exact: false }),
+      ).toBeVisible();
+      await page.screenshot({ path: `/tmp/import-review-empty-${javascript}.png`, fullPage: true });
+      await browserExpect(page.getByLabel("Folder arrangement")).toHaveCount(0);
+      await browserExpect(
+        page.getByRole("button", { name: "Drop failed links", exact: true }),
+      ).toHaveCount(0);
+      await ready(page, `${here}&status=failed`);
+      await page.getByRole("link", { name: "Edit invalid-address", exact: true }).click();
+      await page.getByLabel("Collection", { exact: true }).fill("Engineering library");
+      await page.getByLabel("Section (optional)").fill("Later");
+      for (const width of [390, 768, 1280, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.screenshot({
+          path: `/tmp/import-editor-${javascript}-${width}.png`,
+          fullPage: true,
+        });
+      }
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      const changed = page.locator(".import-table tr").filter({ hasText: "invalid-address" });
+      await page.getByRole("link", { name: "Needs attention 1", exact: true }).click();
+      await browserExpect(changed).toContainText("Engineering library");
+      await browserExpect(changed).toContainText("Later");
+      await changed.getByRole("checkbox").check();
+      await page.locator(".import-remove summary").click();
+      await page.getByRole("button", { name: "Confirm removal", exact: true }).click();
+      await browserExpect(page.getByRole("link", { name: "Skipped 1", exact: true })).toBeVisible();
+    } finally {
+      await close();
+    }
+  }
+}, 180_000);
+
+it("creates CSV collections and sections without destination mapping with and without JavaScript", async () => {
+  for (const javascript of [true, false]) {
+    const signed = await signInHubOwner(app.getHttpServer(), {
+      email: `csv-import-${crypto.randomUUID()}@example.com`,
+      name: "CSV importer",
+    });
+    const userId = signed.body.user.id;
+    const hub = await prisma.hub.findUniqueOrThrow({ where: { ownerUserId: userId } });
+    const existing = await prisma.collection.create({
+      data: { hubId: hub.id, title: "CSV library", slug: `existing-${crypto.randomUUID()}` },
+    });
+    const { page, close } = await freshPage(javascript);
+    const stem = `https://fixture-links.dev/csv-${crypto.randomUUID()}`;
+    const addresses = [`${stem}/a`, `${stem}/b`, `${stem}/c`];
+    try {
+      for (const raw of signed.headers["set-cookie"] as unknown as string[]) {
+        const [name, ...value] = raw.split(";")[0].split("=");
+        await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
+      }
+      await ready(page, "/manage/import-export");
+      const template = await fetch(`${origin}/import-template.csv`);
+      expect(template.status).toBe(200);
+      expect((await template.text()).split("\n")[0]).toBe("collection,section,url,tags");
+      await page.getByLabel("File format").selectOption("csv");
+      await page.getByLabel("Bookmarks, CSV or text file").setInputFiles({
+        name: "library.csv",
+        mimeType: "text/csv",
+        buffer: Buffer.from(
+          `collection,section,url,tags\nCSV library,References,${addresses[0]},css;tools\nCSV library,References,${addresses[1]},reference\nOther library,,${addresses[2]},\n`,
+        ),
+      });
+      await page.getByRole("button", { name: "Review file", exact: true }).click();
+      await browserExpect(page.locator(".import-drafts li")).toHaveCount(2);
+      await page
+        .locator(".import-drafts")
+        .getByRole("link", { name: "CSV library", exact: true })
+        .click();
+      await browserExpect(
+        page.locator('select[name="targetCollectionId"], select[name="structure"]'),
+      ).toHaveCount(0);
+      await browserExpect(page.locator(".import-table")).toContainText("References");
+      await prisma.linkMetadata.updateMany({
+        where: { url: { in: addresses } },
+        data: { state: "ready", fetchedAt: new Date() },
+      });
+      await page.reload();
+      await browserExpect(page.locator(".import-summary")).toContainText("Ready 2");
+      for (const width of [390, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        await page.screenshot({
+          path: `/tmp/structured-csv-${javascript}-${width}.png`,
+          fullPage: true,
+        });
+      }
+      for (const row of await page.locator(".import-table tbody tr").all())
+        await row.getByRole("checkbox").check();
+      await page.getByRole("button", { name: "Import", exact: true }).click();
+      await browserExpect(
+        page.locator(".notice").filter({ hasText: "Import queued" }).first(),
+      ).toBeVisible();
+      await importJobService(prisma).runJobBatch();
+      await page.getByRole("link", { name: "All collections to review", exact: true }).click();
+      await page
+        .locator(".import-drafts")
+        .getByRole("link", { name: "Other library", exact: true })
+        .click();
+      await page.getByRole("button", { name: "Import", exact: true }).click();
+      await browserExpect(
+        page.locator(".notice").filter({ hasText: "Import queued" }).first(),
+      ).toBeVisible();
+      await importJobService(prisma).runJobBatch();
+      const collections = await prisma.collection.findMany({
+        where: { hubId: hub.id, id: { not: existing.id } },
+        include: { resources: { orderBy: { position: "asc" } } },
+      });
+      expect(collections).toHaveLength(2);
+      const library = collections.find((c) => c.title === "CSV library");
+      expect(library?.resources.map((r) => r.titleOverride ?? r.url)).toEqual([
+        "References",
+        addresses[0],
+        addresses[1],
+      ]);
+      expect(library?.resources[0].sectionDescription).toBeNull();
+      const flat = collections.find((c) => c.title === "Other library");
+      expect(flat?.resources.map((r) => r.url)).toEqual([addresses[2]]);
+      expect(collections.every((c) => c.published)).toBe(true);
+      expect(await prisma.resource.count({ where: { collectionId: existing.id } })).toBe(0);
+    } finally {
+      await close();
+    }
+  }
+}, 60000);
+
+it("resumes submitted import corrections after sign-in with and without JavaScript", async () => {
+  for (const javascript of [true, false]) {
+    await prisma.requestBudget.deleteMany();
+    const email = `resume-import-${crypto.randomUUID()}@example.com`;
+    const signed = await signInHubOwner(app.getHttpServer(), { email, name: "Importer" });
+    const tags = Array.from({ length: 30 }, (_, i) =>
+      i === 0 ? "research, notes" : i === 1 ? 'a "quoted" tag' : `${i}`.padEnd(80, "界"),
+    );
+    const csvTags = `"${tags.join(";").replaceAll('"', '""')}"`;
+    const d = (
+      await request(app.getHttpServer())
+        .post("/api/v1/imports")
+        .auth(signed.headers["set-auth-token"], { type: "bearer" })
+        .field("sourceKind", "csv")
+        .attach(
+          "file",
+          Buffer.from(
+            `collection,section,url,tags\nSaved correction,References,invalid-address,${csvTags}\n`,
+          ),
+          "links.csv",
+        )
+        .expect(201)
+    ).body.data;
+    const row = await prisma.importRow.findFirstOrThrow({ where: { draftId: d.id } });
+    const here = `/manage/import-export/${d.id}`;
+    const { page, close } = await freshPage(javascript);
+    const verify = async () => {
+      await page.getByLabel("Email address").fill(email);
+      await page.getByRole("button", { name: "Continue with email", exact: true }).click();
+      await page.getByRole("button", { name: "Send code", exact: true }).click();
+      await browserExpect(page.locator("h1")).toHaveText("Check your email");
+      await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+      await page.getByRole("button", { name: "Verify and continue" }).click();
+    };
+    try {
+      await ready(page, `${here}/rows/${row.id}?status=failed`);
+      await verify();
+      await browserExpect(page.locator("h1")).toHaveText("Saved correction");
+      expect(new URL(page.url()).searchParams.get("status")).toBe("failed");
+      const address = `https://fixture-links.dev/resumed-${crypto.randomUUID()}/${"a".repeat(1800)}`;
+      await page.getByLabel("Address", { exact: true }).fill(address);
+      await browserExpect(page.getByLabel("Tags, one per line")).toHaveValue(tags.join("\n"));
+      if (javascript) {
+        for (const width of [390, 768, 1280, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.screenshot({ path: `/tmp/import-tag-editor-${width}.png`, fullPage: true });
+        }
+      }
+      await page.waitForTimeout(2100);
+      await prisma.session.updateMany({
+        where: { user: { email } },
+        data: { expiresAt: new Date(0) },
+      });
+      await page.getByRole("button", { name: "Save", exact: true }).click();
+      await browserExpect(page.locator("h1")).toHaveText("Sign in to nslinkhub");
+      const recovery = (await page.context().cookies()).find((c) => c.name === "pending_action");
+      expect(recovery?.value).toMatch(/^ref\.[a-f0-9]{64}$/);
+      await verify();
+      await browserExpect(page.locator("h1")).toHaveText("Saved correction");
+      expect(new URL(page.url()).searchParams.get("status")).toBe("failed");
+      expect(await prisma.pendingActionPayload.count()).toBe(0);
+      const saved = await prisma.importRow.findUniqueOrThrow({
+        where: { id: row.id },
+        include: { folder: { include: { parent: true } } },
+      });
+      expect(saved.address).toBe(address);
+      expect(saved.tags).toEqual(tags);
+      expect(saved.folder.name).toBe("References");
+      expect(saved.folder.parent?.newTitle).toBe("Saved correction");
+    } finally {
+      await close();
+    }
+  }
+}, 90000);
+
+it("keeps slow import uploads attributed to their visitors after proof expiry", async () => {
+  const secret = process.env.BETTER_AUTH_SECRET ?? "dev-better-auth-secret";
+  const signed = await signInHubOwner(app.getHttpServer(), {
+    email: `slow-import-${crypto.randomUUID()}@example.com`,
+    name: "Importer",
+  });
+  const session = (signed.headers["set-cookie"] as unknown as string[])
+    .map((c) => c.split(";")[0])
+    .join("; ");
+  const key = (source: string) => requestBudgetKey("file", source, secret);
+  // Neither the saturated visitor nor the shared web socket may lend capacity.
+  for (const source of ["127.0.0.1", "127.0.0.2"])
+    await prisma.requestBudget.upsert({
+      where: { key: key(source) },
+      create: { key: key(source), count: 10, expiresAt: new Date(Date.now() + 120000) },
+      update: { count: 10, expiresAt: new Date(Date.now() + 120000) },
+    });
+  const results = await Promise.all(
+    ["127.0.0.2", "127.0.0.3"].map(async (source) => {
+      const boundary = `boundary-${crypto.randomUUID()}`;
+      const body = `--${boundary}\r\nContent-Disposition: form-data; name="sourceKind"\r\n\r\ntext\r\n--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="links.txt"\r\nContent-Type: text/plain\r\n\r\nhttps://fixture-links.dev/slow-${crypto.randomUUID()}\r\n--${boundary}--\r\n`;
+      const child = Bun.spawn(
+        [
+          "node",
+          "-e",
+          `
+      const { request } = require('node:http');
+      const { url, source, origin, session, boundary, body } = JSON.parse(process.argv[1]);
+      const req = request(url, { method: 'POST', localAddress: source, headers: {
+        Origin: origin, Cookie: session, 'Content-Type': 'multipart/form-data; boundary=' + boundary,
+        'Content-Length': Buffer.byteLength(body), 'x-web-form-source': 'forged',
+        'x-web-read-source': 'forged', 'x-forwarded-for': '127.0.0.99'
+      }}, res => {
+        res.resume(); res.on('end', () => process.stdout.write(JSON.stringify({ status: res.statusCode, location: res.headers.location })));
+      });
+      req.on('error', () => process.exit(1));
+      req.setTimeout(45000, () => req.destroy());
+      req.write(body.slice(0, -1));
+      setTimeout(() => req.end(body.slice(-1)), 31000);
+    `,
+          JSON.stringify({
+            url: `${webOrigin}/forms/import-start`,
+            source,
+            origin,
+            session,
+            boundary,
+            body,
+          }),
+        ],
+        { stdout: "pipe", stderr: "pipe" },
+      );
+      const result = await new Response(child.stdout).text();
+      expect(await child.exited).toBe(0);
+      return JSON.parse(result);
+    }),
+  );
+  expect(results[0]).toMatchObject({
+    status: 303,
+    location: "/manage/import-export?notice=import-limited",
+  });
+  expect(results[1]).toMatchObject({ status: 303, location: "/manage/import-export?tab=review" });
+  expect(
+    (await prisma.requestBudget.findUniqueOrThrow({ where: { key: key("127.0.0.3") } })).count,
+  ).toBe(1);
+  expect(
+    (await prisma.requestBudget.findUniqueOrThrow({ where: { key: key("127.0.0.1") } })).count,
+  ).toBe(10);
+  expect(await prisma.importDraft.count({ where: { userId: signed.body.user.id } })).toBe(1);
+}, 60000);
+
+it("keeps transfer slug conflicts out of impact refreshes before and after sign-in", async () => {
+  for (const javascript of [true, false]) {
+    await prisma.requestBudget.deleteMany();
+    const email = `slug-owner-${crypto.randomUUID()}@example.com`;
+    const signed = await signInHubOwner(app.getHttpServer(), { email, name: "Owner" });
+    const recipientEmail = `slug-recipient-${crypto.randomUUID()}@example.com`;
+    const recipient = await signInHubOwner(app.getHttpServer(), {
+      email: recipientEmail,
+      name: "Recipient",
+    });
+    const ownerHub = await prisma.hub.findUniqueOrThrow({
+      where: { ownerUserId: signed.body.user.id },
+    });
+    const recipientHub = await prisma.hub.findUniqueOrThrow({
+      where: { ownerUserId: recipient.body.user.id },
+    });
+    const slug = `shared-slug-${crypto.randomUUID()}`;
+    const target = await prisma.collection.create({
+      data: { hubId: ownerHub.id, title: "Transfer conflict", slug },
+    });
+    await prisma.collection.create({
+      data: { hubId: recipientHub.id, title: "Existing collection", slug },
+    });
+    await prisma.collectionShare.create({
+      data: {
+        collectionId: target.id,
+        userId: recipient.body.user.id,
+        role: "contributor",
+        source: "direct",
+      },
+    });
+    const { page, close } = await freshPage(javascript);
+    const verify = async () => {
+      await page.getByLabel("Email address").fill(email);
+      await page.getByRole("button", { name: "Continue with email", exact: true }).click();
+      await page.getByRole("button", { name: "Send code", exact: true }).click();
+      await browserExpect(page.locator("h1")).toHaveText("Check your email");
+      await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+      await page.getByRole("button", { name: "Verify and continue" }).click();
+    };
+    try {
+      await ready(page, "/sign-in?returnTo=/manage/collections");
+      await verify();
+      await page.waitForURL(/\/manage\/collections$/);
+      await ready(page, `/c/${target.id}/actions?action=transfer`);
+      await page.getByLabel("New owner's email").fill(recipientEmail);
+      await page.getByRole("button", { name: "Yes, transfer ownership", exact: true }).click();
+      await browserExpect(page.locator("main").getByRole("alert")).toContainText(
+        "The action could not be completed.",
+      );
+      expect(new URL(page.url()).searchParams.get("notice")).not.toBe("impact-changed");
+      await page.getByLabel("New owner's email").fill(recipientEmail);
+      await prisma.session.updateMany({
+        where: { user: { email } },
+        data: { expiresAt: new Date(0) },
+      });
+      await page.getByRole("button", { name: "Yes, transfer ownership", exact: true }).click();
+      await browserExpect(page.locator(".verify-reason")).toContainText("transfer this collection");
+      await verify();
+      await page.waitForURL(/\/manage\/collections\?notice=conflict/);
+      expect((await prisma.collection.findUniqueOrThrow({ where: { id: target.id } })).hubId).toBe(
+        ownerHub.id,
+      );
+    } finally {
+      await close();
+    }
   }
 }, 60000);

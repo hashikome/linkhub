@@ -5,31 +5,30 @@ import { browserRead } from "../lib/browser-api";
 
 // Document navigation avoids the router cache. Never restore an old authorized
 // DOM from bfcache or a background tab before a fresh server authorization.
-// Fast navigations keep the current page until the next one paints; only a
-// navigation still pending after this delay hides it behind the progress state.
-const slowNavigation = 300;
+// Ordinary navigation uses browser-native progress and keeps the current view.
+// Mutation submissions conceal potentially stale content after a short delay.
+const mutationConcealDelay = 300;
 // Returning to a tab re-checks the session cheaply; after a long absence the
 // whole page reloads so revoked shares or unpublished content are re-authorized.
 const staleAfter = 10 * 60 * 1000;
 
 export function FreshDocument() {
-  const [slow, setSlow] = useState(false);
+  const [interrupted, setInterrupted] = useState(false);
   useEffect(() => {
-    let recovery: ReturnType<typeof setTimeout> | undefined;
+    let navigating = false;
     let pending: ReturnType<typeof setTimeout> | undefined;
     let hiddenAt = 0;
     const hide = () => {
       clearTimeout(pending);
       pending = undefined;
-      clearTimeout(recovery);
-      setSlow(false);
-      recovery = setTimeout(() => setSlow(true), 8000);
+      setInterrupted(false);
       document.documentElement.dataset.revalidating = "true";
       window.dispatchEvent(new Event("reader:suspend"));
     };
-    const soon = () => {
+    const beginNavigation = (conceal = false) => {
+      navigating = true;
       clearTimeout(pending);
-      pending = setTimeout(hide, slowNavigation);
+      if (conceal) pending = setTimeout(hide, mutationConcealDelay);
     };
     const reload = () => {
       hide();
@@ -52,11 +51,12 @@ export function FreshDocument() {
         url.origin === window.location.origin &&
         (url.pathname !== window.location.pathname || url.search !== window.location.search)
       )
-        soon();
+        beginNavigation();
     };
     const submit = (event: SubmitEvent) => {
       if (event.defaultPrevented || !(event.target instanceof HTMLFormElement)) return;
-      if (new URL(event.target.action).origin === window.location.origin) soon();
+      if (new URL(event.target.action).origin === window.location.origin)
+        beginNavigation(event.target.method.toLowerCase() !== "get");
     };
     window.addEventListener("submit", submit);
     window.addEventListener("click", navigate);
@@ -83,16 +83,17 @@ export function FreshDocument() {
     };
     window.addEventListener("pagehide", hide);
     window.addEventListener("pageshow", pageshow);
-    // Escape (or a cancelled load) shows the progress state and its recovery at once.
+    // A cancelled navigation offers recovery, without routine loading feedback.
     const cancelled = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (pending) hide();
-      if (document.documentElement.dataset.revalidating === "true") setSlow(true);
+      if (!navigating && document.documentElement.dataset.revalidating !== "true") return;
+      navigating = false;
+      hide();
+      setInterrupted(true);
     };
     window.addEventListener("keydown", cancelled);
     document.addEventListener("visibilitychange", visibility);
     return () => {
-      clearTimeout(recovery);
       clearTimeout(pending);
       window.removeEventListener("keydown", cancelled);
       window.removeEventListener("submit", submit);
@@ -102,20 +103,13 @@ export function FreshDocument() {
       document.removeEventListener("visibilitychange", visibility);
     };
   }, []);
+  if (!interrupted) return null;
   return (
-    <div className="navigation-loading">
-      <p className="navigation-progress" role="status">
-        <span className="loading-indicator" aria-hidden="true" />
-        Loading page…
-      </p>
-      {slow && (
-        <div className="navigation-recovery">
-          <p>This is taking longer than expected.</p>
-          <button type="button" className="button" onClick={() => window.location.reload()}>
-            Reload this page
-          </button>
-        </div>
-      )}
+    <div className="navigation-recovery" role="alert">
+      <p>Navigation was interrupted.</p>
+      <button type="button" className="button" onClick={() => window.location.reload()}>
+        Reload this page
+      </button>
     </div>
   );
 }

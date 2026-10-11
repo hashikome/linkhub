@@ -26,6 +26,11 @@ There are no memberships, invitations into hubs or hub roles.
 Collaboration is per-collection sharing only; a hub is never a space others
 join.
 
+The accepted next URL milestone ([ADR-0053](docs/engineering-decisions/0053-id-only-collection-addresses.md))
+uses `/c/<collectionId>` for all collection addresses and handles only for hub
+resolution. Slug storage and browse lookup in the current codemap below remain
+implemented until that migration; collection IDs already survive transfers.
+
 ## System Shape
 
 A Bun-managed TypeScript monorepo. The backend is a NestJS modular monolith
@@ -77,8 +82,9 @@ ref/               disposable, git-ignored implementation context
 | `sharing` | canonical previews, share entries and reported opens at `/share`; creator/resource-owner analytics and admin metadata obey existing access boundaries |
 | `users` | self-service profile at `/profile` (username, full name, optional hub identity, name visibility); public person profiles at `/people/:id` and `/people/by-username/:username` |
 | `collections` | collection CRUD, Save a link (`/capture`), publish/unpublish, link + direct sharing, ownership transfer, saves, `/discover`, public hub pages + handle resolution (`/hubs/by-handle/:handle`), `/me/{shared,saved,people}`, hub+slug lookup and the durable id permalink (`GET /collections/:id`) |
-| `resources` | items (links with server-resolved titles, collection references, headings), tags, reorder with version checks, public-address rule, link preview |
-| `imports` | bookmarks-HTML + universal-CSV ingestion with per-row error reports |
+| `resources` | items (links with server-resolved titles, same-owner collection references, headings), tags, reorder with version checks, public-address rule, link preview |
+| `imports` | private reviewed bookmarks/CSV/TXT drafts, shared metadata lookups and owner-authorized batched commits |
+| `recovery` | service-authenticated, encrypted temporary payload storage for oversized interrupted web actions; no domain access authority |
 | `exports` | synchronous export (`POST /exports`): markdown/PDF/Word, one document per collection, zipped when several — programmatic renderers, no queue |
 | `avatars` | public active-account Gravatar proxy at immutable user-ID URLs; deterministic SVG fallback from safe seeds |
 | `health` | liveness (`/health`) + per-dependency readiness (`/status`: postgres, queue Redis → ready/degraded/unavailable; 503 when postgres is down) |

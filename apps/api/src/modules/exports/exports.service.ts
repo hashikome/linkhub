@@ -116,7 +116,13 @@ export class ExportsService {
     const target = resource.linkedCollectionId
       ? await this.prisma.collection.findUnique({ where: { id: resource.linkedCollectionId } })
       : null;
-    if (!target || !(await this.policy.resolve(target, user)).canRead)
+    const source =
+      target &&
+      (await this.prisma.collection.findFirst({
+        where: { id: resource.collectionId, hubId: target.hubId },
+        select: { id: true },
+      }));
+    if (!target || !source || !(await this.policy.resolve(target, user)).canRead)
       return { kind: "notice", title: "Collection unavailable — not included in this export." };
     return { kind: "link", title: target.title, url: this.collectionUrl(target.id) };
   }
@@ -144,7 +150,11 @@ export class ExportsService {
         const target = await this.prisma.collection.findUnique({
           where: { id: resource.linkedCollectionId },
         });
-        if (target && (await this.policy.resolve(target, user)).canRead) {
+        if (
+          target &&
+          target.hubId === collection.hubId &&
+          (await this.policy.resolve(target, user)).canRead
+        ) {
           const entries = await this.prisma.resource.findMany({
             where: { collectionId: target.id },
             orderBy: { position: "asc" },

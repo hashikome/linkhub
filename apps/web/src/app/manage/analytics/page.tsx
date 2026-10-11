@@ -2,7 +2,6 @@ import type { ShareAnalytics, ShareKind } from "@nslinkhub/types";
 import type { Metadata } from "next";
 import { LocalTime } from "../../../components/local-time";
 import { OperatorFailure } from "../../../components/operator-failure";
-import { OperatorNav } from "../../../components/operator-ui";
 import { operatorRead } from "../../../lib/operator-read";
 
 export const metadata: Metadata = { title: "Analytics · Manage" };
@@ -54,7 +53,6 @@ export default async function Page() {
   const data = result.data;
   return (
     <section className="reader ops-page analytics-page">
-      <OperatorNav current="analytics" />
       <h1>Analytics</h1>
       <p className="meta">Sharing across the service, all time.</p>
       <div className="analytics-refresh">

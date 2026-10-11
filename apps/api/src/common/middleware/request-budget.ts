@@ -54,7 +54,8 @@ export function requestBudget(
         ? "read"
         : path.startsWith("/api/v1/auth/")
           ? "auth"
-          : /^\/api\/v1\/(imports|exports)(\/|$)/.test(path)
+          : (path === "/api/v1/imports" && request.method === "POST") ||
+              /^\/api\/v1\/exports(\/|$)/.test(path)
             ? "file"
             : path === "/api/v1/link-preview"
               ? "lookup"

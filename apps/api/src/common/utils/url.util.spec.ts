@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { isPublicLinkHost } from "@nslinkhub/types";
+import { collectionAddress, isPublicLinkHost } from "@nslinkhub/types";
 import { publicLinkUrl } from "./url.util";
 
 describe("public link addresses", () => {
@@ -35,5 +35,27 @@ describe("public link addresses", () => {
   it("returns the canonical public address or refuses it", () => {
     expect(publicLinkUrl("https://YouTu.be/abc?utm_source=x")).toBe("https://youtu.be/abc");
     expect(() => publicLinkUrl("http://localhost:8085/notebook/")).toThrow();
+  });
+});
+
+describe("collection address recognition", () => {
+  const origin = "https://links.fixture-links.dev";
+  const id = "01990000-0000-7000-8000-000000000001";
+  it("recognizes durable and pretty routes only at the configured origin", () => {
+    expect(collectionAddress(`${origin}/c/${id}?s=not-authority#item`, origin)).toEqual({ id });
+    expect(collectionAddress(`${origin}/@reader/my-guide`, origin)).toEqual({
+      handle: "reader",
+      slug: "my-guide",
+    });
+    for (const url of [
+      `https://links.fixture-links.dev.evil.dev/c/${id}`,
+      `http://links.fixture-links.dev/c/${id}`,
+      `${origin}:8443/c/${id}`,
+      `https://person@links.fixture-links.dev/c/${id}`,
+      `${origin}/c/${id}/edit`,
+      `${origin}/c/not-an-id`,
+      `${origin}/capture`,
+    ])
+      expect(collectionAddress(url, origin)).toBeNull();
   });
 });

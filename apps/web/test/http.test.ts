@@ -279,3 +279,61 @@ it("forwards proof cancellation on failed code issuance without forwarding sessi
     globalThis.fetch = original;
   }
 });
+
+it("preserves import return paths and explicitly transmits revision-bearing deletes and multipart uploads", async () => {
+  const path = "/manage/import-export/019f0000-0000-7000-8000-000000000001";
+  expect(safeReturn(`${path}?unexpected=value`)).toBe(path);
+  expect(safeReturn("/manage/import-export")).toBe("/manage/import-export");
+  expect(safeReturn("/manage/import-export?tab=review&next=https://evil.test")).toBe(
+    "/manage/import-export?tab=review",
+  );
+  const original = globalThis.fetch;
+  const sent: RequestInit[] = [];
+  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+    sent.push(init ?? {});
+    return Response.json({ data: { success: true } });
+  }) as unknown as typeof fetch;
+  try {
+    await postJson(
+      "http://fixture.test/api/v1/imports/id",
+      { version: 3 },
+      { headers: new Headers(), method: "DELETE", deleteBody: true },
+    );
+    expect(sent[0].body).toBe('{"version":3}');
+    await postJson(
+      "http://fixture.test/api/v1/existing-delete",
+      {},
+      { headers: new Headers(), method: "DELETE" },
+    );
+    expect(sent[1].body).toBeUndefined();
+    const file = new FormData();
+    file.set("sourceKind", "csv");
+    file.set("file", new Blob(["url\nhttps://example.com"]), "links.csv");
+    await postJson("http://fixture.test/api/v1/imports", file, { headers: new Headers() });
+    expect(sent[2].body).toBe(file);
+    expect(sent.every((init) => init.cache === "no-store" && init.redirect === "error")).toBe(true);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+it("preserves safe import row editor returns through sign-in", () => {
+  const path =
+    "/manage/import-export/019f0000-0000-7000-8000-000000000001/rows/019f0000-0000-7000-8000-000000000002";
+  expect(safeReturn(path)).toBe(path);
+  expect(safeReturn(`${path}?next=https://evil.test`)).toBe(path);
+  expect(safeReturn(`${path}/unexpected`)).toBe("/");
+});
+
+it("preserves only valid inline import correction and status parameters", () => {
+  const path = "/manage/import-export/019f0000-0000-7000-8000-000000000001";
+  const id = "019f0000-0000-7000-8000-000000000002";
+  expect(safeReturn(`${path}?edit=${id}&status=failed&next=https://evil.test`)).toBe(
+    `${path}?status=failed&edit=${id}`,
+  );
+  expect(safeReturn(`${path}?edit=invalid&status=unknown`)).toBe(path);
+  expect(safeReturn(`${path}?collection=${id}&status=failed&edit=${id}`)).toBe(
+    `${path}?collection=${id}&status=failed&edit=${id}`,
+  );
+  expect(safeReturn(`${path}?collection=invalid`)).toBe(path);
+});

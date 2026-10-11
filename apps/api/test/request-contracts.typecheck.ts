@@ -8,7 +8,11 @@ import type { TransferCollectionDto } from "../src/modules/collections/dto/trans
 import type { UpdateCollectionDto } from "../src/modules/collections/dto/update-collection.dto";
 import type { CreateCommentDto, UpdateCommentDto } from "../src/modules/comments/dto/comment.dto";
 import type { CreateExportDto } from "../src/modules/exports/dto/create-export.dto";
-import type { ImportTargetDto } from "../src/modules/imports/dto/import-target.dto";
+import type {
+  CreateImportDto,
+  ImportDestinationDto,
+  ImportRowDto,
+} from "../src/modules/imports/dto/import-draft.dto";
 import type { OperationDto } from "../src/modules/operations/operations.dto";
 import type {
   CreateCollectionResourceDto,
@@ -45,7 +49,9 @@ export type RequestContractChecks = [
   Assert<Equal<MoveResourceDto, Wire.MoveResourceRequest>>,
   Assert<Equal<ReorderResourcesDto, Wire.ReorderResourcesRequest>>,
   Assert<Equal<UpdateUserDto, Wire.UpdateProfileRequest>>,
-  Assert<Equal<ImportTargetDto, Wire.ImportTargetRequest>>,
+  Assert<Equal<CreateImportDto, Wire.ImportCreateRequest>>,
+  Assert<Equal<ImportRowDto, Wire.ImportRowUpdate>>,
+  Assert<Equal<ImportDestinationDto, Wire.ImportDestinationUpdate>>,
   Assert<Equal<CreateExportDto, Wire.CreateExportRequest>>,
   Assert<Equal<CreateCommentDto, Wire.CreateCommentRequest>>,
   Assert<Equal<UpdateCommentDto, Wire.UpdateCommentRequest>>,

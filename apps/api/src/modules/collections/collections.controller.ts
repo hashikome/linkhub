@@ -25,6 +25,7 @@ import { conditionalGetHit } from "src/common/utils/etag.util";
 import { apiOk } from "src/common/utils/response.util";
 import { shareTokenFrom } from "src/common/utils/token.util";
 import { CollectionsService } from "./collections.service";
+import { CollectionImpactDto, CollectionImpactQuery } from "./dto/collection-impact.dto";
 import { CreateCollectionDto } from "./dto/create-collection.dto";
 import { CreateShareDto } from "./dto/create-share.dto";
 import { SetLinkSharingDto } from "./dto/set-link-sharing.dto";
@@ -57,8 +58,12 @@ export class CollectionsController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard)
   @Delete(":id")
-  async remove(@Param("id", new ParseUUIDPipe()) id: string, @CurrentUser() user: AuthUser) {
-    return apiOk(await this.collectionsService.remove(id, user));
+  async remove(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CollectionImpactDto,
+  ) {
+    return apiOk(await this.collectionsService.remove(id, user, dto));
   }
 
   @ApiBearerAuth()
@@ -84,6 +89,17 @@ export class CollectionsController {
     @Body() dto: SetLinkSharingDto,
   ) {
     return apiOk(await this.collectionsService.setLinkSharing(id, user, dto));
+  }
+
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard)
+  @Get(":id/impact")
+  async impact(
+    @Param("id", new ParseUUIDPipe()) id: string,
+    @CurrentUser() user: AuthUser,
+    @Query() query: CollectionImpactQuery,
+  ) {
+    return apiOk(await this.collectionsService.impact(id, user, query.action));
   }
 
   @ApiBearerAuth()

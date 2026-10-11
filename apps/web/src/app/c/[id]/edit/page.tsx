@@ -51,11 +51,9 @@ export default async function Page({
       <section id="collection-items" aria-labelledby="items-heading">
         <h2 id="items-heading">Items and sections</h2>
         <nav className="section-controls" aria-label="Item editing">
-          {result.data.capabilities.canManage && (
-            <a className="button" href={`/capture?collection=${id}`}>
-              Add a link
-            </a>
-          )}
+          <a className="button" href={`/capture?collection=${id}`}>
+            Add a link
+          </a>
           {resources.data.length > 0 && (
             <a className="button" href={`/c/${id}/reorder`}>
               Reorder

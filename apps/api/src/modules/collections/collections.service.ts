@@ -28,6 +28,8 @@ import { availableCollections } from "../hubs/availability";
 import { CollectionPolicyService } from "../hubs/collection-policy.service";
 import { ensurePersonalHub } from "../hubs/hub-onboarding";
 import { HubsService } from "../hubs/hubs.service";
+import { applyCollectionImpact, collectionImpact } from "./collection-impact";
+import { CollectionImpactDto } from "./dto/collection-impact.dto";
 import { CreateCollectionDto } from "./dto/create-collection.dto";
 import { CreateShareDto } from "./dto/create-share.dto";
 import { SetLinkSharingDto } from "./dto/set-link-sharing.dto";
@@ -118,12 +120,24 @@ export class CollectionsService {
     return this.toPublicCollection(saved);
   }
 
-  async remove(id: string, user: AuthUser) {
+  async impact(id: string, user: AuthUser, action: "delete" | "transfer") {
+    return this.prisma.withAuthority(async () => {
+      const collection = await this.requireCollection(id);
+      await this.policy.requireManage(collection, user);
+      return (await collectionImpact(this.prisma, collection, action)).view;
+    });
+  }
+
+  async remove(id: string, user: AuthUser, dto: CollectionImpactDto = {}) {
     const collection = await this.requireCollection(id);
     await this.policy.requireManage(collection, user);
-    await this.mutateOwned(collection, user, { action: "collection.deleted" }, (tx) =>
-      tx.collection.delete({ where: { id: collection.id, hubId: collection.hubId } }),
-    );
+    await this.mutateOwned(collection, user, { action: "collection.deleted" }, async (tx) => {
+      const current = await tx.collection.findUniqueOrThrow({
+        where: { id, hubId: collection.hubId },
+      });
+      await applyCollectionImpact(tx, current, user.userId, "delete", dto.impactToken);
+      await tx.collection.delete({ where: { id: collection.id, hubId: collection.hubId } });
+    });
     return { id, deleted: true };
   }
 
@@ -359,6 +373,10 @@ export class CollectionsService {
           select: { role: true },
         });
         if (currentShare?.role !== "contributor") throw appError("transfer_requires_contributor");
+        const current = await tx.collection.findUniqueOrThrow({
+          where: { id, hubId: collection.hubId },
+        });
+        await applyCollectionImpact(tx, current, user.userId, "transfer", dto.impactToken);
         await recordAudit(tx, {
           hubId: recipientHub.id,
           actorUserId: user.userId,
@@ -756,7 +774,12 @@ export class CollectionsService {
         const target = await this.prisma.collection.findUnique({
           where: { id: item.linkedCollectionId },
         });
-        if (target && (await this.policy.resolve(target, user)).canRead) title = target.title;
+        if (
+          target &&
+          target.hubId === collection.hubId &&
+          (await this.policy.resolve(target, user)).canRead
+        )
+          title = target.title;
       }
       itemViews.set(item.id, {
         id: item.id,
@@ -886,7 +909,7 @@ export class CollectionsService {
           slug: dto.slug,
           title: dto.title,
           description: dto.description,
-          published: dto.published ?? false,
+          published: dto.published ?? true,
         },
       });
       const event = { hubId, actorUserId: user.userId, collectionId: created.id };

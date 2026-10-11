@@ -8,6 +8,12 @@ union of their implemented capabilities. A hub has one owner; collection
 contributors and viewers work from their collection, not an owner's Manage.
 The API owns every permission, including direct requests to hidden sections.
 
+Manage sections live in a left sidebar at desktop widths. Below 1024px they
+use a native collapsible Manage menu. The global site header stays in place;
+page headings and filters remain in the content area. Import’s New import and
+Review subsections sit beneath Import in the sidebar.
+Navigation is server-rendered and permission-scoped, including without JavaScript.
+
 ## Implemented sections
 
 | Section | Audience and context |
@@ -15,6 +21,7 @@ The API owns every permission, including direct requests to hidden sections.
 | Accounts | Operators/admins: Account (name and username), Email, Role, Status, Member since, Last login and Sessions; search by full user ID, username, email or hub handle |
 | Access | Hub owners: distinct people currently granted collection access, with collection counts; access is managed from the collection |
 | Collections | Owners: their collections, visibility and edit links. Operators/admins: public collection review and holds |
+| Import | Owners: reviewed bookmarks/CSV/TXT imports, folder destinations, repairs and partial commits. Hubless people can explicitly create a hub here |
 | Team | Admins: current admins/operators and permitted removal actions |
 | Invitations | Admins: service invitations, delivery, resend and revoke |
 | Analytics | Operators/admins: all-time share requests and reported opens, grouped by resource kind and destination; Refresh reloads counts |
@@ -34,16 +41,23 @@ still has service controls; an ordinary hubless reader does not need Manage.
 
 | Section | What |
 | --- | --- |
-| Collection extensions | Bulk import/export and richer filtering; single-collection actions are implemented |
+| Collection extensions | Bulk export and richer filtering; single-collection actions are implemented |
 | Comments | Comments across the hub's collections, newest first, filterable by collection and state; hide, show, mark answers |
 | Access | Like Google Drive's "Manage access", across the hub: **Requests** first ("reader asked to view *Backend building blocks*" — Can view, Can contribute, Decline, Decline and block), then every collaborator by collection (viewer, contributor; change role, remove) and the link-shared collections. Each collection's **Manage access** opens this view filtered to it |
 | Invitations | Send and track collection-access invitations; show the invited collection, viewer/contributor access, recipient and status; resend or revoke pending invitations |
 | Access extensions | Accepted collaborators, grouped by person with the collections and viewer/contributor access granted to each; change or remove access. Also **Subscribers** (remove, block) and **Blocked** (unblock) |
-| Import & export | Import: bulk import drafts ([bulk-import.md](bulk-import.md)). Export: several collections at once (one document each, zipped), optionally including referenced collections |
+| Export extensions | Several collections at once (one document each, zipped), optionally including referenced collections; API export exists, web downloads remain planned |
 | Audit extensions | Richer item labels for the implemented hub audit ([attribution-and-activity.md](attribution-and-activity.md)); identity filters and current person usernames are implemented |
 
 Every section uses the pattern of the implemented operations tables: minimal tables,
 one filter row, row actions, and "Confirm it's you" for sensitive actions.
+Import review uses the same bounded table pattern: counted status filters, Load
+more, Select / Link / Tags / Section / Collection / Status / Edit columns and automatic folder-derived
+placement. First-column checkboxes and row clicks expose counted actions for the
+selection: import, retry, confirmed removal, or collection assignment for unfiled
+links. Clear selection hides these actions. Refresh stays available as a button in
+the same footer; whole-draft discard belongs on the imports list. Edit opens inputs in the same row, preserving the bulk workflow. Desktop tables scroll within the workspace; narrow/zoomed screens keep
+controls reachable. Imported rows are partial-commit history.
 
 ## Invitations and people
 
@@ -127,3 +141,20 @@ and the search/action/date fields. It uses the standard secondary button,
 matching Search. Clear filters appears beside it only when filters are applied
 and returns to the default log. Additional optional filters can join Include
 read events above the buttons; a personal-only option is deferred.
+
+
+### Import workspace views
+
+Import has two permanent subsections: **New import** for uploading a file and **Review**
+for all unfinished imports, including those still processing. Opening a draft keeps
+Review active; selecting Review returns to the list without discarding work.
+The former `?tab=drafts` address redirects to `?tab=review`.
+The draft list owns whole-draft discard; New import links there when all three
+slots are occupied. Upload file opens the file picker and displays the selected
+filename; native file input remains available without JavaScript. File-preparation
+instructions live at `/support/imports`, linked from New import and Support.
+There is no completed-history tab while drafts remain temporary working state.
+
+Navigation sections with children use native expand/collapse controls; expanding
+Import never navigates. New import and Review are the navigation links. Sections
+without children remain direct links. The current section starts expanded.

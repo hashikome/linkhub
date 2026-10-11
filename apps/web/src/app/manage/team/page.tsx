@@ -4,7 +4,6 @@ import { FormNotice } from "../../../components/form-notice";
 import { teamRows } from "../../../components/manage-rows";
 import { ManageTable } from "../../../components/manage-table";
 import { OperatorFailure } from "../../../components/operator-failure";
-import { OperatorNav } from "../../../components/operator-ui";
 import { queryValue, withCursor } from "../../../lib/http";
 import { operatorRead } from "../../../lib/operator-read";
 import { loadManageRows } from "../load-rows";
@@ -24,7 +23,6 @@ export default async function Page({
   if (!team.ok) return <OperatorFailure error={team} />;
   return (
     <section className="reader ops-page ops-list-page">
-      <OperatorNav current="team" />
       <h1>Team</h1>
       <p className="meta">Admins and operators who run the service.</p>
       <FormNotice code={queryValue(query.notice)} />

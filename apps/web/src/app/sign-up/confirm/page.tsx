@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { FormNotice } from "../../../components/form-notice";
-import { SignupHub } from "../../../components/signup-hub";
 import { NativeForm } from "../../../components/native-form";
+import { SignupHub } from "../../../components/signup-hub";
 import { readFlow } from "../../../lib/form-server";
 import { queryValue } from "../../../lib/http";
 import { serverRead } from "../../../lib/server-api";

@@ -163,6 +163,7 @@ export function ResourceRow({
             ) : (
               url && (
                 <>
+                  {item.collectionHint && <span className="resource-kind">Collection</span>}
                   <span>{url.hostname.replace(/^www\./, "")}</span>
                   <ExternalIcon />
                 </>

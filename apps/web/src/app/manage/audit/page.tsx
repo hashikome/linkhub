@@ -3,7 +3,6 @@ import type { Metadata } from "next";
 import { AuditEvents } from "../../../components/audit-events";
 import { AuditFilters } from "../../../components/audit-filters";
 import { OperatorFailure } from "../../../components/operator-failure";
-import { OperatorNav } from "../../../components/operator-ui";
 import { auditContinuation, auditQuery } from "../../../lib/audit-query";
 import type { ApiPath } from "../../../lib/http";
 import { operatorRead } from "../../../lib/operator-read";
@@ -27,7 +26,6 @@ export default async function Page({
   const next = auditContinuation(result.meta);
   return (
     <section className="reader ops-page ops-list-page">
-      <OperatorNav current="audit" />
       <h1>Audit Log</h1>
       <p className="meta">Recorded activity, changes and results.</p>
       <AuditFilters query={{ ...query, view: result.meta?.auditFilters?.view }} />

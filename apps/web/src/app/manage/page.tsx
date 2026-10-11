@@ -5,7 +5,6 @@ import { FormNotice } from "../../components/form-notice";
 import { accountsRows } from "../../components/manage-rows";
 import { ManageTable } from "../../components/manage-table";
 import { OperatorFailure } from "../../components/operator-failure";
-import { OperatorNav } from "../../components/operator-ui";
 import { type ApiPath, queryValue } from "../../lib/http";
 import { openSearch } from "../../lib/manage-search";
 import { operatorRead } from "../../lib/operator-read";
@@ -36,7 +35,6 @@ export default async function Page({
   const here = `/manage${q ? `?${new URLSearchParams({ s: sealed })}` : ""}`;
   return (
     <section className="reader ops-page ops-list-page ops-accounts">
-      <OperatorNav current="accounts" />
       <h1>Accounts</h1>
       <p className="meta">
         Find people by user ID, username, email or hub handle. Every action is recorded.

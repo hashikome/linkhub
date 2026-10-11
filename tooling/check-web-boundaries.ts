@@ -39,8 +39,25 @@ for (const file of all) {
   if (/\b(?:process|Bun)\.env\b/.test(source))
     errors.add(`${file}: runtime config must come from @nslinkhub/config`);
   if (/^["']use client["'];/m.test(source)) browserGraph(file);
+  if (
+    /import\s+["']server-only["']/.test(source) &&
+    /from\s*["'][^"']*browser-api["']/.test(source)
+  )
+    errors.add(`${file}: server code must use the attributed server transport`);
   if (/localStorage|sessionStorage|dangerouslySetInnerHTML|["']use cache/.test(source))
     errors.add(`${file}: persistent browser data, raw HTML or caching needs a reviewed boundary`);
+  if (
+    /\bpostJson\b/.test(source) &&
+    !["/lib/http.ts", "/lib/server-transport.ts"].some((suffix) => file.endsWith(suffix))
+  )
+    errors.add(`${file}: server writes must use the attributed server transport`);
+  if (
+    /\breadJson\b/.test(source) &&
+    !["/lib/http.ts", "/lib/server-transport.ts", "/lib/browser-api.ts"].some((suffix) =>
+      file.endsWith(suffix),
+    )
+  )
+    errors.add(`${file}: reads must use the server or browser API boundary`);
   if (/\bfetch\(/.test(source) && !file.endsWith("/lib/http.ts"))
     errors.add(`${file}: use the shared HTTP adapter`);
 }

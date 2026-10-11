@@ -150,7 +150,7 @@ Open `http://localhost:3000` after `bun run dev` for the landing page. `/discove
 and `/c/<id>` are available alongside public hubs, profile/settings,
 notifications, passwordless sign-in, capture, collection editing, sections and
 reordering, contextual sharing, discussion, History and `/manage`. Reviewed
-imports, preview cards and notes remain planned. The
+imports are available at `/manage/import-export`; preview cards and notes remain planned. The
 root orchestrator sets `BETTER_AUTH_URL=http://localhost:4000` (or `PORT`),
 `WEB_ORIGIN=http://localhost:3000` (or `WEB_PORT`)
 and the trusted `API_INTERNAL_ORIGIN=http://127.0.0.1:4000` (or `PORT`). Use

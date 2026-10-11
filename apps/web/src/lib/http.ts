@@ -189,14 +189,22 @@ export function sessionCookie(raw: string): string {
 export async function postJson<T>(
   url: string,
   body: unknown,
-  options: { headers: Headers; raw?: boolean; method?: "POST" | "PATCH" | "DELETE" | "PUT" },
+  options: {
+    headers: Headers;
+    raw?: boolean;
+    method?: "POST" | "PATCH" | "DELETE" | "PUT";
+    timeout?: number;
+    deleteBody?: boolean;
+  },
 ): Promise<Result<T> & { setCookies?: string[] }> {
-  const signal = AbortSignal.timeout(8000);
+  const signal = AbortSignal.timeout(options.timeout ?? 8000);
   try {
     const response = await fetch(url, {
       method: options.method ?? "POST",
       headers: options.headers,
-      ...(options.method === "DELETE" ? {} : { body: JSON.stringify(body) }),
+      ...(options.method === "DELETE" && !options.deleteBody
+        ? {}
+        : { body: body instanceof FormData ? body : JSON.stringify(body) }),
       signal,
       redirect: "error",
       cache: "no-store",
@@ -307,8 +315,34 @@ export function safeReturn(value: unknown): string {
       ? `/settings?section=${section}`
       : "/settings";
   }
+  if (parsed.pathname === "/manage/import-export")
+    return parsed.searchParams.get("tab") === "review"
+      ? "/manage/import-export?tab=review"
+      : "/manage/import-export";
+  if (/^\/manage\/import-export\/[a-f0-9-]{36}(?:\/rows\/[a-f0-9-]{36})?$/.test(parsed.pathname)) {
+    const query = new URLSearchParams();
+    const status = parsed.searchParams.get("status");
+    const edit = parsed.searchParams.get("edit");
+    const collection = parsed.searchParams.get("collection");
+    if (isUuid(collection)) query.set("collection", collection);
+    if (
+      status &&
+      [
+        "looking_up",
+        "ready",
+        "failed",
+        "duplicate",
+        "already_saved",
+        "imported",
+        "skipped",
+      ].includes(status)
+    )
+      query.set("status", status);
+    if (isUuid(edit)) query.set("edit", edit);
+    return `${parsed.pathname}${query.size ? `?${query}` : ""}`;
+  }
   if (
-    /^\/(?:account|hub|settings(?:\/security)?|notifications|discover|support|confirm|manage(?:\/(?:analytics|audit|people|team|invitations|collections|accounts\/[a-f0-9-]{36}|collections\/[a-f0-9-]{36}))?)$/.test(
+    /^\/(?:account|hub|settings(?:\/security)?|notifications|discover|support|confirm|manage(?:\/(?:analytics|audit|people|team|invitations|import-export(?:\/[a-f0-9-]{36}(?:\/rows\/[a-f0-9-]{36})?)?|collections|accounts\/[a-f0-9-]{36}|collections\/[a-f0-9-]{36}))?)$/.test(
       parsed.pathname,
     )
   )

@@ -293,3 +293,16 @@ and full-width secondary Continue with Google follow. Footer links switch intent
 No image or extra marketing copy is needed. Optional hub creation is progressively
 revealed after proof, with a visible hub-name label. See
 [ADR-0044](docs/engineering-decisions/0044-explicit-auth-entry-and-optional-hub.md).
+
+### Management workspace navigation
+
+Manage sections use a shared 11rem desktop sidebar, separated from the content
+by spacing and a divider. Below 1024px a native Manage disclosure replaces it.
+The selected view uses a surface fill and stronger text. Subsections are indented
+under the current section; headings start the working area, with filters beside
+their content. The global site header stays unchanged. Management content
+can use an 88rem shell to preserve room for tables beside the sidebar.
+
+Navigation sections with children use native expand/collapse controls; expanding
+Import never navigates. New import and Review are the navigation links. Sections
+without children remain direct links. The current section starts expanded.

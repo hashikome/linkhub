@@ -9,6 +9,7 @@ export interface CaptureDraft {
   links: CaptureLink[];
   destination: string;
   collectionTitle?: string;
+  published?: boolean;
   issued: number;
 }
 const key = (secret: string) => createHash("sha256").update(`web-capture:${secret}`).digest();
@@ -61,6 +62,7 @@ export function openDraft(
           (link.tags === undefined ||
             (Array.isArray(link.tags) && link.tags.every((tag) => typeof tag === "string"))),
       ) ||
+      (draft.published !== undefined && typeof draft.published !== "boolean") ||
       (draft.collectionTitle !== undefined &&
         (typeof draft.collectionTitle !== "string" || draft.collectionTitle.length > 255)) ||
       !Number.isFinite(draft.issued) ||

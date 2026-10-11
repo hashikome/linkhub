@@ -26,3 +26,23 @@ export function isPublicLinkHost(hostname: string): boolean {
   const under = (suffix: string) => host === suffix || host.endsWith(`.${suffix}`);
   return !localSuffixes.some(under) && !reservedNames.some(under);
 }
+
+// Recognition is only a hint. The API resolves the address and authorizes any
+// conversion to an owner-scoped reference. Query strings never grant access.
+export function collectionAddress(
+  value: string,
+  origin: string,
+): { id: string } | { handle: string; slug: string } | null {
+  try {
+    const url = new URL(value);
+    if (url.origin !== new URL(origin).origin || url.username || url.password) return null;
+    const path = decodeURIComponent(url.pathname);
+    const durable =
+      /^\/c\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\/?$/i.exec(path);
+    if (durable) return { id: durable[1].toLowerCase() };
+    const pretty = /^\/@([a-z0-9][a-z0-9-]*)\/([a-z0-9-]{2,120})\/?$/.exec(path);
+    return pretty ? { handle: pretty[1], slug: pretty[2] } : null;
+  } catch {
+    return null;
+  }
+}

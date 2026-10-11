@@ -6,7 +6,6 @@ import { invitationsRows } from "../../../components/manage-rows";
 import { ManageTable } from "../../../components/manage-table";
 import { NativeForm } from "../../../components/native-form";
 import { OperatorFailure } from "../../../components/operator-failure";
-import { OperatorNav } from "../../../components/operator-ui";
 import { queryValue, withCursor } from "../../../lib/http";
 import { operatorRead } from "../../../lib/operator-read";
 import { loadManageRows } from "../load-rows";
@@ -25,7 +24,6 @@ export default async function Page({
   if (!invitations.ok) return <OperatorFailure error={invitations} />;
   return (
     <section className="reader ops-page ops-list-page">
-      <OperatorNav current="invitations" />
       <h1>Invitations</h1>
       <p className="meta">
         Invite operators and track service-access invitations. Access begins after verification and

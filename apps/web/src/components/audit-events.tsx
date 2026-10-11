@@ -2,7 +2,8 @@
 import { type AuditLogEntry, auditReadActions } from "@nslinkhub/types";
 import { useEffect, useRef, useState } from "react";
 import { auditActionLabel, auditTarget } from "../lib/audit-presentation";
-import { type Failure, readJson } from "../lib/http";
+import { readAuditPage } from "../lib/browser-api";
+import type { Failure } from "../lib/http";
 import { shortIds } from "../lib/short-id";
 import { AuditEffect, AuditOutcome } from "./audit-effect";
 import { AuditIdValue } from "./audit-identity";
@@ -46,10 +47,7 @@ export function AuditEvents({
     active.current = controller;
     setPending(true);
     setError(undefined);
-    const result = await readJson<AuditLogEntry[]>(`/manage/audit/more?${params}`, {
-      timeout: 10000,
-      signal: controller.signal,
-    });
+    const result = await readAuditPage<AuditLogEntry[]>(params, controller.signal);
     if (controller.signal.aborted) return;
     active.current = null;
     setPending(false);

@@ -24,7 +24,7 @@ describe("Independent collection resources (e2e)", () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ slug, title: slug })
+      .send({ slug, title: slug, published: false })
       .expect(201);
     return (res.body as { data: { id: string } }).data.id;
   };
@@ -55,8 +55,13 @@ describe("Independent collection resources (e2e)", () => {
     await link(alice, c, b).expect(201);
     await link(alice, b, a).expect(201);
     await link(alice, a, b, 1).expect(409);
+    const impact = await request(app.getHttpServer())
+      .get(`/api/v1/collections/${a}/impact?action=delete`)
+      .auth(alice, { type: "bearer" })
+      .expect(200);
     await request(app.getHttpServer())
       .delete(`/api/v1/collections/${a}`)
+      .send({ impactToken: impact.body.data.token })
       .auth(alice, { type: "bearer" })
       .expect(200);
     await request(app.getHttpServer())
@@ -67,14 +72,10 @@ describe("Independent collection resources (e2e)", () => {
       .get(`/api/v1/collections/${b}/resources`)
       .auth(alice, { type: "bearer" })
       .expect(200);
-    expect(refs.body.data[0]).toMatchObject({
-      kind: "collection_link",
-      linkedCollectionId: null,
-      linkedCollection: null,
-    });
+    expect(refs.body.data).toEqual([]);
   });
 
-  it("authorizes cross-hub targets separately and lets editors manage only the reference", async () => {
+  it("rejects cross-owner targets even when public or directly shared", async () => {
     const alice = await signUp("reference-owner"),
       bob = await signUp("reference-editor");
     const a = await createCollection(alice, "source"),
@@ -84,30 +85,23 @@ describe("Independent collection resources (e2e)", () => {
       .post(`/api/v1/collections/${b}/publish`)
       .auth(bob, { type: "bearer" })
       .expect(201);
-    const added = await link(alice, a, b).expect(201);
-    expect(added.body.data.linkedCollection.title).toBe("destination");
+    await link(alice, a, b).expect(404);
     await request(app.getHttpServer())
-      .post(`/api/v1/collections/${b}/unpublish`)
+      .post(`/api/v1/collections/${b}/shares`)
       .auth(bob, { type: "bearer" })
+      .send({ email: `reference-owner_${sfx}@example.com`, role: "contributor" })
       .expect(201);
-    await request(app.getHttpServer())
-      .patch(`/api/v1/collections/${a}/resources/${added.body.data.id}`)
-      .auth(alice, { type: "bearer" })
-      .send({ titleOverride: "My label", version: 1 })
-      .expect(400);
-    await request(app.getHttpServer())
-      .patch(`/api/v1/collections/${a}/resources/${added.body.data.id}`)
-      .auth(alice, { type: "bearer" })
-      .send({ tags: ["mine"], version: 1 })
-      .expect(200);
-    await request(app.getHttpServer())
-      .delete(`/api/v1/collections/${a}/resources/${added.body.data.id}`)
+    await link(alice, a, b).expect(404);
+    // Previously stored cross-owner rows remain unavailable, without changing the other owner's content.
+    await app.get(PrismaService).resource.create({
+      data: { collectionId: a, linkedCollectionId: b, kind: "collection_link", position: 0 },
+    });
+    const rows = await request(app.getHttpServer())
+      .get(`/api/v1/collections/${a}/resources`)
       .auth(alice, { type: "bearer" })
       .expect(200);
-    await request(app.getHttpServer())
-      .get(`/api/v1/collections/${b}`)
-      .auth(bob, { type: "bearer" })
-      .expect(200);
+    expect(rows.body.data[0].linkedCollection).toBeNull();
+    expect(rows.body.data[0].linkedCollectionId).toBeNull();
   });
 
   it("never inherits reader/editor, publication or link-token access", async () => {

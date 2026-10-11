@@ -30,7 +30,7 @@ describe("Collection transfer (e2e)", () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ slug, title: slug })
+      .send({ slug, title: slug, published: false })
       .expect(201);
     return (res.body as { data: { id: string } }).data.id;
   };
@@ -160,7 +160,7 @@ describe("Collection transfer (e2e)", () => {
       .expect(400);
   });
 
-  it("transfers only the chosen collection and preserves its references", async () => {
+  it("transfers only the chosen collection and removes confirmed references", async () => {
     const alice = await signUp("xowner");
     const bob = await signUp("xnewowner");
     const root = await createCollection(alice.bearer, `xroot-${sfx}`);
@@ -176,10 +176,14 @@ describe("Collection transfer (e2e)", () => {
       .set("Authorization", `Bearer ${alice.bearer}`)
       .send({ email: bob.email, role: "contributor" })
       .expect(201);
+    const impact = await request(app.getHttpServer())
+      .get(`/api/v1/collections/${root}/impact?action=transfer`)
+      .auth(alice.bearer, { type: "bearer" })
+      .expect(200);
     await request(app.getHttpServer())
       .post(`/api/v1/collections/${root}/transfer`)
       .set("Authorization", `Bearer ${alice.bearer}`)
-      .send({ email: bob.email })
+      .send({ email: bob.email, impactToken: impact.body.data.token })
       .expect(201);
 
     // The referenced collection stays with Alice. Bob cannot manage it.
@@ -188,17 +192,16 @@ describe("Collection transfer (e2e)", () => {
       .set("Authorization", `Bearer ${bob.bearer}`)
       .expect(403);
 
-    // The reference survived the move and still points to the section, but Bob
-    // cannot open the section, so its id and any stored title stay hidden from him.
+    // The confirmed reference is removed; the destination remains independently owned.
     const stored = await app
       .get(PrismaService)
       .resource.findMany({ where: { collectionId: root }, select: { linkedCollectionId: true } });
-    expect(stored).toEqual([{ linkedCollectionId: section }]);
+    expect(stored).toEqual([]);
     const resources = await request(app.getHttpServer())
       .get(`/api/v1/collections/${root}/resources`)
       .set("Authorization", `Bearer ${bob.bearer}`)
       .expect(200);
-    expect(resources.body.data).toHaveLength(1);
+    expect(resources.body.data).toHaveLength(0);
     expect(JSON.stringify(resources.body)).not.toContain(section);
   });
 });

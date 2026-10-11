@@ -9,6 +9,8 @@ export const eventNames = new Set([
   "email.worker_started",
   "email.worker_stopped",
   "budget.maintenance_failed",
+  "imports.cleanup_failed",
+  "imports.job_failed",
   "health.transition",
   "application.started",
   "application.failed",

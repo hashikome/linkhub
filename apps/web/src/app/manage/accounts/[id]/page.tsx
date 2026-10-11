@@ -4,11 +4,7 @@ import { FormNotice } from "../../../../components/form-notice";
 import { InvitationAction } from "../../../../components/invitation-form";
 import { LocalTime } from "../../../../components/local-time";
 import { OperatorFailure } from "../../../../components/operator-failure";
-import {
-  accountActionLabels,
-  OperationForm,
-  OperatorNav,
-} from "../../../../components/operator-ui";
+import { accountActionLabels, OperationForm } from "../../../../components/operator-ui";
 import { TimeZoneFallbackNote } from "../../../../components/time-zone";
 import { failure, queryValue } from "../../../../lib/http";
 import { operatorRead } from "../../../../lib/operator-read";
@@ -39,7 +35,6 @@ export default async function Page({
     requestedAction && a.availableActions.includes(requestedAction) ? requestedAction : undefined;
   return (
     <section className="reader ops-page account-profile">
-      <OperatorNav current="accounts" />
       <header className="account-profile-heading">
         <h1>{a.name || "Account details"}</h1>
         <a href={`/${encodeURIComponent(a.username)}`}>{a.username}</a>

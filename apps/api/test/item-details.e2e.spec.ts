@@ -49,7 +49,7 @@ describe("collaborators and single-item reads", () => {
         await api()
           .post("/api/v1/collections")
           .auth(owner.token, { type: "bearer" })
-          .send({ title: slug, slug })
+          .send({ published: false, title: slug, slug })
           .expect(201)
       ).body.data.id as string;
     source = await create("source-items");

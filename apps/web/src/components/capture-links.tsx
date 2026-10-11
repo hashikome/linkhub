@@ -1,6 +1,7 @@
 "use client";
 import {
   type CaptureLink,
+  collectionAddress,
   isPublicLinkHost,
   type LinkPreview,
   maxCaptureLinks,
@@ -19,14 +20,18 @@ type Row = {
   titleFor: string;
   status?: LinkPreview["status"];
   left?: boolean;
+  collectionHint?: boolean;
 };
 
 // A savable address on the public web (not localhost, a private or example
 // name, or an IP number). Half-typed hosts like "https://exa" fail it too, so
 // they are never sent for a title lookup.
-function publicHref(value: string) {
+function publicHref(value: string, origin: string) {
   const href = captureUrl(value);
-  return href !== null && isPublicLinkHost(new URL(href).hostname) ? href : null;
+  return href !== null &&
+    (collectionAddress(href, origin) || isPublicLinkHost(new URL(href).hostname))
+    ? href
+    : null;
 }
 // Close enough to the API's canonical form to catch the same link pasted twice.
 function sameKey(value: string) {
@@ -45,9 +50,11 @@ function sameKey(value: string) {
 // Without JavaScript this is a single plain row with comma-separated tags.
 export function CaptureLinks({
   initial,
+  origin,
   children,
 }: {
   initial: CaptureLink[];
+  origin: string;
   children?: React.ReactNode;
 }) {
   const next = useRef(initial.length || 1);
@@ -97,7 +104,7 @@ export function CaptureLinks({
         state: "invalid",
         message: "This link is already in the list. Use a different link or remove this one.",
       };
-    if (captureUrl(url) && !publicHref(url))
+    if (captureUrl(url) && !publicHref(url, origin))
       return row.left
         ? {
             state: "invalid",
@@ -136,7 +143,7 @@ export function CaptureLinks({
     const timer = setTimeout(() => {
       for (const row of rows) {
         const url = row.url.trim();
-        if (!publicHref(url) || requested.current.get(row.key) === url) continue;
+        if (!publicHref(url, origin) || requested.current.get(row.key) === url) continue;
         requested.current.set(row.key, url);
         lookups.current.get(row.key)?.abort();
         const controller = new AbortController();
@@ -147,13 +154,13 @@ export function CaptureLinks({
           .catch(() => null)
           .then((result) => {
             if (signal.aborted) return;
-            const { title, status } = result?.ok
+            const { title, status, collectionHint } = result?.ok
               ? result.data
-              : { title: null, status: "untitled" as const };
+              : { title: null, status: "untitled" as const, collectionHint: false };
             setRows((current) =>
               current.map((r) =>
                 r.key === row.key && r.url.trim() === url
-                  ? { ...r, title: title ?? "", titleFor: url, status }
+                  ? { ...r, title: title ?? "", titleFor: url, status, collectionHint }
                   : r,
               ),
             );
@@ -170,7 +177,7 @@ export function CaptureLinks({
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [rows]);
+  }, [rows, origin]);
 
   useEffect(() => {
     if (focusKey.current === null) return;
@@ -239,6 +246,9 @@ export function CaptureLinks({
               ) : looking.has(row.key) ? (
                 <p className="capture-title pending">Finding the title…</p>
               ) : null}
+              {row.titleFor === row.url.trim() && row.collectionHint && (
+                <p className="capture-title">Collection</p>
+              )}
               <TagInput id={`capture-tags-${row.key}`} initial={row.tags.join(", ")} />
             </fieldset>
           </li>
@@ -281,26 +291,12 @@ const RemoveIcon = () => (
   </svg>
 );
 
-// Bulk import is not built yet. The button stands where "Add another link" was;
-// only people who press it learn it is coming (a demand signal, not a notice).
 function BulkImport() {
-  const [asked, setAsked] = useState(false);
   return (
     <div className="capture-bulk">
-      <button
-        type="button"
-        className="button capture-add"
-        aria-expanded={asked}
-        aria-controls="capture-bulk-note"
-        onClick={() => setAsked(true)}
-      >
+      <a className="button capture-add" href="/manage/import-export">
         Bulk import links
-      </button>
-      <p id="capture-bulk-note" className="capture-bulk-note" role="status">
-        {asked
-          ? `Bulk import from browser bookmarks or a spreadsheet (CSV) is coming soon. Until then, save ${maxCaptureLinks} links at a time.`
-          : ""}
-      </p>
+      </a>
     </div>
   );
 }

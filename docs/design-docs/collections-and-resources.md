@@ -4,18 +4,25 @@ Status: item APIs, link metadata and Save a link are implemented. Web
 section authoring and inline details are implemented; further organization,
 preview cards and notes are planned as labelled below. Settled in
 [ADR-0007](../engineering-decisions/0007-resolved-titles-read-only-items.md) and
-[ADR-0008](../engineering-decisions/0008-references-grant-nothing.md).
+[ADR-0008](../engineering-decisions/0008-references-grant-nothing.md) and
+[ADR-0047](../engineering-decisions/0047-owner-scoped-collection-references.md).
 
 ## Items and their API
 
 Collections have no structural parent. Resources are ordered rows with versions:
 
 - `POST /collections/:id/resources/external`: canonical HTTP(S) URL, optional
-  tags. The title is resolved from the page, never an input. Pasting a
-  collection URL still creates an external link.
+  tags. The title is resolved by the server, never an input. Like Save a link,
+  the backend recognizes collection URLs at the configured web origin. A readable
+  target in the source's hub becomes a reference; foreign, unreadable, missing
+  and self destinations stay ordinary URLs with a generic Collection hint.
+  Both durable `/c/:id` and current `/@handle/:slug` addresses are recognized
+  today; [ADR-0053](../engineering-decisions/0053-id-only-collection-addresses.md)
+  selects removal of slug recognition for the next milestone;
+  stored references use only the immutable ID. Query tokens grant no authority.
 - `POST /collections/:id/resources/collection`: `linkedCollectionId`, optional
   tags and position; its title is the target's. Requires source write and target read,
-  including cross-hub references. One reference per source/target pair; cycles
+  within the same hub (owner or source contributor). One reference per source/target pair; cycles
   and multiple incoming references are allowed. No copied target title by default.
 - `POST /collections/:id/resources/heading`: nonblank `title`, optional plain-text
   `description` (500 characters), `firstItemId` and `firstItemVersion`. Inserts the
@@ -27,20 +34,23 @@ Collections have no structural parent. Resources are ordered rows with versions:
 
 A link must be a public web address (`isPublicLinkHost`, shared with the web):
 IP literals, single-label, local/internal and reserved example/test names are
-refused with `link_not_public`.
+refused with `link_not_public`. Recognized application collection routes are
+accepted on the configured development origin too, without network metadata
+lookups. No extra Add collection control is needed; the API chooses the item kind.
 
 The planned [link-health workflow](link-health.md) adds a narrow approved-redirect
 URL update (ADR-0029); ordinary resource edits still cannot change addresses.
 
 ## Link metadata
 
-Every link's page metadata — title, description, site name; text only — lives
+External web links' page metadata — title, description, site name; text only — lives
 in `link_metadata`, one row per canonical address, shared by every item that
 links to it. Saving a link (Save a link, adding an item, importing) writes a
 pending row in the same transaction; the worker relays pending rows to its
 `link-metadata` queue, claims each with a lease, fetches the page
 (`og:title`/`<title>`, `og:description`/`description`, `og:site_name`; YouTube
-and Vimeo through oEmbed; SSRF-guarded, 3 s, 256 KB) and marks it ready, or
+and Vimeo through oEmbed first, falling back to the original page when metadata
+is unavailable; SSRF-guarded, one 3 s deadline, 256 KB page cap) and marks it ready, or
 retries at 1 minute, 10 minutes, 1 hour and 6 hours before marking it failed.
 Saving a failed address again retries it; reading a collection re-requests
 addresses with no row, failures a day after they gave up, and ready metadata older
@@ -52,9 +62,19 @@ stores what it fetches. Imports ignore titles in the source file.
 
 Reference edits, reorders and removal require only source write access. The
 viewer-filtered `linkedCollection` payload is `{ id, title }` or null; it never
-reveals an unreadable destination's title. Deleting a target nulls its reference
-FK and leaves an unavailable resource. Collections are independent; references
-create no structural parent or inherited grant.
+reveals an unreadable destination's title. Legacy cross-owner references are
+unavailable. Collections are independent; references create no structural parent
+or inherited grant.
+
+Owners preview `GET /collections/:id/impact?action=delete|transfer` before lifecycle
+changes. Deletion removes incoming same-owner references; transfer removes incoming
+and outgoing references that would cross owners. The preview lists affected
+collections and headings that become empty. Confirmation includes `impactToken`;
+changed impact returns a conflict and a fresh preview. APIs may omit the token
+only when no references are affected. Cleanup and audit commit with the mutation.
+Other collections, ordinary URLs and other items remain. Web forms show **Keep
+collection** and explicit confirmation and preserve account-bound commands through
+sign-in.
 Resources carry no summary; heading descriptions are authored section context. Titles and tags clarify links; headings organize guides.
 
 ## Sections (implemented)
@@ -92,8 +112,9 @@ Clicking non-interactive expanded item content collapses its details; title,
 attribution links retain navigation, copy controls remain actionable, and selecting text does not
 collapse the item. Native summaries retain keyboard/no-JavaScript toggling.
 
-Targeting a section from Save a link and bulk import folder organization remain
-planned in their own slices.
+Reviewed [bulk imports](bulk-import.md) organize folders as nonempty sections
+or separate owned collections. Partial commits preserve section and link order.
+Targeting a section from Save a link remains planned.
 
 ## Preview cards and notes (planned)
 
@@ -167,7 +188,7 @@ The command
 uses the existing collection policy and resource canonicalization, and shares
 the authority transaction. Its destination is first, new, or an explicit owned
 collection ID. First-save concurrency uses a nullable immutable collection ID
-on the hub, never a title/slug; only private unshared collections can be
+on the hub, never a title/slug; only unshared collections matching the intent's publication choice can be
 implicitly reused by intents begun before that first collection was created.
 Returning intents require a destination choice. Retry receipts recheck current
 ownership/access and resource existence; deletion never recreates content on replay.

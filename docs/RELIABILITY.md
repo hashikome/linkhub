@@ -13,10 +13,23 @@
 - Reorder writes use the two-pass temporary-offset transaction to respect the
   unique `(collection, position)` constraint without transient conflicts.
 
-- Imports isolate each resource insert with a PostgreSQL savepoint inside the
-  authority transaction. A database-invalid row rolls back to its savepoint;
-  valid preceding and following rows commit together, matching the reported
-  counts. A transaction-wide failure still fails the request.
+- Reviewed import edits carry a draft revision; stale mutations fail with 409.
+  Commit takes at most 100 ready rows under the authority transaction, rechecks
+  owner access, and atomically writes collections, nonempty sections, resources,
+  audit entries and immutable import receipts. Failures/pending rows remain in
+  the draft; a database or audit failure rolls back the whole batch. Completed
+  replay imports zero rows. Source order within each import group survives later repairs and batches.
+  Bookmark collections place direct links before child references and then flat
+  sections; sibling references keep source order across partial commits. Separate
+  source folders sharing a destination also retain their relative order.
+  Import batches plan all section/resource insertions against one snapshot per
+  destination collection. Existing resources move through collision-free temporary
+  positions with two bulk writes, then receive final positions and one version
+  increment. This bounds position-shift queries independently of the number of
+  repaired folders and preserves atomic rollback and unique positions.
+- Draft expiry runs every minute in the worker, deleting at most 100 expired
+  drafts under the authority lock. Draft removal never deletes imported resources.
+  Lookup requests share durable metadata jobs; no network fetch holds this lock.
 - Sign-in flow issuance and resend eligibility are separate timestamps. A
   refused resend preserves issuance/expiry and stores the server cooldown as
   a retry deadline, including waits longer than the normal resend interval.
@@ -103,3 +116,28 @@ together. Revisit contention with measured traffic before increasing scale.
 - The [release runbook](runbooks/release.md) separates disposable local
   migration/backup/restore and outage proof from outstanding live Swarm,
   off-host restore, routing and collector checks.
+
+## Collection reference cleanup
+
+Delete and transfer confirmations bind to a fingerprint of the target and affected
+collection/resource state. Recompute under the authority transaction; conflicts
+return to a fresh preview. Remove only the owner's reference rows and section
+headings made empty, audit those removals, and commit with the lifecycle change.
+A failed cleanup or audit rolls everything back. Ordinary URLs have no reference
+lifecycle. See [ADR-0047](engineering-decisions/0047-owner-scoped-collection-references.md).
+
+Collection imports persist queued ready-row IDs before responding. The worker
+processes at most 100 links per authority transaction and records continuation
+state with receipts. Failed batches roll back to a savepoint before recording
+failure under the same lock. Multiple workers and restart retries cannot duplicate
+receipts. Queued/running collections are frozen against edits; each batch checks
+account status, ownership, expiry and current collection policy. Publication is a
+per-draft creation preference and never overwrites an existing destination.
+
+
+Capture receipts persist the exact immutable resource IDs returned by a save.
+Retries check those resources still exist in the destination and recheck access;
+target handle/slug changes do not change the result. Legacy receipts without IDs
+are upgraded on a resolvable retry; aliases already lost before migration cannot
+be reconstructed reliably. See
+[ADR-0051](engineering-decisions/0051-durable-interrupted-actions.md).

@@ -5,7 +5,7 @@ import { isUUID } from "class-validator";
 import { appError } from "../../common/errors/app-exception";
 import { AuthUser } from "../../common/interfaces/auth-user.interface";
 import { normalizeTags } from "../../common/utils/tags.util";
-import { publicLinkUrl } from "../../common/utils/url.util";
+import { savableLinkUrl } from "../../common/utils/url.util";
 import { PrismaService } from "../../database/prisma.service";
 import { CollectionPolicyService } from "../hubs/collection-policy.service";
 import { ensurePersonalHub } from "../hubs/hub-onboarding";
@@ -36,16 +36,23 @@ export class CaptureService {
         parsed.href.length > 2048
       )
         throw appError("bad_request");
-      const url = publicLinkUrl(parsed.href);
+      const url = savableLinkUrl(parsed.href);
       if (links.some((entry) => entry.url === url)) continue;
       links.push({ url, tags: normalizeTags(link.tags) });
     }
     if (!["first", "new"].includes(dto.destination) && !isUUID(dto.destination))
       throw appError("bad_request");
     const name = dto.collectionTitle?.trim() || null;
-    const hub = await ensurePersonalHub(this.prisma, user.userId);
+    const hub = isUUID(dto.destination) ? null : await ensurePersonalHub(this.prisma, user.userId);
     const fingerprint = createHash("sha256")
-      .update(JSON.stringify([links, dto.destination, name]))
+      .update(
+        JSON.stringify([
+          links,
+          dto.destination,
+          name,
+          ...(!isUUID(dto.destination) && dto.published === false ? [false] : []),
+        ]),
+      )
       .digest("hex");
     const receipt = await this.prisma.captureReceipt.findUnique({
       where: { userId_operationId: { userId: user.userId, operationId: dto.operationId } },
@@ -53,26 +60,49 @@ export class CaptureService {
     if (receipt) {
       if (receipt.fingerprint !== fingerprint) throw appError("conflict");
       const collection = await this.prisma.collection.findFirst({
-        where: { id: receipt.collectionId, hubId: hub.id },
+        where: { id: receipt.collectionId },
       });
       if (!collection) throw appError("not_found");
+      await this.policy.requireRead(collection, user);
       await this.policy.requireWriteContent(collection, user);
-      const saved = await this.prisma.resource.findMany({
-        where: { collectionId: collection.id, url: { in: links.map((link) => link.url) } },
-        select: { id: true, url: true },
+      let ids = receipt.resourceIds;
+      if (!ids.length) {
+        // Pre-migration receipts have no saved IDs. Upgrade them on the first
+        // resolvable retry; new receipts never depend on mutable aliases.
+        const resolved = await Promise.all(
+          links.map(async (link) => {
+            const target = await this.resources.collectionAtUrl(link.url);
+            return (
+              await this.prisma.resource.findFirst({
+                where: {
+                  collectionId: collection.id,
+                  OR: [{ url: link.url }, ...(target ? [{ linkedCollectionId: target.id }] : [])],
+                },
+              })
+            )?.id;
+          }),
+        );
+        if (resolved.some((id) => !id)) throw appError("not_found");
+        ids = [...new Set(resolved)] as string[];
+        await this.prisma.captureReceipt.update({
+          where: { userId_operationId: { userId: user.userId, operationId: dto.operationId } },
+          data: { resourceIds: ids },
+        });
+      }
+      const saved = await this.prisma.resource.count({
+        where: { collectionId: collection.id, id: { in: ids } },
       });
-      const ids = links.map((link) => saved.find((row) => row.url === link.url)?.id);
-      if (ids.some((id) => !id)) throw appError("not_found");
-      return { collectionId: collection.id, resourceIds: ids as string[] };
+      if (saved !== ids.length) throw appError("not_found");
+      return { collectionId: collection.id, resourceIds: ids };
     }
     let id = isUUID(dto.destination) ? dto.destination : null;
-    if (dto.destination === "first") {
+    if (dto.destination === "first" && hub) {
       if (hub.firstCaptureCollectionId) {
         const first = await this.prisma.collection.findFirst({
           where: {
             id: hub.firstCaptureCollectionId,
             hubId: hub.id,
-            published: false,
+            published: dto.published ?? true,
             linkSharingEnabled: false,
             shares: { none: {} },
           },
@@ -84,20 +114,22 @@ export class CaptureService {
         throw appError("capture_destination_required");
     }
     if (!id) {
+      if (!hub) throw appError("bad_request");
       const collection = await this.collections.create(user, {
         title: name ?? (await this.defaultTitle(hub.id)),
         slug: `links-${randomUUID()}`,
-        published: false,
+        published: dto.published ?? true,
       });
       id = collection.id;
-      if (dto.destination === "first")
+      if (dto.destination === "first" && hub)
         await this.prisma.hub.update({
           where: { id: hub.id },
           data: { firstCaptureCollectionId: id },
         });
     }
-    const collection = await this.prisma.collection.findFirst({ where: { id, hubId: hub.id } });
+    const collection = await this.prisma.collection.findUnique({ where: { id } });
     if (!collection) throw appError("not_found");
+    await this.policy.requireRead(collection, user);
     await this.policy.requireWriteContent(collection, user);
     const last = await this.prisma.resource.aggregate({
       where: { collectionId: id },
@@ -105,19 +137,28 @@ export class CaptureService {
     });
     let position = (last._max.position ?? -1) + 1;
     // A link already in the collection is kept as it is, not duplicated.
-    const existing = await this.prisma.resource.findMany({
-      where: { collectionId: id, url: { in: links.map((link) => link.url) } },
-      select: { id: true, url: true },
-    });
     const resourceIds: string[] = [];
-    for (const link of links)
-      resourceIds.push(
-        existing.find((row) => row.url === link.url)?.id ??
-          (await this.resources.insertExternal(collection, user, link.url, link.tags, position++))
-            .id,
-      );
+    for (const link of links) {
+      const linkedCollectionId = await this.resources.referenceTarget(collection, user, link.url);
+      const existing = await this.prisma.resource.findFirst({
+        where: {
+          collectionId: id,
+          OR: [{ url: link.url }, ...(linkedCollectionId ? [{ linkedCollectionId }] : [])],
+        },
+      });
+      const saved =
+        existing ??
+        (await this.resources.insertLink(collection, user, link.url, link.tags, position++));
+      if (!resourceIds.includes(saved.id)) resourceIds.push(saved.id);
+    }
     await this.prisma.captureReceipt.create({
-      data: { userId: user.userId, operationId: dto.operationId, collectionId: id, fingerprint },
+      data: {
+        userId: user.userId,
+        operationId: dto.operationId,
+        collectionId: id,
+        fingerprint,
+        resourceIds,
+      },
     });
     return { collectionId: id, resourceIds };
   }

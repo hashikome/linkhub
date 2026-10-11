@@ -32,7 +32,7 @@ describe("collection resource tag summary", () => {
     const created = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(token, { type: "bearer" })
-      .send({ slug: "unicode-tags", title: "Unicode tags" })
+      .send({ published: false, slug: "unicode-tags", title: "Unicode tags" })
       .expect(201);
     const input = `İ${"a".repeat(77)} b`;
     expect(input.length).toBe(80);
@@ -59,7 +59,7 @@ describe("collection resource tag summary", () => {
       const response = await request(app.getHttpServer())
         .post("/api/v1/collections")
         .auth(token, { type: "bearer" })
-        .send({ slug, title: slug })
+        .send({ slug, title: slug, published: false })
         .expect(201);
       return response.body.data.id as string;
     };
@@ -174,7 +174,7 @@ describe("collection resource tag summary", () => {
     const created = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(login.headers["set-auth-token"], { type: "bearer" })
-      .send({ slug: "sync", title: "Sync" })
+      .send({ published: false, slug: "sync", title: "Sync" })
       .expect(201);
     const id = created.body.data.id as string;
     const rows = await Promise.all(

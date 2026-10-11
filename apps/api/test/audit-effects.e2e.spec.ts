@@ -16,7 +16,11 @@ describe("bounded audit evidence (HTTP)", () => {
     request(app.getHttpServer())[method](path).auth(auth, { type: "bearer" });
   async function create() {
     const result = await as("post", "/api/v1/collections")
-      .send({ title: "Private title never captured", slug: `audit-${randomUUID()}` })
+      .send({
+        published: false,
+        title: "Private title never captured",
+        slug: `audit-${randomUUID()}`,
+      })
       .expect(201);
     return result.body.data;
   }

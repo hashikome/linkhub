@@ -8,13 +8,14 @@ this documentation task does not implement billing or change runtime defaults.
 Deliver free public curation and ordinary imports, paid AI/DOCX convenience and
 paid private collaboration under normal collection permissions. Complete reviewed
 imports, settle numeric allowances and lifecycle rules, and implement backend
-entitlements with public-by-default creation and clear private choices.
+entitlements. Public-by-default creation and clear private choices are now built.
 
 ## Progress
 
 - [x] (2026-10-10) Captured founder workflow, candidate packaging, document-import
   design and decision conflicts in repository docs and backlog.
-- [ ] M1 — Complete the existing reviewed-import foundation and fixtures.
+- [x] (2026-10-10) M1 — Completed the reviewed-import foundation and fixtures;
+  [implementation and evidence](../completed/deliver-bulk-import.md).
 - [ ] M2 — Compare deterministic document extraction and assisted grouping.
 - [ ] M3 — Validate usefulness, willingness to pay and processing costs.
 - [x] (2026-10-10) Packaging and public creation defaults accepted in ADR-0028,
@@ -35,10 +36,19 @@ that may not benefit from a persistent collection. The conversation generated
 hypotheses; it did not validate a market or price.
 
 The follow-up explicitly keeps ordinary imports free and makes AI/DOCX paid.
-ADR-0028 resolves private-sharing and creation-default conflicts. Runtime code
-still uses private creation defaults and has no billing or quota enforcement.
+ADR-0028 resolves private-sharing and creation-default conflicts. The completed
+[collection-import milestone](../completed/import-whole-collections.md) now implements
+public creation defaults; billing and quota enforcement remain unimplemented.
 
 ## Decision Log
+
+- User clarification (2026-10-11): distinct communities within a hub and reusable
+  intake/application handling are accepted future scope in
+  [ADR-0050](../../engineering-decisions/0050-community-entities-and-intake-integration.md).
+  The [owning backlog task](../../backlog/curation-and-paid-services.md#community-access-and-intake-integration-task)
+  links the shared product brief with team and client views, NSLinkHub first and
+  portfolio next. Community implementation requires a separate selected milestone;
+  documenting the service does not start another active implementation.
 
 - Completed follow-up (2026-10-10): public Gravatar avatars are implemented
   through the backend proxy under ADR-0034. Richer Gravatar profile display
@@ -62,7 +72,8 @@ still uses private creation defaults and has no billing or quota enforcement.
 
 ## Outcomes & Retrospective
 
-Commercial boundaries and defaults are decided. Prototype, price/allowance
+Commercial boundaries and defaults are decided, and reviewed imports are built.
+Document/AI prototypes, price/allowance
 validation, lifecycle details and implementation remain outstanding. A separate unpublished notebook entry tells
 Paul's origin story; that article is not the product specification. Paul explicitly restricted the notebook
 and portfolio to motivation and capabilities; commercial details remain here.
@@ -72,8 +83,9 @@ and portfolio to motivation and capabilities; commercial details remain here.
 `PRODUCT.md` owns scope/order. `docs/design-docs/monetization.md` separates the
 accepted direction from current development behavior. `docs/design-docs/ai-curation.md` describes
 extraction and proposal review. `docs/backlog/curation-and-paid-services.md` records
-outcomes and unresolved choices. The active `deliver-bulk-import.md` plan is the
-prerequisite: today `apps/api/src/modules/imports/` imports CSV/bookmarks directly.
+outcomes and unresolved choices. The completed
+[reviewed-import plan](../completed/deliver-bulk-import.md) supplies the foundation: `apps/api/src/modules/imports/` now stages CSV/bookmarks/TXT in
+private drafts, resolves shared metadata and commits reviewed owner destinations.
 `ResourcesService` owns section validity; collection policy owns access.
 
 ## Plan Of Work
@@ -102,8 +114,8 @@ ordinary paid imports as a prerequisite to implementing the free import journey.
 M5 scopes backend entitlements and metered jobs only after those decisions. Require
 atomic quotas, idempotent usage, revocable normal grants, explicit review/commit,
 and accessible native web delivery. Select a payment/AI provider through that
-implementation plan, with real cost and data-handling constraints. Roll out backend
-public defaults with visibility choice in capture/manual/import creation. Exercise
+implementation plan, with real cost and data-handling constraints. Preserve the implemented public defaults and visibility choices in
+capture/manual/import creation when adding entitlements. Exercise
 public-to-private changes, existing contributor grants, transfers, invitation
 acceptance and entitlement expiry; none may retain a free private-sharing bypass.
 
@@ -147,7 +159,7 @@ migration fixtures for schema changes; no development reset.
 
 ## Idempotence And Recovery
 
-Keep all implementation and documents uncommitted pending review. Evaluation jobs
+Commit completed milestones after review under the repository workflow. Evaluation jobs
 use bounded disposable data, can be cancelled and never mutate a real collection.
 If a provider fails, retain the user's reviewable draft and avoid duplicate charges.
 Declining an AI proposal leaves collections unchanged. Existing private collections

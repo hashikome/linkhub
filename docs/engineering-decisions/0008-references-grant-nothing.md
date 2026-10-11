@@ -1,6 +1,6 @@
 # ADR-0008: References grant no access and reveal nothing unreadable
 
-**Status:** accepted  
+**Status:** accepted; creation scope and lifecycle amended by [ADR-0047](0047-owner-scoped-collection-references.md)
 **Date:** 2026-10-07
 
 ## Context

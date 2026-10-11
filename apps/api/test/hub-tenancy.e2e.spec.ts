@@ -39,7 +39,7 @@ describe("Hub tenancy (e2e)", () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${ownerBearer}`)
-      .send({ slug: `unpub-${sfx}`, title: "Unpublished" })
+      .send({ slug: `unpub-${sfx}`, title: "Unpublished", published: false })
       .expect(201);
     const body = res.body as { data: { hubId: string; published: boolean } };
     expect(body.data.hubId).toBeTruthy();
@@ -52,7 +52,7 @@ describe("Hub tenancy (e2e)", () => {
     const created = await request(server)
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${ownerBearer}`)
-      .send({ slug: `secret-${sfx}`, title: "Secret" })
+      .send({ slug: `secret-${sfx}`, title: "Secret", published: false })
       .expect(201);
     const collectionId = (created.body as { data: { id: string } }).data.id;
 

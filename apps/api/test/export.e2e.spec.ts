@@ -35,7 +35,7 @@ describe("Export (e2e)", () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ slug, title: slug })
+      .send({ slug, title: slug, published: false })
       .expect(201);
     return (res.body as { data: { id: string } }).data.id;
   };
@@ -162,7 +162,11 @@ describe("Export (e2e)", () => {
     const firstB = await addLink(b, "https://fixture-links.dev/practice", 0).expect(201);
     await heading(b, "Practice", firstB.body.data);
     await reference(b, a, 2);
-    await reference(a, a, 3);
+    // Legacy self references still render with bounded expansion; new saves do
+    // not create them.
+    await app.get(PrismaService).resource.create({
+      data: { collectionId: a, kind: "collection_link", linkedCollectionId: a, position: 3 },
+    });
     const md = (
       await exportAs({ format: "markdown", collectionIds: [a], expand: true }).expect(201)
     ).body.toString();
@@ -189,7 +193,7 @@ describe("Export (e2e)", () => {
     await Bun.write("/tmp/independent-guide.md", md);
   });
 
-  it("marks restricted and deleted references without exposing destination contents", async () => {
+  it("marks restricted references and omits references removed by confirmed deletion", async () => {
     const source = await createCollection(`public-reference-${sfx}`);
     const target = await createCollection(`private-secret-${sfx}`);
     await addLink(target, "https://fixture-links.dev/private-secret", 0).expect(201);
@@ -212,14 +216,19 @@ describe("Export (e2e)", () => {
       expect(md).not.toContain("private-secret");
       expect(md).not.toContain(target);
     }
+    const impact = await request(app.getHttpServer())
+      .get(`/api/v1/collections/${target}/impact?action=delete`)
+      .auth(bearer, { type: "bearer" })
+      .expect(200);
     await request(app.getHttpServer())
       .delete(`/api/v1/collections/${target}`)
+      .send({ impactToken: impact.body.data.token })
       .auth(bearer, { type: "bearer" })
       .expect(200);
     const deleted = (
       await exportAs({ format: "markdown", collectionIds: [source], expand: true }).expect(201)
     ).body.toString();
-    expect(deleted).toContain("Collection unavailable");
+    expect(deleted).not.toContain("Collection unavailable");
     expect(deleted).not.toContain("private-secret");
   });
 

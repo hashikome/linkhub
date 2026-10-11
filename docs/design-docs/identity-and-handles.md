@@ -50,6 +50,15 @@ otherwise first ownership or explicit Create hub does (ADR-0044).
 
 ## Web URL scheme
 
+**Accepted next milestone:** [ADR-0053](../engineering-decisions/0053-id-only-collection-addresses.md)
+makes `/c/<collectionId>` the only collection address, including browse links.
+`/@handle` resolves hubs only; no hub or handle is embedded in collection URLs.
+Collection IDs and addresses survive ownership transfer; access remains subject
+to current policy. Remove collection slugs and their uniqueness/lookup contracts.
+The [implementation plan](../exec-plans/active/use-id-only-collection-addresses.md)
+is pending. The table and rules below describe the existing implementation until
+that milestone lands, including the pretty route being retired.
+
 Durable references carry only the immutable id of the thing itself; every
 mutable attribute — handle, slug, owning hub — lives in the payload, never
 the address. The public URL shapes are:

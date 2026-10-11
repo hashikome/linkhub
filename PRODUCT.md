@@ -122,8 +122,7 @@ entitlement for both viewers and contributors. AI curator and DOCX import
 This accepted direction supersedes the conflicting portions of ADR-0016; see
 [ADR-0028](docs/engineering-decisions/0028-free-public-curation-paid-private-sharing.md)
 and [monetization](docs/design-docs/monetization.md). Prices and private allowance
-counts remain open. Billing, quotas and the public creation default are not yet
-implemented; existing development collections are never automatically published.
+counts remain open. Billing and quotas are not yet implemented; existing development collections are never automatically published.
 
 ## 3. Target Users
 
@@ -234,11 +233,12 @@ decided by how it was added, never by inspecting a URL:
   context is limited to 500 characters; every section has at least one web link
   or collection reference.
 - **Collection reference**: points to another collection by its permanent id,
-  possibly in another person's hub. Whoever adds it must be able to read the
-  target; references can be reused and may form cycles. It grants no access:
+  within the same owner's hub. Source owners and contributors may add it when
+  they can independently read the target; references can be reused and may form cycles. It grants no access:
   readers who couldn't open the target anyway see a neutral "unavailable"
-  entry, without its title. Pasting a collection's address creates an
-  ordinary link, never a reference.
+  entry, without its title. **Add a link** recognizes readable same-hub collection
+  addresses and saves references automatically; other collection URLs stay ordinary
+  links with a generic Collection hint. No separate creation control is needed.
 
 **Tags** are optional item labels (`video`, `free`, `must-read`), normalized
 when saved (lowercase, de-duplicated, capped). A shared `tags` catalogue stores
@@ -286,16 +286,16 @@ the API, no web screens yet), or **Planned**.
 ### 6.1 Saving Links
 
 Purpose: get a link into the right collection in seconds. Status: Built.
-The current private creation default is superseded prospectively by ADR-0028:
-new collections will default to public with a visible private choice; this rollout
-is pending and must cover first-save, native forms and API defaults together.
+New collections default to published. Each import collection draft can disable
+publishing before submission; explicit API publication choices remain supported.
+Existing collections retain their publication and sharing settings.
 
 - **First link (signed out):** the home page's main action is **Save your
   first link**. The person pastes one or two links (tags optional), then
   verifies their email with an eight-digit code — it is sign in plus add the
   link. Sending a code creates nothing; verifying signs them in (creating the
   account if new) and saves the links: with no hub yet, the hub is created on
-  the spot with a new collection (currently private) named with the date ("Saved links,
+  the spot with a new collection (published by default) named with the date ("Saved links,
   7 Oct"); with a hub that has collections, they choose where the links go.
   Existing accounts are never turned away. Saving is atomic and safe to retry;
   no profile, title or handle setup comes first. Ordinary **Sign in** never silently
@@ -306,7 +306,7 @@ is pending and must cover first-save, native forms and API defaults together.
   and shows the page's title once found. Tags are optional, behind **Add
   tags**, shown as pills. The destination is an existing collection (each shows
   when it was last updated) or a new one, prefilled with a name that never
-  repeats; adding to a published collection is always an explicit choice.
+  repeats; new collections default to published; existing destinations retain their sharing settings.
   Repeats, non-addresses and domains that don't exist are refused before
   saving; a real site with no title is still saved. The form fits a 14-inch
   laptop screen in at most eight actions; more than two links is bulk work
@@ -328,27 +328,37 @@ is pending and must cover first-save, native forms and API defaults together.
 ### 6.2 Bulk Import
 
 Purpose: bring an existing library in, reviewed before it lands — Save a link
-at scale. Status: Planned (today the API imports in one shot);
+at scale. Status: Built (reviewed drafts, API/worker and web);
 design: `docs/design-docs/bulk-import.md`, ADR-0012.
 
 - Owner-only: an existing personal hub is required. The import page prompts
   explicit hub creation when absent; the API never creates a hub during import
   and rejects imports into collections the caller does not own.
-- Sources: a browser bookmarks file, one documented CSV layout (`url`,
-  optional `tags`, optional `folder`), or a pasted list. Only the link and its
-  destination are needed; a title in the file is a hint for human readers and is
-  ignored — everything about the page is fetched from the link.
+- Sources: bookmarks HTML, plain-text files (one URL per line), and one product CSV
+  layout: `collection,section,url,tags`. CSV is bulk creation:
+  every named collection is new, with no matching or updates to existing content.
+  CSV determines placement directly; preview validates and confirms without
+  asking for collection or folder choices. A downloadable template documents it.
+  Collection/section names are preserved; blank sections create flat collections
+  and tags are optional. Collection and section descriptions are edited after
+  import; resource notes are deferred. Resource titles and metadata are fetched
+  from their URLs.
 - Everything becomes a **draft** first. Titles resolve from the pages like any
   save (source titles are ignored); each row shows Ready, Failed with a reason,
   Duplicate or Already saved, with a summary and filters.
 - Failed rows are fixed in place (re-checked), revalidated or dropped.
-- Folders become sections of one collection, or split into separate
-  collections chosen per folder (new, existing, section of the parent, or
-  skip).
-- **Import N ready links** commits the ready rows; the rest wait in the draft
-  until fixed or dropped.
-- Limits: 1,000 links and 10 MB per draft, 3 open drafts, 30-day expiry.
-- Lives in Manage › Import & export (§6.9).
+- Bookmark imports ignore browser wrappers. Meaningful roots and branching folders
+  become collections named after those folders; leaf children become flat sections.
+  Same-owner collection references preserve navigation; intermediary folders that
+  would contain only one reference are collapsed. Unfiled links need a named
+  collection. There is no arrangement or per-folder mapping step.
+- Review lists **collection drafts**. **Import** queues all ready links in that
+  collection and the worker completes bounded batches without further clicks.
+  Failed/processing links remain for repair; later jobs reuse the same collection.
+- Each draft collection has its own Published choice, enabled by default. Drafts
+  remain private until import. Existing collections retain their publishing state.
+- Limits: 5,000 links and 10 MB per draft, 3 open drafts, 30-day expiry.
+- Lives in Manage › Import (§6.9), with New import for uploads and Review for unfinished imports. File-format guidance lives in Support.
 
 ### 6.3 Collections And Guides
 
@@ -442,9 +452,12 @@ way around the paid requirement. Entitlements are not yet enforced.
   can ask for Can view or Can contribute; the owner answers in Manage › Access. The
   request always reads "sent", so it never reveals whether a private
   collection exists.
-- **Transfer:** a collection moves to one of its contributors' hubs; references are
-  untouched, the previous owner becomes a contributor, the creator stays on
-  record. Hubs are never transferred; the chosen account email is fixed. The optional-hub design must handle a recipient without a
+- **Delete/transfer:** preview affected same-owner references and section headings
+  that would become empty; confirmed cleanup is atomic. Deletion removes incoming
+  references. Transfer removes incoming/outgoing references that would cross owners,
+  moving the collection to one of its contributors' hubs. The previous owner becomes
+  a contributor and the creator stays on record. Other collections and ordinary URLs
+  remain; changed impact requires fresh confirmation (ADR-0047). Hubs are never transferred; the chosen account email is fixed. The optional-hub design must handle a recipient without a
   hub when collection transfer is implemented against it.
 
 ### 6.6 Discover, Subscriptions And Your Home
@@ -456,17 +469,26 @@ saves API only; subscriptions and home tabs Planned
 - **Discover** lists published collections, newest first, page by page. Search
   by text and tags, tag filters (popular tags from published collections over
   the last 90 days) and full-text search are planned; no date-range filter.
-- **Public hub page:** the hub's name, handle, description, the planned **Subscribe** action, and
+- **Public hub page:** the hub's name, handle, description, the planned **Join community** action, and
   published collections. The contextual Share page is implemented for hubs,
   profiles, collections and the site, with site sharing in the footer. Planned
   hub counts prioritize subscribers and total collection saves: readers saving
   curated collections to return to. Individual resource copies are a separate
   action and do not contribute to collection-save counts.
-- **Subscribe** to a hub like subscribing to a YouTube channel: it joins your
-  Subscriptions list, its new published collections appear there, and you're
-  notified when it publishes (a per-hub notifications toggle, on by default).
-  A person subscribes to the hub’s immutable ID; the subscription survives
-  name and handle changes. Hubs never change owners.
+- **Join community** *(accepted direction; not implemented)*: owners invite people
+  by email; a hub can contain distinct, goal-specific communities. Join requests
+  require owner approval and an invitation. Accepted
+  members can view all collections published for that community. They gain no
+  editing rights; collection contributor invitations remain separate. Membership
+  is not an open subscription. Existing subscription behavior remains until a
+  dedicated migration; followers are never silently granted community access.
+  Communities are planned for paid Curator owners; invited members need no paid
+  plan. Membership in one community grants nothing in another. The reusable intake
+  service is planned to handle applications, team review, and client follow-up,
+  with NSLinkHub as its first integration; NSLinkHub retains invitations and access.
+  Direct invitations need no form. See
+  [ADR-0050](docs/engineering-decisions/0050-community-entities-and-intake-integration.md)
+  and the [integration backlog](docs/backlog/curation-and-paid-services.md#community-access-and-intake-integration-task).
 - **Save** a published collection like saving a document in Google Drive. If
   it is unpublished, the save goes dormant — it keeps its place labelled
   "Currently unavailable", can't be opened or downloaded, can be removed, and
@@ -522,7 +544,7 @@ Further owner capabilities:
   access opens it filtered), **Invitations** (send and track collection-access
   invitations), **Access** (accepted collaborators and their granted access,
   subscribers and blocked accounts),
-  **Import & export**, and **Activity** — the hub's audit trail.
+  **Import**, and **Activity** — the hub's audit trail.
 - **Blocking** happens where a person appears — a comment, a subscriber, an
   access request, a share — and is undone in Access. A blocked account can't
   comment, subscribe, be shared into or open link-shared collections; published
@@ -534,7 +556,7 @@ Purpose: take a collection out of the product as a document. Status: API only.
 
 - Like File › Download in Google Docs, a signed-in reader can **Download** a
   collection as Word, Markdown or PDF; several collections at once (one
-  document each, zipped) are exported from Manage › Import & export.
+  document each, zipped) are exported from a selection in Manage › Collections.
 - The title and description lead, sections become headings, and references stay
   links unless the reader asks to include readable referenced collections one
   level deep — an expanded guide.
@@ -756,9 +778,10 @@ are scoped, revocable and rate-limited per plan.
   sole URL-update exception (ADR-0029), requiring a recorded explanation; generic
   PUT/PATCH URL editing stays unavailable.
 - References never inherit direct shares, link access or publication. A contributor
-  can reference any collection they can read, then tag, reorder or remove the
-  reference without access to its target. Deleting the target leaves a neutral
-  unavailable entry; deleting or transferring a source never affects its targets.
+  can reference a readable collection in the source's hub, then tag, reorder or
+  remove the reference without access to its target. Confirmed target deletion
+  removes the owner's incoming references and newly empty section headings;
+  deleting or transferring a source never deletes its targets.
 - Export expansion is one level deep and separately authorized, so cycles can't
   recurse and private content can't leak.
 - Verification sends nothing until the person chooses to; an interrupted action
@@ -804,7 +827,7 @@ Nothing is deployed; everything built runs and is verified locally. The API
 | Module | Web | API |
 | --- | --- | --- |
 | 6.1 Saving links | Built | Built |
-| 6.2 Bulk import (reviewed drafts) | Planned | One-shot import built; drafts planned |
+| 6.2 Bulk import (reviewed drafts) | Built | Built |
 | 6.3 Collections: reading, details | Built | Built |
 | 6.3 Section authoring and descriptions | Built | Built |
 | 6.3 Item reordering | Built | Built |
@@ -858,8 +881,8 @@ Delivery sequence and remaining work (completed foundations are marked):
    Preview cards, notes and item editing remain in their later milestones.
 5. **Manage** for the hub owner (§6.9) — core built; remaining extensions in
    [manage-workspace](docs/design-docs/manage-workspace.md).
-6. **Bulk import** (§6.2) —
-   [deliver-bulk-import](docs/exec-plans/active/deliver-bulk-import.md).
+6. **Bulk import** (§6.2) — built;
+   [deliver-bulk-import](docs/exec-plans/completed/deliver-bulk-import.md).
 7. **Notifications** (§6.8) —
    [notifications](docs/design-docs/notifications.md).
 8. **Your home and subscriptions** (§6.6) —
@@ -900,9 +923,21 @@ Delivery sequence and remaining work (completed foundations are marked):
     document extraction and AI use the reviewed-import foundation, not a parallel
     unreviewed importer.
 
+Accepted next milestone: use `/c/<collectionId>` for every collection address,
+with handles resolving hub pages only. Remove collection slugs and their transfer
+conflicts; IDs and URLs survive ownership transfers while current access policy
+still applies. Runtime removal is pending in the
+[implementation plan](docs/exec-plans/active/use-id-only-collection-addresses.md),
+under [ADR-0053](docs/engineering-decisions/0053-id-only-collection-addresses.md).
+
 ## 12. References
 
 - Architecture: `ARCHITECTURE.md`; visual system: `DESIGN.md`.
 - Focused designs: `docs/design-docs/README.md`.
 - Settled foundations: `docs/engineering-decisions/README.md`.
 - Security and reliability rules: `docs/SECURITY.md`, `docs/RELIABILITY.md`.
+
+Community direction: [ADR-0049](docs/engineering-decisions/0049-invitation-based-communities.md)
+records future owner-invited membership granting viewer access across collections
+published for community members. Implementation and subscription migration are
+deferred; current imports use existing publishing and access controls.

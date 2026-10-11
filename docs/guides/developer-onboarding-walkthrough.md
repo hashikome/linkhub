@@ -175,11 +175,19 @@ ls *.pdf   # open it: H1 guide, H2 section, hyperlinked lines
 # Default expand:false keeps references as links. Explicit expansion stops after
 # one reference level; every target is authorized. Two collectionIds → a zip.
 
-# Import: the universal CSV, with a bad row flagged instead of failing
-printf 'url,title\nhttps://xyproblem.info,The XY Problem\nnot-a-url,Bad\n' > /tmp/links.csv
-curl -s localhost:4000/api/v1/imports/csv -H "Authorization: Bearer $T" \
-  -F file=@/tmp/links.csv -F createCollection=true \
-  -F collectionTitle=Imported -F collectionSlug=imported | jq
+# Import: stage a creation CSV; bad addresses await repair
+printf 'collection,section,url,tags\nReading,References,https://xyproblem.info,reference\nReading,References,not-a-url,\n' > /tmp/links.csv
+DRAFT=$(curl -s localhost:4000/api/v1/imports -H "Authorization: Bearer $T" \
+  -F sourceKind=csv -F file=@/tmp/links.csv | jq -r .data.id)
+curl -s localhost:4000/api/v1/imports/$DRAFT -H "Authorization: Bearer $T" | jq .data
+curl -s localhost:4000/api/v1/imports/$DRAFT/rows -H "Authorization: Bearer $T" | jq .data
+# Let the worker resolve metadata; review destinations and visibility in
+# /manage/import-export/$DRAFT. Then commit ready rows at the latest revision.
+VERSION=$(curl -s localhost:4000/api/v1/imports/$DRAFT -H "Authorization: Bearer $T" | jq .data.version)
+curl -s localhost:4000/api/v1/imports/$DRAFT/commit -H "Authorization: Bearer $T" \
+  -H 'content-type: application/json' -d "{\"version\":$VERSION}" | jq
+# The bad address stays in the draft. No content is written until commit.
+
 ```
 
 **Checkpoint 3**:

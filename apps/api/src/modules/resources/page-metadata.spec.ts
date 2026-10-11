@@ -1,5 +1,6 @@
 import { describe, expect, it, spyOn } from "bun:test";
 import http from "node:http";
+import https from "node:https";
 import { extractMetadata, fetchPageMetadata, isPublicAddress } from "./page-metadata";
 
 describe("page metadata for saved links", () => {
@@ -158,6 +159,165 @@ it("aborts a streaming socket at a single deadline across redirects", async () =
   } finally {
     requestSpy.mockRestore();
     for (const socket of sockets) socket.destroy();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+it("distinguishes reachable non-HTML and untitled pages from HTTP failures without reading binary bodies", async () => {
+  const server = http.createServer((req, res) => {
+    const type = {
+      "/pdf": "application/pdf",
+      "/image": "image/png",
+      "/unknown": "application/octet-stream",
+      "/untitled": "text/html",
+    }[req.url ?? ""];
+    if (!type) {
+      res.writeHead(404, { "content-type": "application/pdf" });
+      res.end("missing");
+    } else if (type === "text/html") {
+      res.writeHead(200, { "content-type": type });
+      res.end("<html><body>No title</body></html>");
+    } else {
+      // Never finish the body: reachability must settle from the headers.
+      res.writeHead(200, { "content-type": type });
+      res.write("<title>Never parse this binary payload</title>");
+    }
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Missing listener");
+  const original = http.request;
+  const requestSpy = spyOn(http, "request").mockImplementation(((
+    target: URL,
+    options: http.RequestOptions,
+    callback: (res: http.IncomingMessage) => void,
+  ) =>
+    original(
+      {
+        ...options,
+        hostname: "127.0.0.1",
+        port: address.port,
+        path: target.pathname,
+        lookup: undefined,
+      },
+      callback,
+    )) as typeof http.request);
+  try {
+    const options = {
+      timeoutMs: 1000,
+      lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+    };
+    for (const path of ["pdf", "image", "unknown", "untitled"])
+      expect(await fetchPageMetadata(`http://public.example/${path}`, options)).toEqual({
+        title: null,
+        description: null,
+        siteName: null,
+      });
+    expect(await fetchPageMetadata("http://public.example/missing", options)).toBeNull();
+  } finally {
+    requestSpy.mockRestore();
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
+it("falls back from unavailable oEmbed to the original page within one guarded deadline", async () => {
+  const visited: string[] = [];
+  const server = http.createServer((req, res) => {
+    const target = new URL(req.url ?? "/", "http://fixture.test");
+    visited.push(target.pathname);
+    if (target.pathname === "/oembed" || target.pathname === "/api/oembed.json") {
+      const page = new URL(target.searchParams.get("url") ?? "http://fixture.test");
+      if (page.pathname === "/slow-provider") return;
+      if (page.pathname === "/invalid-json") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end("invalid JSON");
+      } else if (page.pathname === "/video") {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify({ title: "Video title", provider_name: "Provider" }));
+      } else {
+        res.writeHead(404);
+        res.end();
+      }
+    } else if (target.pathname === "/missing") {
+      res.writeHead(404);
+      res.end();
+    } else if (target.pathname === "/private-redirect") {
+      res.writeHead(302, { location: "http://127.0.0.1/private" });
+      res.end();
+    } else {
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(target.pathname === "/playlist" ? "<p>No title</p>" : "<title>Original page</title>");
+    }
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Missing listener");
+  const original = http.request;
+  const transport = ((
+    target: URL,
+    options: http.RequestOptions,
+    callback: (res: http.IncomingMessage) => void,
+  ) =>
+    original(
+      {
+        ...options,
+        hostname: "127.0.0.1",
+        port: address.port,
+        path: `${target.pathname}${target.search}`,
+        lookup: undefined,
+      },
+      callback,
+    )) as typeof http.request;
+  const httpSpy = spyOn(http, "request").mockImplementation(transport);
+  const httpsSpy = spyOn(https, "request").mockImplementation(transport as typeof https.request);
+  try {
+    const options = {
+      timeoutMs: 1000,
+      lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+    };
+    for (const url of [
+      "https://www.youtube.com/channel/example",
+      "https://vimeo.com/showcase/example",
+      "https://vimeo.com/invalid-json",
+    ]) {
+      visited.length = 0;
+      expect((await fetchPageMetadata(url, options))?.title).toBe("Original page");
+      expect(visited).toEqual([
+        url.includes("vimeo") ? "/api/oembed.json" : "/oembed",
+        new URL(url).pathname,
+      ]);
+    }
+    expect(
+      await fetchPageMetadata("https://www.youtube.com/playlist?list=example", options),
+    ).toEqual({ title: null, description: null, siteName: null });
+    expect(await fetchPageMetadata("https://www.youtube.com/missing", options)).toBeNull();
+    visited.length = 0;
+    expect(await fetchPageMetadata("https://www.youtube.com/private-redirect", options)).toBeNull();
+    expect(visited).toEqual(["/oembed", "/private-redirect"]);
+    visited.length = 0;
+    expect(await fetchPageMetadata("https://www.youtube.com/video", options)).toEqual({
+      title: "Video title",
+      description: null,
+      siteName: "Provider",
+    });
+    expect(visited).toEqual(["/oembed"]);
+    visited.length = 0;
+    const started = Date.now();
+    expect(
+      (
+        await fetchPageMetadata("https://www.youtube.com/slow-provider", {
+          ...options,
+          timeoutMs: 400,
+        })
+      )?.title,
+    ).toBe("Original page");
+    expect(visited).toEqual(["/oembed", "/slow-provider"]);
+    expect(Date.now() - started).toBeLessThan(600);
+  } finally {
+    httpSpy.mockRestore();
+    httpsSpy.mockRestore();
+    server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
 });

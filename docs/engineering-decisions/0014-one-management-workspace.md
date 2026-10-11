@@ -68,3 +68,14 @@ permissions are unchanged.
 ## Audit consolidation — 2026-10-09
 
 [ADR-0024](0024-one-audit-log.md) supersedes separate audit storage and the Audit context switch. All event categories use one AuditLog; permissions and attribution rules remain unchanged.
+
+## Navigation layout — 2026-10-11
+
+Manage sections use a shared desktop sidebar and a native collapsible menu on
+narrow screens. Subsections (Import → New import / Review) live under their
+section in that navigation; the working area holds one view, headed by its title.
+Status filters remain with the table. Capability rules and routes are unchanged.
+
+Navigation sections with children use native expand/collapse controls; expanding
+Import never navigates. New import and Review are the navigation links. Sections
+without children remain direct links. The current section starts expanded.

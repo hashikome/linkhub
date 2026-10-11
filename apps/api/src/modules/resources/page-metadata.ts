@@ -124,8 +124,9 @@ function tidy(raw: unknown, max = 255): string | null {
 
 // YouTube puts the title far beyond the body cap (~700 KB into the page) but
 // publishes an official oEmbed endpoint that answers with a
-// small JSON document. Those hosts are asked there instead, with the same
-// address, redirect, deadline and size guards.
+// small JSON document. Ask there first, then fall back to the original page
+// when metadata is unavailable, with the same address and redirect guards
+// and a shared deadline.
 const oembedProviders: [RegExp, string][] = [
   [
     /^(?:www\.|m\.|music\.)?youtube\.com$|^youtu\.be$/i,
@@ -176,24 +177,29 @@ export async function fetchPageMetadata(
   const oembed = oembedEndpoint(url);
   try {
     if (oembed) {
-      const body = await fetchWithinDeadline(
-        oembed,
-        controller.signal,
-        64 * 1024,
-        maxRedirects,
-        lookup,
-        "json",
-      );
-      if (!body) return null;
+      // Metadata is optional: reserve time to check the original page even
+      // when the provider stalls. Both requests share the overall deadline.
+      const provider = new AbortController();
+      const providerTimer = setTimeout(() => provider.abort(), timeoutMs / 2);
       try {
-        const data = JSON.parse(body);
-        return {
-          ...none,
-          title: tidy(data.title, 255),
-          siteName: tidy(data.provider_name, 120),
-        };
+        const body = await fetchWithinDeadline(
+          oembed,
+          AbortSignal.any([controller.signal, provider.signal]),
+          64 * 1024,
+          maxRedirects,
+          lookup,
+          "json",
+        );
+        if (body !== null) {
+          const data = JSON.parse(body);
+          const title = tidy(data?.title, 255);
+          if (title) return { ...none, title, siteName: tidy(data.provider_name, 120) };
+        }
       } catch {
-        return none;
+        // An unsupported representation or malformed response says nothing
+        // about the original page's reachability.
+      } finally {
+        clearTimeout(providerTimer);
       }
     }
     const html = await fetchWithinDeadline(
@@ -330,8 +336,15 @@ function request(
           return;
         }
         const type = String(res.headers["content-type"] ?? "");
-        if (status !== 200 || !accepted[kind][1].test(type)) {
+        if (status !== 200) {
           finish(null);
+          res.destroy();
+          return;
+        }
+        if (!accepted[kind][1].test(type)) {
+          // The address is reachable even when its representation has no
+          // extractable metadata. Do not download binary/unsupported bodies.
+          finish({ body: "" });
           res.destroy();
           return;
         }

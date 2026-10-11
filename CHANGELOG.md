@@ -9,6 +9,120 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Record ID-only collection URLs as the next implementation milestone (ADR-0053):
+  handles resolve hubs only, and `/c/<id>` survives ownership transfers. Slug
+  removal remains pending. Refresh public-default and attribution documentation.
+
+- Consolidate import repair placement per destination, using two bulk position
+  updates instead of repeatedly shifting saved resources for every section.
+- Refresh collection lifecycle impact previews only for version conflicts;
+  transfer slug conflicts retain normal error handling, including after sign-in.
+
+- Accept valid maximum-length Unicode import edits with a bounded 64 KiB encoded
+  form allowance, preserving tags through normal saving and sign-in recovery.
+- Renew authenticated visitor attribution at API forwarding so slow uploads and
+  rendering retain per-visitor budgets without extending API proof expiry.
+
+- Preserve bookmark collection relationships when discarding unfiled links;
+  retain the synthetic export root so later child imports create their ancestor
+  references. Cover root and real-parent discard paths with regression tests.
+
+- Require trusted visitor attribution in one shared server-to-API transport,
+  including recovery storage during sign-in rendering. Add a boundary gate and
+  cross-visitor rate-limit regression; record ADR-0052.
+- Preserve imported tag names containing commas, semicolons and quotes when
+  editing rows, using one tag per line without silently truncating submitted tags.
+
+- Capture receipts now retain saved resource IDs so retries survive collection
+  slug and hub-handle changes, while deleted resources still fail safely.
+- Preserve large interrupted import edits in encrypted, expiring backend storage
+  with a short reference cookie; sign-in replays all fields for the same account.
+
+- Finish duplicate/already-saved rows only within the completed collection import
+  job, releasing the upload slot when no pending rows remain. Exclude discarded
+  collections when assigning unfiled links so those links stay visible for review.
+
+- Document distinct communities within a hub and the reusable intake/application
+  service boundary. Link the shared backlog and expanded brief covering team and
+  client views, NSLinkHub as the first integration, and portfolio intake. Community
+  access and the separate service remain planned, not implemented.
+
+- Review imports as individual collection drafts with independent publishing choices,
+  published by default. Import queues all ready links for background batches; failed
+  links remain reviewable and later jobs reuse the saved collection.
+- New collections default to published across creation and capture, with explicit
+  opt-out controls. Existing collection visibility and access grants are preserved.
+- Record invitation-based community membership as a future direction: viewer access
+  across collections explicitly published for community members, without contribution rights.
+
+
+- Remove the redundant selected-row count from import actions; place Import immediately before Clear selection.
+
+- Keep the current view visible during ordinary navigation and use browser-native loading feedback; show app feedback only for interrupted navigation or failures. Preserve concealment for mutations and session/history revalidation; remove a duplicate Manage session read and parallelize import review reads.
+
+- Move Manage sections into a shared desktop sidebar, with a collapsible menu on narrow screens. Import now has New import and Review subsections; Review lists unfinished imports and supports opening or discarding drafts.
+
+- Add an explicit Upload file button with the selected filename and move file-format guidance to Support.
+
+- Import review actions now appear only after selection, show affected link counts, and leave unselected rows untouched. Refresh stays visible in the same button row; discard moves to the imports list.
+- Simplify import review labels to Processing and Save. Rename the Manage tab
+  to Import, keeping planned web exports with collections. Selected action
+  buttons sit below the table, with inline destructive confirmation.
+
+- Import review now opens on a bounded links table with counted status filters
+  and Load more. First-column checkboxes select links for targeted retry or removal;
+  Link, Tags, Section, Collection, Status and Edit follow. Inline editing keeps
+  corrections in the table and preserves loaded rows. Placement comes from the file. Browser wrappers are ignored; meaningful roots and
+  branching folders become named collections connected by same-owner references,
+  with leaf folders as flat sections. Collapse folders that would contain only one
+  collection reference. Unfiled links require a collection name.
+  Remove single/split and per-folder mapping, preserving saved receipts and manual
+  edits when migrating drafts. Actions follow the status tab and preserve it
+  through submission and sign-in.
+- Add a link now saves readable same-hub collection URLs as immutable references
+  for owners and contributors. Other collection URLs remain ordinary links with
+  a Collection hint. Deletion and transfer preview affected references and newly
+  empty sections, apply confirmed cleanup atomically, and require another review
+  when impact changes. Native forms preserve confirmations through sign-in.
+
+- Raised the per-file import limit to 5,000 links and daily metadata-lookup budget
+  to 15,000 URLs so larger browser libraries fit. Uploads remain bounded to 10 MB
+  and commits to 100 ready links per batch.
+
+- CSV import now uses the application’s creation layout: collection, section,
+  URL and tags. Blank sections create flat collections; tags are optional.
+  Collection and section descriptions are edited after import; resource notes
+  are deferred. It creates new collections (now published by default, with an
+  explicit private choice) directly
+  from the file, with a downloadable template and no destination-mapping step.
+  Enforced nonempty sections across partial commits and retained heading receipts
+  when bookmark mappings change. Removed obsolete import-description fields,
+  rendering and storage; normal post-import description editing is unchanged.
+
+- Replaced pasted-link imports with TXT file uploads (one URL per line). All
+  import formats now require a file; existing drafts are preserved. Reject files
+  containing NUL characters before persistence.
+
+- Added reviewed bulk imports for browser bookmarks, quoted CSV and plain-text files:
+  private owner drafts, shared background title resolution, folder destinations,
+  explicit visibility, row repairs and retries, and atomic batches of 100 links.
+  Manage now provides upload and review journeys with and without JavaScript.
+  Removed the former one-shot import endpoints; imports never create a hub implicitly.
+- Added original-page fallback when oEmbed is unavailable, within the shared
+  lookup deadline. Repaired import rows retain source order across folders
+  that share one destination collection.
+- Fixed review findings: reachable non-HTML links can import with address fallback,
+  section/skip folder changes clear unavailable destinations, and isolated verification
+  removes staged deletions from its cloned snapshot.
+- Added bounded draft expiry, account lookup budgets, revision conflicts and import
+  receipts that preserve source order and prevent duplicate retries.
+- Refreshed browser acceptance for the current footer and email-first sign-in,
+  including explicit account creation; isolated timezone fixtures from expired
+  sessions and normalize timestamp fallbacks when comparing pagination rows.
+- Added `verify:isolated` to run the full gate and browser/dev checks without
+  sharing build artifacts with a running development server. Restored the local
+  username column width after confirming all existing values fit; no data reset.
+
 - Fixed authenticator enrollment after an abandoned Google connection: session
   maintenance skips pending Google sign-in completion and preserves session assurance.
 - Fixed account recovery while signed in as another account: verified recovery

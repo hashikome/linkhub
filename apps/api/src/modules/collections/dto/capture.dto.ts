@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsInt,
   IsOptional,
   IsString,
@@ -36,6 +37,7 @@ export class CaptureLinkDto implements CaptureLink {
 }
 
 export class CaptureDto implements CaptureRequest {
+  @IsOptional() @IsBoolean() published?: boolean;
   @IsInt()
   @Min(1)
   startedAt: number;

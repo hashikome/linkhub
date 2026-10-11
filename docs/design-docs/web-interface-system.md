@@ -65,7 +65,7 @@ hover and feedback. Reduced motion makes transitions immediate.
 | Condition | Visible result | Recovery |
 | --- | --- | --- |
 | Initial document | Complete uncached server render, bounded by API deadlines | Results or feedback work without JavaScript |
-| Document navigation/revalidation | After ~300 ms pending, hide previous content and show compact progress; offer "Reload this page" after eight seconds or Escape | Fresh server authorization before rendering; cancelled navigation remains recoverable |
+| Document navigation/revalidation | Ordinary GET navigation keeps the current view with browser-native progress only. Mutation, session revalidation and history restoration hide stale content; offer "Reload this page" after Escape interruption | Fresh server authorization before rendering; cancelled navigation remains recoverable |
 | Empty successful list | Context-specific empty copy | Existing navigation only |
 | More results loading | Existing rows stay, continuation disabled/busy | Append and announce |
 | Next page fails | Existing rows stay; inline feedback at continuation | Retry the same cursor |
@@ -184,7 +184,9 @@ run the web's `server.ts` entry point: it derives the source from the socket and
 explicit trusted proxy hops, overwrites untrusted attribution, and signs a
 short-lived proof for the API read budget. API and web share `WEB_SOURCE_SECRET`
 with `_FILE` support; browser bundles receive neither secret nor proof. The
-API verifies attribution only for read budgets; backend authority is unchanged.
+API verifies attribution for read and form/write budgets; backend authority is unchanged.
+SSR and form forwarding use the shared mandatory visitor-attribution transport
+([ADR-0052](../engineering-decisions/0052-mandatory-visitor-attribution.md)).
 Direct `next start` is unsupported. Browser acceptance exercises that topology using an
 isolated loopback proxy and the production web build. No deployment image is
 required. Next.js/React/Tailwind versions are pinned in the workspace lockfile;
@@ -194,7 +196,9 @@ Public hub continuation adapts the public `HubPage` envelope (`hub` + `collectio
 using `/hubs/:hubId`, never the owner-visible collection-list endpoint.
 Invalid-cursor recovery stays on the current hub or reader; duplicate rows are
 suppressed and announcements count newly appended items. Hub rows use pretty
-URLs, while copied links and collection references retain immutable ID URLs. Next's encoded
+URLs today, while copied links and collection references retain immutable ID URLs.
+[ADR-0053](../engineering-decisions/0053-id-only-collection-addresses.md) selects
+ID URLs for hub rows too; implementation is pending. Next's encoded
 dynamic route parameters are decoded once before validating the literal `@`
 prefix and permitted path shapes. No share token reaches public hub discovery.
 
@@ -390,10 +394,14 @@ current, available, reserved, taken and invalid names without exposing owners.
 It is advisory: final validation and the database unique constraint decide the
 write. Discard stale availability responses and preserve edits made during a save.
 
-During a document navigation pending longer than ~300 ms, hide stale private
-content and show a compact progress indicator (no placeholder skeletons) and
-no immediate failure instructions. Offer reload recovery after eight seconds or
-Escape cancellation. Reduced-motion users get a static indicator.
+Under [ADR-0048](../engineering-decisions/0048-nonblocking-navigation-progress.md),
+ordinary GET navigation keeps the current authorized view visible. The browser
+provides loading feedback; do not add an app spinner or a slow-response notice.
+Mutation submissions, session changes, long-away revalidation and history
+restoration still conceal stale content. Escape cancellation conceals the document
+and offers reload recovery with fresh authorization. Actual page failures retain
+error/retry views. Manage reuses the request-scoped session read, and independent
+import summary/row reads run in parallel.
 
 
 The owner’s hub view leads with the same hub name, handle, optional owner

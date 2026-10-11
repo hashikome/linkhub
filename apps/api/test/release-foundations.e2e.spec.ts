@@ -42,7 +42,7 @@ describe("release foundations over real HTTP and PostgreSQL", () => {
     const created = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${owner}`)
-      .send({ slug: `audit-${suffix}`, title: "Private title" })
+      .send({ published: false, slug: `audit-${suffix}`, title: "Private title" })
       .expect(201);
     collectionId = created.body.data.id;
   });

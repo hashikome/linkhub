@@ -668,7 +668,11 @@ describe("service operator authority (HTTP)", () => {
   it("uses one audit model and timeline with permission-scoped search and stable pagination", async () => {
     const c = await create(false);
     const owned = await as("post", "/api/v1/collections")
-      .send({ title: "Operator own private collection", slug: `audit-own-${randomUUID()}` })
+      .send({
+        published: false,
+        title: "Operator own private collection",
+        slug: `audit-own-${randomUUID()}`,
+      })
       .expect(201);
     const at = new Date(Date.now() - 1000);
     const events: { id: string }[] = [];

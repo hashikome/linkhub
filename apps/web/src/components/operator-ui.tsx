@@ -1,30 +1,18 @@
 import { randomUUID } from "node:crypto";
-import type {
-  AccountOperationAction,
-  OperationAction,
-  OperationReason,
-  SessionView,
-} from "@nslinkhub/types";
-import { serverRead } from "../lib/server-api";
+import type { AccountOperationAction, OperationAction, OperationReason } from "@nslinkhub/types";
+import { readSession } from "../lib/session";
+import { ManageNavigation, type OpsTab } from "./manage-navigation";
 import { NativeForm } from "./native-form";
 
-export type OpsTab =
-  | "accounts"
-  | "people"
-  | "collections"
-  | "team"
-  | "invitations"
-  | "analytics"
-  | "audit";
-
-export async function OperatorNav({ current }: { current?: OpsTab }) {
-  const session = await serverRead<SessionView>("/api/v1/session");
-  if (!session.ok) return null;
-  const { operator, admin, hubId } = session.data;
+export async function OperatorNav() {
+  const session = await readSession();
+  if (!session) return null;
+  const { operator, admin, hubId } = session;
   const tabs: [OpsTab, string, string][] = [];
   if (operator) tabs.push(["accounts", "/manage", "Accounts"]);
   if (hubId) tabs.push(["people", "/manage/people", "Access"]);
   if (operator || hubId) tabs.push(["collections", "/manage/collections", "Collections"]);
+  if (hubId) tabs.push(["imports", "/manage/import-export", "Import"]);
   if (admin)
     tabs.push(
       ["team", "/manage/team", "Team"],
@@ -32,15 +20,7 @@ export async function OperatorNav({ current }: { current?: OpsTab }) {
     );
   if (operator || admin) tabs.push(["analytics", "/manage/analytics", "Analytics"]);
   if (operator || hubId) tabs.push(["audit", "/manage/audit", "Audit Log"]);
-  return (
-    <nav aria-label="Manage" className="ops-tabs">
-      {tabs.map(([key, href, label]) => (
-        <a key={key} href={href} aria-current={key === current ? "page" : undefined}>
-          {label}
-        </a>
-      ))}
-    </nav>
-  );
+  return tabs.length ? <ManageNavigation tabs={tabs} /> : null;
 }
 
 const choices: Record<OperationAction, OperationReason[]> = {

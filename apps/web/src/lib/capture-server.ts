@@ -38,6 +38,7 @@ export async function saveDraft(
     startedAt: draft.issued,
     links: draft.links,
     destination: draft.destination,
+    published: draft.published ?? true,
     ...(draft.collectionTitle ? { collectionTitle: draft.collectionTitle } : {}),
   } satisfies CaptureRequest;
   const result = await formPost<CaptureResult>(request, "/api/v1/capture", body);

@@ -6,6 +6,21 @@ The canonical verification gate:
 bun run verify
 ```
 
+When a development server is running in this checkout, use:
+
+```bash
+bun run verify:isolated
+bun run verify:isolated test:browser
+```
+
+This snapshots tracked and non-ignored untracked regular files (including current
+edits, staged and unstaged deletions, and renames) into a disposable checkout, installs the frozen lockfile,
+and runs the same gate with independent generated clients and Next.js output.
+Environment files are excluded; test runners retain their disposable database,
+queue and secret masking rules. It removes its temporary checkout afterward.
+Do not build into an active development server's `.next` or remove its lock.
+The wrapper also accepts `test:dev` and passes remaining arguments to the runner.
+
 It runs client/telemetry boundary checks, local documentation links, the
 guide-pin check, shared typechecks, Biome format/lint, tooling/email tests,
 then API generation/build, typecheck, source unit tests and real-service e2e,

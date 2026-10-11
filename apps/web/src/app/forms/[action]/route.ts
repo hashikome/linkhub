@@ -14,6 +14,7 @@ import type {
 } from "@nslinkhub/types";
 import {
   accountActions,
+  collectionAddress,
   isPublicLinkHost,
   maxCaptureLinks,
   operationActions,
@@ -39,6 +40,7 @@ import {
   sealInvitationFlow,
 } from "../../../lib/form-server";
 import { type ApiPath, safeDocumentReturn, safeReturn, sessionCookie } from "../../../lib/http";
+import { importForm } from "../../../lib/import-forms";
 import { sealSearch } from "../../../lib/manage-search";
 import {
   accountFingerprint,
@@ -61,12 +63,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
   const { action } = await params;
   let form: URLSearchParams;
   try {
-    form = await formData(request);
+    form = await formData(request, action);
   } catch {
     return new Response("Unable to submit this form. Return to the page and try again.", {
       status: 403,
     });
   }
+  const importResponse = await importForm(action, request, form);
+  if (importResponse) return importResponse;
   const securityResponse = await securityForm(action, request, form);
   if (securityResponse) return securityResponse;
   if (action === "account-recover") {
@@ -122,7 +126,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     return redirectResponse(`/account?done=${selected}`, [
       serverCookie("account_flow", "", 0),
       lastAccountCookie(null),
-      pendingActionCookie(null),
+      await pendingActionCookie(null),
       ...expiredSessions,
     ]);
   }
@@ -182,7 +186,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
       if (!raw.trim()) continue;
       const url = captureUrl(raw.trim());
       if (!url) return back("link-invalid");
-      if (!isPublicLinkHost(new URL(url).hostname)) return back("link-not-public");
+      if (
+        !collectionAddress(url, webServerConfig().publicOrigin) &&
+        !isPublicLinkHost(new URL(url).hostname)
+      )
+        return back("link-not-public");
       const tagList = parseTags(tags[index]);
       links.push({ url, ...(tagList.length ? { tags: tagList } : {}) });
     }
@@ -190,19 +198,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     if (!links.length || (!["first", "new"].includes(destination) && !isUuid(destination)))
       return back("link-invalid");
     if (links.length > maxCaptureLinks) return back("too-many-links");
+    const published = form.get("published") !== "false";
     const collectionTitle =
       destination === "new"
         ? form.get("collectionTitle")?.trim().slice(0, 255) || undefined
         : undefined;
     const same =
       previous &&
-      JSON.stringify([previous.links, previous.destination, previous.collectionTitle]) ===
-        JSON.stringify([links, destination, collectionTitle]);
+      JSON.stringify([
+        previous.links,
+        previous.destination,
+        previous.collectionTitle,
+        previous.published ?? true,
+      ]) === JSON.stringify([links, destination, collectionTitle, published]);
     const draft: CaptureDraft = {
       id,
       links,
       destination,
       ...(collectionTitle ? { collectionTitle } : {}),
+      published,
       issued: previous?.issued ?? Date.now(),
       operationId: same ? previous.operationId : previous ? randomUUID() : id,
     };
@@ -459,7 +473,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     // Drop the waiting action and go back to where it was started.
     const pending = await readPendingAction();
     return redirectResponse(pending?.target ?? "/manage", [
-      pendingActionCookie(null),
+      await pendingActionCookie(null),
       flowCookie("", 0),
     ]);
   }
@@ -579,7 +593,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
       ? redirectResponse("/?notice=signed-out", [
           ...(result.setCookies ?? []),
           lastAccountCookie(null),
-          pendingActionCookie(null),
+          await pendingActionCookie(null),
         ])
       : redirectResponse("/sign-in?notice=signout-failed");
   }
@@ -721,7 +735,7 @@ async function confirmFirst(action: PendingAction) {
   const session = await readSession();
   if (!session) return resumeAfterSignIn(action);
   return redirectResponse("/confirm", [
-    pendingActionCookie({ ...action, owner: accountFingerprint(session.email) }),
+    await pendingActionCookie({ ...action, owner: accountFingerprint(session.email) }),
   ]);
 }
 // A session that ended mid-action: sign in, then the action continues — but
@@ -729,7 +743,7 @@ async function confirmFirst(action: PendingAction) {
 async function resumeAfterSignIn(action: PendingAction) {
   const owner = await readLastAccount();
   return redirectResponse(`/sign-in?returnTo=${encodeURIComponent(action.target)}`, [
-    owner ? pendingActionCookie({ ...action, owner }) : pendingActionCookie(null),
+    owner ? await pendingActionCookie({ ...action, owner }) : await pendingActionCookie(null),
   ]);
 }
 const commentLabels: Record<string, string> = {

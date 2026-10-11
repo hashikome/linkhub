@@ -1,6 +1,6 @@
 # ADR-0002: Immutable UUIDv7 identities; mutable names never in contracts
 
-**Status:** accepted  
+**Status:** accepted; pretty collection URL allowance superseded by [ADR-0053](0053-id-only-collection-addresses.md)
 **Date:** 2026-10-07
 
 ## Context

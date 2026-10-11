@@ -117,7 +117,7 @@ describe("Collection routes (e2e)", () => {
     const priv = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ slug: `priv-${sfx}`, title: "Private" })
+      .send({ published: false, slug: `priv-${sfx}`, title: "Private" })
       .expect(201);
     const privId = (priv.body as { data: { id: string } }).data.id;
 

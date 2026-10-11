@@ -1,7 +1,12 @@
 import type { TransferCollectionRequest } from "@nslinkhub/types";
 import { IsEmail, MaxLength } from "class-validator";
 
-export class TransferCollectionDto implements TransferCollectionRequest {
+import { CollectionImpactDto } from "./collection-impact.dto";
+
+export class TransferCollectionDto
+  extends CollectionImpactDto
+  implements TransferCollectionRequest
+{
   // The recipient's email. They must already be a contributor on the collection.
   @IsEmail()
   @MaxLength(255)

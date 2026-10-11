@@ -4,7 +4,7 @@ import { CursorQueryDto } from "src/common/dto/cursor-query.dto";
 import { ResourceKind } from "src/common/enums/resource-kind.enum";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";
 import { decodeCursor, encodeCursor } from "src/common/utils/cursor.util";
-import { publicLinkUrl } from "src/common/utils/url.util";
+import { localCollectionAddress, savableLinkUrl } from "src/common/utils/url.util";
 import { PrismaService } from "src/database/prisma.service";
 import { Collection, Prisma, Resource } from "src/generated/prisma/client";
 import { recordAudit } from "../../common/audit";
@@ -34,17 +34,79 @@ export class ResourcesService {
     const collection = await this.requireWritableCollection(collectionId, user);
     await this.ensurePositionAvailable(collection.id, dto.position);
 
-    const url = publicLinkUrl(dto.url);
+    const url = savableLinkUrl(dto.url);
+    const linkedCollectionId = await this.referenceTarget(collection, user, url);
     const duplicate = await this.prisma.resource.findFirst({
-      where: { collectionId: collection.id, url },
+      where: {
+        collectionId,
+        OR: [{ url }, ...(linkedCollectionId ? [{ linkedCollectionId }] : [])],
+      },
       select: { id: true },
     });
-    if (duplicate) {
-      throw appError("duplicate_resource");
-    }
+    if (duplicate) throw appError("duplicate_resource");
+    const saved = linkedCollectionId
+      ? await this.insertReference(
+          collection,
+          user,
+          linkedCollectionId,
+          dto.tags ?? [],
+          dto.position,
+        )
+      : await this.insertExternal(collection, user, url, dto.tags ?? [], dto.position);
+    return this.resourceView(saved, user, await this.context([saved]));
+  }
 
-    const saved = await this.insertExternal(collection, user, url, dto.tags ?? [], dto.position);
-    return this.toPublicResource(saved, await this.context([saved]));
+  async collectionAtUrl(url: string) {
+    const address = localCollectionAddress(url);
+    if (!address) return null;
+    if ("id" in address) return this.prisma.collection.findUnique({ where: { id: address.id } });
+    const hub = await this.prisma.hub.findUnique({
+      where: { handle: address.handle },
+      select: { id: true },
+    });
+    return hub
+      ? this.prisma.collection.findFirst({ where: { hubId: hub.id, slug: address.slug } })
+      : null;
+  }
+
+  async referenceTarget(collection: Pick<Collection, "id" | "hubId">, user: AuthUser, url: string) {
+    const target = await this.collectionAtUrl(url);
+    if (!target || target.id === collection.id || target.hubId !== collection.hubId) return null;
+    return (await this.policy.resolve(target, user)).canRead ? target.id : null;
+  }
+
+  private async insertReference(
+    collection: Pick<Collection, "id" | "hubId">,
+    user: AuthUser,
+    linkedCollectionId: string,
+    tags: string[],
+    position: number,
+  ) {
+    const saved = await this.prisma.resource.create({
+      data: {
+        collectionId: collection.id,
+        kind: ResourceKind.COLLECTION_LINK,
+        linkedCollectionId,
+        position,
+        tags: await itemTags(this.prisma, tags),
+        addedByUserId: user.userId,
+      },
+    });
+    await this.record(collection, user, "item.reference_added", saved.id);
+    return saved;
+  }
+
+  async insertLink(
+    collection: Pick<Collection, "id" | "hubId">,
+    user: AuthUser,
+    url: string,
+    tags: string[],
+    position: number,
+  ) {
+    const target = await this.referenceTarget(collection, user, url);
+    return target
+      ? this.insertReference(collection, user, target, tags, position)
+      : this.insertExternal(collection, user, url, tags, position);
   }
 
   // Inserts a canonical, non-duplicate link into a collection the caller has
@@ -67,7 +129,7 @@ export class ResourcesService {
         addedByUserId: user.userId,
       },
     });
-    await requestLinkMetadata(this.prisma, [url]);
+    if (!localCollectionAddress(url)) await requestLinkMetadata(this.prisma, [url]);
     await this.record(collection, user, "item.link_added", saved.id);
     return saved;
   }
@@ -95,8 +157,9 @@ export class ResourcesService {
     dto: CreateCollectionResourceDto,
   ) {
     const collection = await this.requireWritableCollection(collectionId, user);
-    const target = await this.prisma.collection.findUnique({
-      where: { id: dto.linkedCollectionId },
+    if (collectionId === dto.linkedCollectionId) throw appError("bad_request");
+    const target = await this.prisma.collection.findFirst({
+      where: { id: dto.linkedCollectionId, hubId: collection.hubId },
     });
     if (!target) throw new NotFoundException("Collection not found");
     await this.policy.requireRead(target, user);
@@ -107,17 +170,13 @@ export class ResourcesService {
       })
     )
       throw appError("duplicate_resource");
-    const resource = await this.prisma.resource.create({
-      data: {
-        collectionId,
-        kind: ResourceKind.COLLECTION_LINK,
-        linkedCollectionId: target.id,
-        position: dto.position,
-        tags: await itemTags(this.prisma, dto.tags),
-        addedByUserId: user.userId,
-      },
-    });
-    await this.record(collection, user, "item.reference_added", resource.id);
+    const resource = await this.insertReference(
+      collection,
+      user,
+      target.id,
+      dto.tags ?? [],
+      dto.position,
+    );
     return this.resourceView(resource, user, await this.context([resource]));
   }
 
@@ -415,7 +474,7 @@ export class ResourcesService {
       throw appError("section_empty");
   }
 
-  private async requireNonemptySections(collectionId: string) {
+  async requireNonemptySections(collectionId: string) {
     this.assertSectionOrder(
       await this.prisma.resource.findMany({
         where: { collectionId },
@@ -505,7 +564,13 @@ export class ResourcesService {
     const target = resource.linkedCollectionId
       ? await this.prisma.collection.findUnique({ where: { id: resource.linkedCollectionId } })
       : null;
-    const readable = target && (await this.policy.resolve(target, viewer)).canRead;
+    const sameOwner =
+      target &&
+      (await this.prisma.collection.findFirst({
+        where: { id: resource.collectionId, hubId: target.hubId },
+        select: { id: true },
+      }));
+    const readable = sameOwner && target && (await this.policy.resolve(target, viewer)).canRead;
     // Never forward the containing collection's share token or expose unreadable
     // metadata: an unreadable target's id and any stored title (which may have
     // been copied from it) stay out of the response.
@@ -528,6 +593,9 @@ export class ResourcesService {
       collectionId: resource.collectionId,
       kind: wireToken(resource.kind, ["external_link", "collection_link", "heading"]),
       url: resource.url ?? undefined,
+      ...(link && resource.url && localCollectionAddress(resource.url)
+        ? { collectionHint: true }
+        : {}),
       linkedCollectionId: resource.linkedCollectionId,
       title: link
         ? meta.title
@@ -558,6 +626,9 @@ interface ItemContext {
 
 function linkUrls(items: Resource[]) {
   return items
-    .filter((item) => item.kind === ResourceKind.EXTERNAL_LINK && item.url)
+    .filter(
+      (item) =>
+        item.kind === ResourceKind.EXTERNAL_LINK && item.url && !localCollectionAddress(item.url),
+    )
     .map((item) => item.url as string);
 }

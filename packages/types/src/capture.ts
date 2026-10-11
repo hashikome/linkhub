@@ -10,6 +10,7 @@ export interface CaptureRequest {
   links: CaptureLink[];
   /** Name for a collection created by this save ("new" or a first capture). */
   collectionTitle?: string;
+  published?: boolean;
 }
 export interface CaptureResult {
   collectionId: string;
@@ -17,6 +18,8 @@ export interface CaptureResult {
 }
 export interface LinkPreview {
   url: string;
+  /** Recognized application collection URL; no ownership or availability implied. */
+  collectionHint?: boolean;
   title: string | null;
   /** found: title read. untitled: no title (blocked, slow, none) — still saveable.
    *  no_domain: the host name does not exist, so the address is a typo. */

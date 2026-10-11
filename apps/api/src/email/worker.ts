@@ -1,13 +1,13 @@
 import "dotenv/config";
-import { PrismaPg } from "@prisma/adapter-pg";
 import {
   emitEvent,
   initializeTelemetry,
   shutdownTelemetry,
 } from "../common/observability/telemetry";
 import { validateEnv } from "../config/env.validation";
-import { readSecret } from "../config/secret";
-import { PrismaClient } from "../generated/prisma/client";
+import { PrismaService } from "../database/prisma.service";
+import { importJobService } from "../modules/imports/import-jobs";
+import { expireImportDrafts } from "../modules/imports/import-maintenance";
 import {
   LinkMetadataLookup,
   startLinkMetadataQueue,
@@ -21,12 +21,7 @@ async function main() {
   await initializeTelemetry();
   validateEnv(process.env);
   const config = emailConfig(process.env, true);
-  const prisma = new PrismaClient({
-    adapter: new PrismaPg({
-      connectionString:
-        readSecret("DATABASE_URL") ?? "postgresql://postgres:postgres@127.0.0.1:5436/nslinkhub",
-    }),
-  });
+  const prisma = new PrismaService();
   const provider =
     config.provider === "resend"
       ? new ResendProvider(config.apiKey ?? "", config.from ?? "")
@@ -41,14 +36,38 @@ async function main() {
   const metadata = linkTitlesEnabled()
     ? startLinkMetadataQueue(new LinkMetadataLookup(prisma), config.redisUrl, config.prefix)
     : null;
+  const imports = importJobService(prisma);
+  let importWork: Promise<unknown> | undefined;
+  const importTimer = setInterval(() => {
+    if (importWork) return;
+    importWork = imports
+      .runJobBatch()
+      .catch(() => emitEvent("imports.job_failed", {}, "warn"))
+      .finally(() => {
+        importWork = undefined;
+      });
+  }, 1000);
+  let expiryWork: Promise<unknown> | undefined;
+  const expire = () => {
+    if (expiryWork) return;
+    expiryWork = expireImportDrafts(prisma)
+      .catch(() => emitEvent("imports.cleanup_failed", {}, "warn"))
+      .finally(() => {
+        expiryWork = undefined;
+      });
+  };
+  const expiryTimer = setInterval(expire, 60_000);
+  expire();
   emitEvent("email.worker_started");
   let stopping = false;
   async function stop(failed = false) {
     if (stopping) return;
     stopping = true;
+    clearInterval(expiryTimer);
+    clearInterval(importTimer);
     const deadline = setTimeout(() => process.exit(1), 10_000);
     try {
-      await Promise.all([runtime.close(), metadata?.close()]);
+      await Promise.all([runtime.close(), metadata?.close(), expiryWork, importWork]);
       await prisma.$disconnect();
       emitEvent("email.worker_stopped");
       await shutdownTelemetry();

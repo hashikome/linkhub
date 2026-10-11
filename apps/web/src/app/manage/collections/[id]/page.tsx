@@ -2,7 +2,7 @@ import type { OperatorCollection } from "@nslinkhub/types";
 import type { Metadata } from "next";
 import { FormNotice } from "../../../../components/form-notice";
 import { OperatorFailure } from "../../../../components/operator-failure";
-import { OperationForm, OperatorNav } from "../../../../components/operator-ui";
+import { OperationForm } from "../../../../components/operator-ui";
 import { failure, queryValue } from "../../../../lib/http";
 import { operatorRead } from "../../../../lib/operator-read";
 import { isUuid } from "../../../../lib/validation";
@@ -26,7 +26,6 @@ export default async function Page({
   if (!result.data)
     return (
       <section className="reader ops-page">
-        <OperatorNav current="collections" />
         <h1>Collection unavailable</h1>
         <p>
           No public collection or hold matches this address.{" "}
@@ -37,7 +36,6 @@ export default async function Page({
   const c = result.data;
   return (
     <section className="reader ops-page">
-      <OperatorNav current="collections" />
       <h1>Collection moderation</h1>
       <FormNotice code={queryValue(query.notice)} />
       <dl className="account-details">

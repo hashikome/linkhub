@@ -21,6 +21,11 @@ export class RequestBudgetMaintenance implements OnModuleInit, OnModuleDestroy {
   async prune(): Promise<void> {
     await pruneDeletedAccounts(this.prisma);
     await this.prisma.$executeRaw`
+      DELETE FROM pending_action_payloads WHERE token_hash IN (
+        SELECT token_hash FROM pending_action_payloads WHERE expires_at < clock_timestamp()
+        ORDER BY expires_at LIMIT 1000 FOR UPDATE SKIP LOCKED
+      )`;
+    await this.prisma.$executeRaw`
       DELETE FROM service_invitations WHERE id IN (
         SELECT id FROM service_invitations WHERE expires_at < clock_timestamp() - interval '30 days'
         ORDER BY expires_at LIMIT 1000 FOR UPDATE SKIP LOCKED

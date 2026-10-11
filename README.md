@@ -32,7 +32,7 @@ the product rules; the Next.js web app reads through its HTTP contracts.
   transfer, saves, explore, id permalinks + handle resolution
 - Auth via self-hosted [better-auth](https://better-auth.com) (email codes, DB-backed sessions, bearer tokens for API clients); signup creates a person with a username; first collection ownership creates their optional hub
 - Synchronous export (Markdown/PDF/Word; multi-collection, zipped) and
-  imports (bookmarks-HTML + universal CSV with per-row error reports)
+  reviewed imports (bookmarks HTML, CSV and TXT, folder mapping and partial commits)
 - `@nslinkhub/types` (wire contracts) and `@nslinkhub/email` (code-email
   templates); liveness + per-dependency readiness endpoints; `_FILE`
   deployment-secret contract with zero-config dev

@@ -24,6 +24,9 @@ export default function Page() {
           Our support inbox isn't set up yet. Please check back soon.
         </p>
       )}
+      <p>
+        <a href="/support/imports">Importing bookmarks, CSV and text files</a>
+      </p>
       <h2 id="profile-picture">How do I update my profile picture?</h2>
       <p>
         We use <a href="https://gravatar.com/">Gravatar</a> for profile pictures. Sign in there or

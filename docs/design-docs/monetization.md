@@ -2,8 +2,9 @@
 
 Status: accepted product direction in
 [ADR-0028](../engineering-decisions/0028-free-public-curation-paid-private-sharing.md);
-billing, entitlements, private quotas and public creation defaults are not yet
-implemented. Current development behavior must not be described as the launch model.
+public creation defaults and explicit private choices are implemented. Billing,
+entitlements and private quotas are not yet implemented. Current development
+sharing permissions must not be described as the enforced launch commercial model.
 
 ## Free and paid boundaries
 

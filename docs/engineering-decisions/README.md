@@ -110,3 +110,17 @@ Current implementation guidance lives in the linked design documents.
 - [0045-account-timezone-preference.md](0045-account-timezone-preference.md) — Private database-backed timezone preference, Automatic device default and consistent server/client date rendering.
 
 - [0046-shared-authentication-completion.md](0046-shared-authentication-completion.md) — One transactional completion operation for session assurance, invitation completion and account-bound sign-in auditing across all methods.
+
+- [0047-owner-scoped-collection-references.md](0047-owner-scoped-collection-references.md) — Same-owner references via Add a link; confirmed, atomic deletion and transfer cleanup.
+
+- [0048-nonblocking-navigation-progress.md](0048-nonblocking-navigation-progress.md) — Preserve the current view during ordinary GET navigation; retain mutation, session and history concealment.
+
+- [0049-invitation-based-communities.md](0049-invitation-based-communities.md) — Future owner-approved membership grants viewer access across community-published collections; no implicit migration of subscriptions.
+
+- [0050-community-entities-and-intake-integration.md](0050-community-entities-and-intake-integration.md) — Distinct communities within a hub; reusable intake with team and client views, NSLinkHub first and portfolio next; implementation deferred.
+
+- [0051-durable-interrupted-actions.md](0051-durable-interrupted-actions.md) — Immutable capture result IDs and encrypted backend overflow storage for account-bound sign-in recovery.
+
+- [0052-mandatory-visitor-attribution.md](0052-mandatory-visitor-attribution.md) — Mandatory source attribution in one server transport, enforced by the web boundary gate.
+
+- [0053-id-only-collection-addresses.md](0053-id-only-collection-addresses.md) — Accepted next milestone: all collection URLs use `/c/<id>`; handles resolve hubs only; remove collection slugs.

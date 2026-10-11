@@ -3,7 +3,9 @@ import { webServerConfig } from "@nslinkhub/config/web-server";
 import { type AccountAction, accountActions } from "@nslinkhub/types";
 import { cookies } from "next/headers";
 import { serverCookie } from "./cookies";
-import { type ApiPath, authCookies, postJson, safePath } from "./http";
+import { readFormData } from "./form-body";
+import { type ApiPath, authCookies } from "./http";
+import { serverSend } from "./server-transport";
 import { openSignInFlow, type SignInFlow, sealSignInFlow } from "./sign-in-flow";
 
 export function sealFlow(flow: SignInFlow) {
@@ -12,30 +14,10 @@ export function sealFlow(flow: SignInFlow) {
 export async function readFlow(cookieName = "sign_in_flow"): Promise<SignInFlow | null> {
   return openSignInFlow((await cookies()).get(cookieName)?.value, webServerConfig().sourceSecret);
 }
-export async function formData(request: Request): Promise<URLSearchParams> {
-  if (
-    request.headers.get("origin") !== webServerConfig().publicOrigin ||
-    request.headers.get("sec-fetch-site") === "cross-site"
-  )
-    throw new Error("origin");
-  if (!request.headers.get("content-type")?.startsWith("application/x-www-form-urlencoded"))
-    throw new Error("format");
-  const reader = request.body?.getReader();
-  let size = 0;
-  const chunks: Uint8Array[] = [];
-  if (reader)
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      size += value.length;
-      if (size > 16384) {
-        await reader.cancel();
-        throw new Error("size");
-      }
-      chunks.push(value);
-    }
-  return new URLSearchParams(Buffer.concat(chunks).toString());
+export async function formData(request: Request, action = ""): Promise<URLSearchParams> {
+  return readFormData(request, webServerConfig().publicOrigin, action);
 }
+
 export function formPost<T>(
   request: Request,
   path: ApiPath,
@@ -51,9 +33,20 @@ export function formPost<T>(
   });
   const cookie = authCookies(request.headers.get("cookie") ?? "");
   if (cookie) headers.set("cookie", cookie);
-  const source = request.headers.get("x-web-form-source");
-  if (source) headers.set("x-web-form-source", source);
-  return postJson<T>(`${config.apiOrigin}${safePath(path)}`, body, { headers, raw, method });
+  return serverSend<T>(
+    path,
+    body,
+    {
+      headers,
+      raw,
+      method,
+      deleteBody:
+        method === "DELETE" &&
+        (/^\/api\/v1\/collections\/[a-f0-9-]{36}$/.test(path) ||
+          /^\/api\/v1\/imports\//.test(path)),
+    },
+    request.headers,
+  );
 }
 export function redirectResponse(path: string, setCookies: string[] = []) {
   const headers = new Headers({ Location: path, "Cache-Control": "private, no-store, max-age=0" });

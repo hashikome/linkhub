@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { peopleRows } from "../../../components/manage-rows";
 import { ManageTable } from "../../../components/manage-table";
 import { OperatorFailure } from "../../../components/operator-failure";
-import { OperatorNav } from "../../../components/operator-ui";
 import { queryValue, withCursor } from "../../../lib/http";
 import { operatorRead } from "../../../lib/operator-read";
 import { loadManageRows } from "../load-rows";
@@ -26,7 +25,6 @@ export default async function Page({
   if (!result.ok) return <OperatorFailure error={result} />;
   return (
     <section className="reader ops-page ops-list-page">
-      <OperatorNav current="people" />
       <h1>Access</h1>
       <p className="meta">
         People with access to collections in your hub. Manage their access from each collection.

@@ -9,6 +9,8 @@ export interface Resource {
   linkedCollectionId: string | null;
   /** Viewer-authorized destination metadata; null means unavailable. */
   linkedCollection?: { id: string; title: string } | null;
+  /** Recognized application collection URL; no ownership or availability implied. */
+  collectionHint?: boolean;
   /**
    * A link's title from its page (null until looked up), a section's text, or
    * a readable reference's target title. Never an input for links.

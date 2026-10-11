@@ -1,6 +1,6 @@
 import { FormNotice } from "./form-notice";
-import { NativeForm } from "./native-form";
 import { GoogleSignIn } from "./google-sign-in";
+import { NativeForm } from "./native-form";
 
 export async function AuthEntry({
   intent,

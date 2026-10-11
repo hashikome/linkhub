@@ -4,7 +4,6 @@ import { FormNotice } from "../../../components/form-notice";
 import { managedCollectionsRows } from "../../../components/manage-rows";
 import { ManageTable } from "../../../components/manage-table";
 import { OperatorFailure } from "../../../components/operator-failure";
-import { OperatorNav } from "../../../components/operator-ui";
 import { queryValue, withCursor } from "../../../lib/http";
 import { operatorRead } from "../../../lib/operator-read";
 import { loadManageRows } from "../load-rows";
@@ -31,7 +30,6 @@ export default async function Page({
   const returnTo = `/manage/collections${returnQuery.size ? `?${returnQuery}` : ""}`;
   return (
     <section className="reader ops-page ops-list-page">
-      <OperatorNav current="collections" />
       <h1>Collections</h1>
       <p className="meta">
         Find a collection by its ID or link. Available actions depend on your access.

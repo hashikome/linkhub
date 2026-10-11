@@ -25,4 +25,4 @@ separate worker; exports do not use that queue.
 
 Word, Markdown and PDF are all offered (the API already renders all three). A
 collection page offers **Download**; exporting several collections at once is
-in Manage › Import & export.
+from a selection in Manage › Collections.

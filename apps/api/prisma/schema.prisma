@@ -42,6 +42,7 @@ model User {
   operatorGrant        OperatorGrant?
   adminGrant           AdminGrant?
 
+  importDrafts       ImportDraft[]
   hub                Hub?
   createdCollections Collection[]        @relation("CollectionCreator")
   shares             CollectionShare[]
@@ -71,6 +72,7 @@ model Hub {
   updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
 
   owner                    User         @relation(fields: [ownerUserId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  importDrafts             ImportDraft[]
   collections              Collection[]
   firstCaptureCollectionId String?      @map("first_capture_collection_id") @db.Uuid
   firstCaptureCollection   Collection?  @relation("FirstCapture", fields: [firstCaptureCollectionId], references: [id], onDelete: SetNull, onUpdate: NoAction)
@@ -84,7 +86,7 @@ model Collection {
   slug               String   @db.VarChar(120)
   title              String   @db.VarChar(255)
   description        String?
-  published          Boolean  @default(false)
+  published          Boolean  @default(true)
   linkSharingEnabled Boolean  @default(false) @map("link_sharing_enabled")
   commentsEnabled    Boolean  @default(true) @map("comments_enabled")
   shareTokenHash     String?  @map("share_token_hash") @db.VarChar(255)
@@ -399,6 +401,7 @@ model LinkMetadata {
 }
 
 model CaptureReceipt {
+  resourceIds  String[] @default([]) @map("resource_ids") @db.Uuid
   userId       String   @map("user_id") @db.Uuid
   operationId  String   @map("operation_id") @db.Uuid
   collectionId String   @map("collection_id") @db.Uuid
@@ -552,4 +555,80 @@ model Passkey {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   @@index([userId])
   @@map("passkeys")
+}
+
+// Private review state. Destination and imported IDs are durable receipts, not
+// cascading relations: deleting a collection must not make a row import again.
+model ImportDraft {
+  id String @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  hubId String @map("hub_id") @db.Uuid
+  sourceKind String @map("source_kind") @db.VarChar(24)
+  version Int @default(1)
+  closed Boolean @default(false)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  hub Hub @relation(fields: [hubId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  folders ImportFolder[]
+  rows ImportRow[]
+  @@index([userId, closed, expiresAt])
+  @@index([expiresAt])
+  @@map("import_drafts")
+}
+
+model ImportFolder {
+  id String @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
+  draftId String @map("draft_id") @db.Uuid
+  parentId String? @map("parent_id") @db.Uuid
+  name String @db.VarChar(255)
+  path String @db.VarChar(2000)
+  position Int
+  mode String @default("section") @db.VarChar(16)
+  targetCollectionId String? @map("target_collection_id") @db.Uuid
+  newTitle String @map("new_title") @db.VarChar(255)
+  headingId String? @map("heading_id") @db.Uuid
+  referenceId String? @map("reference_id") @db.Uuid
+  manual Boolean @default(false)
+  published Boolean @default(true)
+  jobState String @default("review") @map("job_state") @db.VarChar(16)
+  jobRows String[] @default([]) @map("job_rows") @db.Uuid
+  jobRequestedAt DateTime? @map("job_requested_at") @db.Timestamptz(6)
+  draft ImportDraft @relation(fields: [draftId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  parent ImportFolder? @relation("ImportTree", fields: [draftId, parentId], references: [draftId, id], onDelete: NoAction, onUpdate: NoAction)
+  children ImportFolder[] @relation("ImportTree")
+  rows ImportRow[] @relation("ImportPlacement")
+  @@unique([draftId, id])
+  @@unique([draftId, position])
+  @@map("import_folders")
+}
+
+model ImportRow {
+  id String @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
+  draftId String @map("draft_id") @db.Uuid
+  folderId String @map("folder_id") @db.Uuid
+  position Int
+  sourceLocation String @map("source_location") @db.VarChar(100)
+  address String @db.VarChar(8192)
+  url String? @db.VarChar(2048)
+  tags String[] @default([])
+  failure String? @db.VarChar(32)
+  resourceId String? @map("resource_id") @db.Uuid
+  dropped Boolean @default(false)
+  draft ImportDraft @relation(fields: [draftId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  folder ImportFolder @relation("ImportPlacement", fields: [draftId, folderId], references: [draftId, id], onDelete: NoAction, onUpdate: NoAction)
+  @@unique([draftId, position])
+  @@index([url])
+  @@map("import_rows")
+}
+
+// Opaque, encrypted web recovery payloads; no domain authority or user content queries.
+model PendingActionPayload {
+  tokenHash String @id @map("token_hash") @db.VarChar(64)
+  payload String @db.Text
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@map("pending_action_payloads")
 }

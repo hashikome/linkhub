@@ -28,17 +28,24 @@ export async function collectionOperation(
   let path = base;
   let method: "POST" | "DELETE" | "PUT" = "POST";
   let body: Record<string, unknown> = {};
+  const impactToken = String(data.get("impactToken") ?? "");
+  if (["delete", "transfer"].includes(action) && !/^[a-f0-9]{64}$/.test(impactToken))
+    return { error: "Reload this page to review what will change." };
   switch (action) {
     case "publish":
     case "unpublish":
       path = `${base}/${action}`;
       break;
     case "delete":
+      body = { impactToken };
       method = "DELETE";
       break;
     case "transfer":
       path = `${base}/transfer`;
-      body = { email: String(data.get("email") ?? "").trim() } satisfies TransferCollectionRequest;
+      body = {
+        email: String(data.get("email") ?? "").trim(),
+        impactToken,
+      } satisfies TransferCollectionRequest;
       break;
     case "grant": {
       const role = String(data.get("role") ?? "viewer");
@@ -110,6 +117,10 @@ export async function collectionOperation(
     });
     redirect(`/sign-in?returnTo=${encodeURIComponent(target)}`);
   }
+  if (!result.ok && result.code === "version_conflict" && ["delete", "transfer"].includes(action))
+    redirect(
+      `/c/${id}/actions?${new URLSearchParams({ action, notice: "impact-changed", returnTo: safeDocumentReturn(data.get("returnTo") ?? `/c/${id}`) })}`,
+    );
   if (!result.ok)
     return {
       error:

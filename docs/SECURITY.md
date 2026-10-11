@@ -21,6 +21,9 @@
   grants apply only to that collection. References grant no access, and share
   tokens never travel to referenced targets. A reference whose target the
   reader cannot open carries no target id, title or stored title override.
+  Reference creation requires source write, target read and the same hub; pasted
+  query tokens never authorize conversion. Foreign or unreadable collection URLs
+  remain ordinary links with only a generic address-pattern hint (ADR-0047).
   Otherwise return not found.
 - `contributor` shares are content-only: no publication, no share management, no
   deletion, no wider hub access.
@@ -121,10 +124,18 @@ one public origin. Next never proxies API paths (ADR-0036).
 - External input is validated at HTTP and upload boundaries (global
   `ValidationPipe` with whitelist + forbidNonWhitelisted; file size/type
   checks on imports). Multipart import parsing enforces a 10 MiB file limit,
-  one file, four fields and five parts before acquiring the shared authority
+  one file, two fields and three parts before acquiring the shared authority
   lock. The authenticated session is rechecked under that lock after parsing.
-- Import parsers must fail per-row with clear errors rather than corrupting
-  state.
+- Imports require an existing owned hub. Private drafts bind to the account and
+  hub; only owner-managed collections may be targets. No service-role bypass.
+  Invalid addresses remain repairable rows; malformed file structure rejects the
+  upload. Draft edits and commits require a revision. The API rechecks destinations
+  and writes content, receipts and audit evidence in one authority transaction.
+  Shared metadata workers enforce DNS/redirect/SSRF rules outside that transaction.
+- Import lookups have a separate account budget of 15,000 candidate URLs per day;
+  retries count. Reads/polling use the ordinary read budget, draft mutations the
+  write budget; only draft creation consumes the file budget. Files are parsed
+  in memory and not retained; draft rows expire after 30 days without changes.
 - Product HTTP errors use a shared catalog and an explicit trusted exception
   boundary. Arbitrary framework messages/details are discarded; validation
   exposes only declared DTO field paths and bounded rule identifiers. Unknown
@@ -183,7 +194,7 @@ Auth audits retain 90 days; collection audit/deletion policy remains separate.
 ## Abuse protection
 
 Every non-probe request admitted by the browser-origin boundary consumes an atomic PostgreSQL-backed source budget,
-shared by replicas: auth 30/minute, imports/exports 10/minute, other writes
+shared by replicas: auth 30/minute, import creation/exports 10/minute, other writes
 60/minute, reads 300/minute. The HTTP boundary runs before better-auth/body
 parsing, returns 429 plus Retry-After, and fails closed with a safe 503 when
 the budget store fails. Liveness/readiness GETs remain available.
@@ -199,11 +210,20 @@ connection/body limits during live deployment.
 Web server rendering preserves the visitor's source budget through signed
 attribution. `apps/web/server.ts` derives the source from its socket, walking
 forwarded addresses only through explicit `WEB_TRUSTED_PROXY_CIDRS` hops, and
-overwrites any caller-supplied `x-web-read-source`. Server reads forward this
-30-second HMAC proof to the API. Only the read budget accepts `x-web-read-source` proofs;
+overwrites caller-supplied read and form attribution headers. The shared transport
+authenticates this server-stamped request context and signs fresh 30-second HMAC
+proofs immediately before API forwarding, including after slow body uploads. Only the read budget accepts `x-web-read-source` proofs;
 invalid/absent proofs use the normal API socket/proxy source. Native web POST
 forms use a separate `x-web-form-source` proof/HMAC domain for source budgets,
 including the POST, PATCH and DELETE API requests they forward.
+All visitor-triggered server API calls use the mandatory attributed transport,
+including recovery-storage POSTs during SSR. It renews both entry-point proofs,
+requires valid signed context before sending, and overwrites outgoing proof values;
+the API chooses the applicable proof domain. Feature code cannot call the low-level
+HTTP adapter directly (`check:web`). Background calls require a separately reviewed
+service policy, never a missing-context bypass. See
+[ADR-0052](engineering-decisions/0052-mandatory-visitor-attribution.md).
+
 Documents use `strict-origin` referrers so native browser POSTs retain Origin
 without disclosing paths or query tokens; external resource links still use
 `no-referrer`. The web validates the browser Origin before forwarding JSON, and the API
@@ -236,7 +256,7 @@ Email-code verification is one flow with a purpose (sign in, first link,
 continue, resume, confirm, invitation; `apps/web/src/lib/verification.ts`).
 An action interrupted by verification — a sensitive operator action needing a
 fresh code (`recent_auth_required`, "Confirm it's you") or any form action whose
-session ended — is kept in a 15-minute HttpOnly AES-GCM cookie and replayed once
+session ended — is encrypted with AES-GCM for 15 minutes and replayed once
 after the code, with the new session. Only same-origin form posts can create it
 (`formData()` rejects other origins and cross-site requests), it never targets
 `/api/v1/auth/*`, and operator replays keep their `operationId`, so they cannot
@@ -327,3 +347,17 @@ independent email, Google, passkey or invitation flow discards old creation proo
 Previews receive per-visitor attributed read budgets. Return destinations remain
 validated web context and cannot change account identity. Capture alone supplies
 explicit creation consent in its code request; invitations use their isolated flow.
+
+
+### Oversized interrupted actions
+
+Actions too large for a 3,800-character cookie value use an opaque 256-bit reference
+cookie. The API stores only the encrypted payload under a SHA-256 hash of that
+reference, with a 15-minute expiry and a 64 KiB payload ceiling. The web service
+signs storage commands with `WEB_SOURCE_SECRET` in a separate cryptographic domain;
+proofs bind operation, token, payload, and a timestamp valid for 60 seconds.
+Browsers cannot issue authorized storage commands. Reads never grant domain access;
+replay still requires the matching account fingerprint and current API policy.
+Storage outages surface as failures. Consumed payloads are deleted; API maintenance
+prunes expired records in bounded batches. See
+[ADR-0051](engineering-decisions/0051-durable-interrupted-actions.md).

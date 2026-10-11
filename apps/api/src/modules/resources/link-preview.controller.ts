@@ -3,7 +3,11 @@ import { Controller, Get, Query } from "@nestjs/common";
 import type { LinkPreview } from "@nslinkhub/types";
 import { appError } from "../../common/errors/app-exception";
 import { apiOk } from "../../common/utils/response.util";
-import { canonicalizeUrl, publicLinkUrl } from "../../common/utils/url.util";
+import {
+  canonicalizeUrl,
+  localCollectionAddress,
+  publicLinkUrl,
+} from "../../common/utils/url.util";
 import { PrismaService } from "../../database/prisma.service";
 import { fetchPageMetadata, linkTitlesEnabled } from "./page-metadata";
 
@@ -29,6 +33,8 @@ export class LinkPreviewController {
     } catch {
       throw appError("bad_request");
     }
+    if (localCollectionAddress(url))
+      return apiOk<LinkPreview>({ url, title: null, status: "found", collectionHint: true });
     url = publicLinkUrl(url);
     const title = linkTitlesEnabled() ? await this.title(url) : null;
     const preview: LinkPreview = {

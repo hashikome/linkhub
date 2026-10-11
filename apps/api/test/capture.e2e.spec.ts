@@ -2,13 +2,14 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test"
 import { randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
+import { publicOrigins } from "@nslinkhub/config/public-origins";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
 import { PrismaService } from "../src/database/prisma.service";
 import { signInWithCode } from "./fixtures/sign-in";
 
-describe("atomic private link capture", () => {
+describe("atomic link capture", () => {
   let app: INestApplication, prisma: PrismaService;
   let owner: { id: string; token: string }, other: { id: string; token: string };
   const send = (body: object, token = owner.token) =>
@@ -41,7 +42,7 @@ describe("atomic private link capture", () => {
   afterAll(async () => {
     await app.close();
   });
-  it("concurrent first saves create one private collection and replay creates no duplicates", async () => {
+  it("concurrent first saves create one published collection and replay creates no duplicates", async () => {
     const a = input(),
       b = input();
     const [one, two] = await Promise.all([send(a).expect(201), send(b).expect(201)]);
@@ -51,14 +52,14 @@ describe("atomic private link capture", () => {
     const collection = await prisma.collection.findUniqueOrThrow({
       where: { id: one.body.data.collectionId },
     });
-    expect(collection.published).toBe(false);
+    expect(collection.published).toBe(true);
     expect(collection.linkSharingEnabled).toBe(false);
     const replay = await send(a).expect(201);
     expect(replay.body.data).toEqual(one.body.data);
     await send({ ...a, ...link("https://different.fixture-links.dev") }).expect(409);
     expect(await prisma.resource.count({ where: { collectionId: collection.id } })).toBe(2);
-    await request(app.getHttpServer()).get(`/api/v1/collections/${collection.id}`).expect(404);
-    await send({ ...input(collection.id) }, other.token).expect(404);
+    await request(app.getHttpServer()).get(`/api/v1/collections/${collection.id}`).expect(200);
+    await send({ ...input(collection.id) }, other.token).expect(403);
   });
   it("requires a choice for returning owners and deduplicates canonical URLs in an explicit destination", async () => {
     await send(input()).expect(409);
@@ -215,6 +216,52 @@ describe("atomic private link capture", () => {
       expect(refused.body.error.code).toBe("link_not_public");
     }
   });
+  it("replays saved reference IDs after slug and handle changes, but rejects deleted receipts", async () => {
+    const target = (await send(input("new")).expect(201)).body.data;
+    const collection = await prisma.collection.findUniqueOrThrow({
+      where: { id: target.collectionId },
+      include: { hub: true },
+    });
+    const body = {
+      ...input("new"),
+      links: [
+        {
+          url: `${publicOrigins(process.env).webOrigin}/@${collection.hub.handle}/${collection.slug}`,
+        },
+        { url: `${publicOrigins(process.env).webOrigin}/c/${collection.id}` },
+      ],
+    };
+    const saved = (await send(body).expect(201)).body.data;
+    expect(saved.resourceIds).toHaveLength(1);
+    await prisma.collection.update({
+      where: { id: collection.id },
+      data: { slug: `renamed-${randomUUID()}` },
+    });
+    expect((await send(body).expect(201)).body.data).toEqual(saved);
+    await prisma.hub.update({
+      where: { id: collection.hubId },
+      data: { handle: `renamed-${randomUUID()}` },
+    });
+    expect((await send(body).expect(201)).body.data).toEqual(saved);
+    await prisma.resource.delete({ where: { id: saved.resourceIds[0] } });
+    await send(body).expect(404);
+  });
+  it("upgrades a legacy receipt on a resolvable retry", async () => {
+    const body = input("new"),
+      saved = (await send(body).expect(201)).body.data;
+    await prisma.captureReceipt.update({
+      where: { userId_operationId: { userId: owner.id, operationId: body.operationId } },
+      data: { resourceIds: [] },
+    });
+    expect((await send(body).expect(201)).body.data).toEqual(saved);
+    expect(
+      (
+        await prisma.captureReceipt.findUniqueOrThrow({
+          where: { userId_operationId: { userId: owner.id, operationId: body.operationId } },
+        })
+      ).resourceIds,
+    ).toEqual(saved.resourceIds);
+  });
   it("rejects malicious URLs, missing sessions and replay after deletion", async () => {
     for (const url of [
       "javascript:alert(1)",
@@ -228,4 +275,43 @@ describe("atomic private link capture", () => {
     await prisma.collection.delete({ where: { id: result.body.data.collectionId } });
     await send(body).expect(404);
   });
+});
+
+it("accepts an unpublished creation choice while ordinary creation defaults to published", async () => {
+  const module = await Test.createTestingModule({ imports: [AppModule] }).compile();
+  const app = module.createNestApplication({ bodyParser: false });
+  configureApp(app);
+  await app.init();
+  try {
+    const signed = await signInWithCode(app.getHttpServer(), {
+      email: `publication-${randomUUID()}@example.com`,
+    });
+    const token = signed.headers["set-auth-token"] as string;
+    const api = () => request(app.getHttpServer());
+    const first = (
+      await api()
+        .post("/api/v1/capture")
+        .auth(token, { type: "bearer" })
+        .send({
+          operationId: randomUUID(),
+          startedAt: Date.now(),
+          destination: "first",
+          published: false,
+          links: [{ url: `https://fixture-links.dev/${randomUUID()}` }],
+        })
+        .expect(201)
+    ).body.data;
+    await api().get(`/api/v1/collections/${first.collectionId}`).expect(404);
+    const created = (
+      await api()
+        .post("/api/v1/collections")
+        .auth(token, { type: "bearer" })
+        .send({ title: "Default public", slug: `default-${randomUUID()}` })
+        .expect(201)
+    ).body.data;
+    expect(created.published).toBe(true);
+    await api().get(`/api/v1/collections/${created.id}`).expect(200);
+  } finally {
+    await app.close();
+  }
 });
