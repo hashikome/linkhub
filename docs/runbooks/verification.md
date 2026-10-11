@@ -148,7 +148,7 @@ can select a locally installed executable. CI installs Playwright Chromium expli
 missing-service or missing-browser case becomes a skipped pass.
 
 The journey covers explore and public hubs/continuation (including no JavaScript),
-pretty URLs, collection and reference reading, explicit public previews for owners, handle/slug
+ID URLs, collection and reference reading, explicit public previews for owners, handle/title
 rename durability, hidden/missing equivalence, unpublish/history, token
 rotation, session expiry, real browser-cookie issuance, error recovery and
 Origin enforcement for unsafe requests. It also checks keyboard interaction,

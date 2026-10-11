@@ -26,7 +26,7 @@ describe("link metadata", () => {
     const created = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(token, { type: "bearer" })
-      .send({ published: false, slug: `meta-${randomUUID().slice(0, 8)}`, title: "Metadata" })
+      .send({ published: false, title: "Metadata" })
       .expect(201);
     collectionId = created.body.data.id;
   });
@@ -67,7 +67,7 @@ describe("link metadata", () => {
     const other = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(token, { type: "bearer" })
-      .send({ published: false, slug: `meta-b-${randomUUID().slice(0, 8)}`, title: "Second" })
+      .send({ published: false, title: "Second" })
       .expect(201);
     await request(app.getHttpServer())
       .post(`/api/v1/collections/${other.body.data.id}/resources/external`)
@@ -127,7 +127,7 @@ describe("link metadata", () => {
     const again = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(token, { type: "bearer" })
-      .send({ published: false, slug: `meta-retry-${randomUUID().slice(0, 8)}`, title: "Retry" })
+      .send({ published: false, title: "Retry" })
       .expect(201);
     await request(app.getHttpServer())
       .post(`/api/v1/collections/${again.body.data.id}/resources/external`)

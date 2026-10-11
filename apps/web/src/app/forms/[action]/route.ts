@@ -236,8 +236,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     return saveDraft(request, draft, room);
   }
   if (action.startsWith("comment-")) {
-    // Every comment write returns to the collection it belongs to (permalink or
-    // pretty URL, keeping an explicit share token) at the discussion.
+    // Every comment write returns to its collection ID address at the discussion,
+    // keeping an explicit share token.
     const returnTo = safeReturn(form.get("returnTo"));
     const token = new URL(returnTo, "http://local.invalid").searchParams.get("s");
     const scoped = token ? `?s=${encodeURIComponent(token)}` : "";

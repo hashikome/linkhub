@@ -31,11 +31,11 @@ describe("Export (e2e)", () => {
     const res = await signInWithCode(app.getHttpServer(), { email, name });
     return res.headers["set-auth-token"];
   };
-  const createCollection = async (slug: string) => {
+  const createCollection = async (title: string) => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ slug, title: slug, published: false })
+      .send({ title, published: false })
       .expect(201);
     return (res.body as { data: { id: string } }).data.id;
   };
@@ -85,7 +85,7 @@ describe("Export (e2e)", () => {
       201,
     );
     expect(res.headers["content-type"]).toContain("text/markdown");
-    expect(res.headers["content-disposition"]).toContain(`guide-${sfx}.md`);
+    expect(res.headers["content-disposition"]).toContain(`${guide}.md`);
     const content = (res.body as Buffer).toString("utf8");
     expect(content).toContain(`# guide-${sfx}`);
     expect(content).toContain(`## section-${sfx}`);
@@ -124,6 +124,16 @@ describe("Export (e2e)", () => {
     const res = await exportAs({ format: "markdown", collectionIds: [guide, section] }).expect(201);
     expect(res.headers["content-type"]).toContain("application/zip");
     expect((res.body as Buffer).subarray(0, 2).toString("latin1")).toBe("PK");
+  });
+
+  it("uses immutable filenames for same-title exports without overwriting zip entries", async () => {
+    const first = await createCollection("Same title");
+    const second = await createCollection("Same title");
+    const res = await exportAs({ format: "markdown", collectionIds: [first, second] }).expect(201);
+    const files = unzipSync(res.body);
+    expect(Object.keys(files).sort()).toEqual([`${first}.md`, `${second}.md`].sort());
+    for (const content of Object.values(files))
+      expect(new TextDecoder().decode(content)).toContain("# Same title");
   });
 
   it("renders pdf and docx", async () => {

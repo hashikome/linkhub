@@ -1,11 +1,11 @@
-import { createHash, randomUUID } from "node:crypto";
-import { Injectable } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import type { CaptureResult } from "@linkhub/types";
+import { Injectable } from "@nestjs/common";
 import { isUUID } from "class-validator";
 import { appError } from "../../common/errors/app-exception";
 import { AuthUser } from "../../common/interfaces/auth-user.interface";
 import { normalizeTags } from "../../common/utils/tags.util";
-import { savableLinkUrl } from "../../common/utils/url.util";
+import { canonicalizeUrl, savableLinkUrl } from "../../common/utils/url.util";
 import { PrismaService } from "../../database/prisma.service";
 import { CollectionPolicyService } from "../hubs/collection-policy.service";
 import { ensurePersonalHub } from "../hubs/hub-onboarding";
@@ -36,14 +36,13 @@ export class CaptureService {
         parsed.href.length > 2048
       )
         throw appError("bad_request");
-      const url = savableLinkUrl(parsed.href);
+      const url = canonicalizeUrl(parsed.href);
       if (links.some((entry) => entry.url === url)) continue;
       links.push({ url, tags: normalizeTags(link.tags) });
     }
     if (!["first", "new"].includes(dto.destination) && !isUUID(dto.destination))
       throw appError("bad_request");
     const name = dto.collectionTitle?.trim() || null;
-    const hub = isUUID(dto.destination) ? null : await ensurePersonalHub(this.prisma, user.userId);
     const fingerprint = createHash("sha256")
       .update(
         JSON.stringify([
@@ -95,6 +94,10 @@ export class CaptureService {
       if (saved !== ids.length) throw appError("not_found");
       return { collectionId: collection.id, resourceIds: ids };
     }
+    // Completed operations replay their immutable saved IDs even if an old URL
+    // shape has since been retired. Only new saves validate current address rules.
+    for (const link of links) savableLinkUrl(link.url);
+    const hub = isUUID(dto.destination) ? null : await ensurePersonalHub(this.prisma, user.userId);
     let id = isUUID(dto.destination) ? dto.destination : null;
     if (dto.destination === "first" && hub) {
       if (hub.firstCaptureCollectionId) {
@@ -117,7 +120,6 @@ export class CaptureService {
       if (!hub) throw appError("bad_request");
       const collection = await this.collections.create(user, {
         title: name ?? (await this.defaultTitle(hub.id)),
-        slug: `links-${randomUUID()}`,
         published: dto.published ?? true,
       });
       id = collection.id;

@@ -39,7 +39,7 @@ describe("Hub tenancy (e2e)", () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${ownerBearer}`)
-      .send({ slug: `unpub-${sfx}`, title: "Unpublished", published: false })
+      .send({ title: "Unpublished", published: false })
       .expect(201);
     const body = res.body as { data: { hubId: string; published: boolean } };
     expect(body.data.hubId).toBeTruthy();
@@ -52,7 +52,7 @@ describe("Hub tenancy (e2e)", () => {
     const created = await request(server)
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${ownerBearer}`)
-      .send({ slug: `secret-${sfx}`, title: "Secret", published: false })
+      .send({ title: "Secret", published: false })
       .expect(201);
     const collectionId = (created.body as { data: { id: string } }).data.id;
 
@@ -85,16 +85,15 @@ describe("Hub tenancy (e2e)", () => {
 
   it("lists a published collection on the public explore listing", async () => {
     const server = app.getHttpServer();
-    const slug = `pub-${sfx}`;
 
     await request(server)
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${ownerBearer}`)
-      .send({ slug, title: "Published", published: true })
+      .send({ title: "Published", published: true })
       .expect(201);
 
     const res = await request(server).get("/api/v1/discover?limit=50").expect(200);
-    const body = res.body as { data: Array<{ slug: string }> };
-    expect(body.data.some((c) => c.slug === slug)).toBe(true);
+    const body = res.body as { data: Array<{ title: string }> };
+    expect(body.data.some((c) => c.title === "Published")).toBe(true);
   });
 });

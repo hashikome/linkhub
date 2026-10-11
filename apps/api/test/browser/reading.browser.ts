@@ -82,13 +82,13 @@ let capture: ReturnType<typeof Bun.serve>;
 const publicIds: string[] = [];
 let delayedDocument: { path: string; started: () => void; released: Promise<void> } | undefined;
 
-async function create(title: string, slug: string, published = false) {
+async function create(title: string, published = false) {
   const result = await request(app.getHttpServer())
     .post("/api/v1/collections")
     .auth(owner, { type: "bearer" })
     .send({
       title,
-      slug,
+
       published,
       description: "Collected notes and practical references.\nA second line for reading.",
     })
@@ -331,14 +331,13 @@ beforeAll(async () => {
   await request(app.getHttpServer())
     .post("/api/v1/collections")
     .auth(otherToken, { type: "bearer" })
-    .send({ slug: "private-reading", title: "Other private collection", published: false })
+    .send({ title: "Other private collection", published: false })
     .expect(201);
-  for (let i = 0; i < 23; i++)
-    publicIds.push(await create(`Reading collection ${i + 1}`, `reading-${i}`, true));
-  sourceId = await create(longTitle, "reading-guide", true);
+  for (let i = 0; i < 23; i++) publicIds.push(await create(`Reading collection ${i + 1}`, true));
+  sourceId = await create(longTitle, true);
   publicIds.push(sourceId);
-  privateId = await create("Private title should never leak", "private-reading");
-  targetId = await create("A useful collection", "useful-collection", true);
+  privateId = await create("Private title should never leak");
+  targetId = await create("A useful collection", true);
   await request(app.getHttpServer())
     .post(`/api/v1/collections/${sourceId}/resources/collection`)
     .auth(owner, { type: "bearer" })
@@ -711,7 +710,7 @@ describe("explore to resource: production browser journey", () => {
     let release = () => {};
     let unpublished = false;
     try {
-      for (const entry of [`/c/${sourceId}`, `/@${handle}/reading-guide`]) {
+      for (const entry of [`/c/${sourceId}`]) {
         for (const revoke of [false, true]) {
           await ready(page, entry);
           let started = () => {};
@@ -840,7 +839,7 @@ describe("explore to resource: production browser journey", () => {
         ).toHaveCount(1);
         await browserExpect(
           page.getByRole("link", { name: longTitle, exact: true }),
-        ).toHaveAttribute("href", `/@${handle}/reading-guide`);
+        ).toHaveAttribute("href", `/c/${sourceId}`);
         await ready(page, `/@${emptyHandle}?view=public`);
         await browserExpect(page.locator(".hub-collections-heading .meta")).toHaveText("0");
         await browserExpect(page.getByText("No published collections here yet.")).toBeVisible();
@@ -931,7 +930,7 @@ describe("explore to resource: production browser journey", () => {
     }
   }, 15000);
 
-  it("follows hub, pretty URL, reference and external resource with keyboard, narrow widths and no JavaScript", async () => {
+  it("follows hub, ID collection URL, reference and external resource with keyboard, narrow widths and no JavaScript", async () => {
     for (const js of [true, false]) {
       const { page, close } = await freshPage(js);
       try {
@@ -954,7 +953,7 @@ describe("explore to resource: production browser journey", () => {
         const collection = page.getByRole("link", { name: longTitle, exact: true });
         await collection.focus();
         await collection.press("Enter");
-        expect(new URL(page.url()).pathname).toBe(`/@${handle}/reading-guide`);
+        expect(new URL(page.url()).pathname).toBe(`/c/${sourceId}`);
         await browserExpect(page.locator("h1")).toHaveText(longTitle);
         await page.reload();
         await browserExpect(page.locator(".resource-row")).toHaveCount(20);
@@ -972,7 +971,7 @@ describe("explore to resource: production browser journey", () => {
         }
         await page.getByRole("link", { name: "More resources", exact: true }).click();
         await browserExpect(page.locator(".resource-row")).toHaveCount(js ? 22 : 2);
-        await ready(page, `/@${handle}/reading-guide`);
+        await ready(page, `/c/${sourceId}`);
         await page.getByRole("link", { name: "A useful collection", exact: true }).click();
         expect(new URL(page.url()).pathname).toBe(`/c/${targetId}`);
         await browserExpect(page.locator("h1")).toHaveText("A useful collection");
@@ -1053,18 +1052,18 @@ describe("explore to resource: production browser journey", () => {
       await browserExpect(page.locator("h1")).toHaveText("This list has changed.");
       await page.getByRole("link", { name: "Reload collections", exact: true }).click();
       expect(new URL(page.url()).pathname).toBe(`/@${handle}`);
-      await ready(page, `/@${handle}/reading-guide?cursor=invalid`);
+      await ready(page, `/c/${sourceId}?cursor=invalid`);
       await page.getByRole("link", { name: "Reload collection", exact: true }).click();
-      expect(new URL(page.url()).pathname).toBe(`/@${handle}/reading-guide`);
+      expect(new URL(page.url()).pathname).toBe(`/c/${sourceId}`);
     } finally {
       await close();
     }
   }, 30000);
 
-  it("keeps immutable ID links readable after handle and slug renames", async () => {
+  it("keeps one collection address after handle and title renames, with no pretty aliases", async () => {
     const { page, close } = await freshPage();
     const renamed = "renamed-reader";
-    async function renameSlug(slug: string) {
+    async function renameTitle(title: string) {
       const current = await request(app.getHttpServer())
         .get(`/api/v1/collections/${sourceId}`)
         .auth(owner, { type: "bearer" })
@@ -1072,34 +1071,36 @@ describe("explore to resource: production browser journey", () => {
       await request(app.getHttpServer())
         .patch(`/api/v1/collections/${sourceId}`)
         .auth(owner, { type: "bearer" })
-        .send({ slug, version: current.body.data.version })
+        .send({ title, version: current.body.data.version })
         .expect(200);
     }
     try {
-      await ready(page, `/@${handle}/reading-guide`);
+      await ready(page, `/c/${sourceId}`);
       await request(app.getHttpServer())
         .patch("/api/v1/profile")
         .auth(owner, { type: "bearer" })
         .send({ handle: renamed })
         .expect(200);
-      await renameSlug("renamed-guide");
-      await ready(page, `/@${renamed}/renamed-guide`);
-      await browserExpect(page.locator("h1")).toHaveText(longTitle);
+      await renameTitle("Renamed reading guide");
+      await ready(page, `/@${renamed}`);
+      await browserExpect(
+        page.getByRole("link", { name: "Renamed reading guide", exact: true }),
+      ).toHaveAttribute("href", `/c/${sourceId}`);
       await ready(page, `/c/${sourceId}`);
-      await browserExpect(page.locator("h1")).toHaveText(longTitle);
+      await browserExpect(page.locator("h1")).toHaveText("Renamed reading guide");
       await browserExpect(
         page.getByRole("link", { name: `@${renamed}`, exact: true }),
       ).toBeVisible();
       for (const path of [`/@${handle}/reading-guide`, `/@${renamed}/reading-guide`]) {
-        await ready(page, path);
-        await browserExpect(page.locator("h1")).toHaveText("This collection isn't available.");
+        const response = await page.goto(`${origin}${path}`);
+        expect(response?.status()).toBe(404);
+        await browserExpect(page.locator("h1")).toHaveText("This page isn't available.");
       }
     } finally {
-      // Reset only shared synthetic fixture state; public workflows can never do this.
       await prisma.hubHandleReservation.delete({ where: { handle } });
       await prisma.hub.update({ where: { id: hubId }, data: { handleChangedAt: null } });
       await prisma.hub.update({ where: { id: hubId }, data: { handle } });
-      await renameSlug("reading-guide");
+      await renameTitle(longTitle);
       await close();
     }
   }, 20000);
@@ -1116,21 +1117,17 @@ describe("explore to resource: production browser journey", () => {
         `/@${handle}/missing`,
         `/@${emptyHandle}/reading-guide`,
         `/@${handle}/bad%2Fslug`,
-      ]) {
-        await ready(page, path);
-        await browserExpect(page.locator("h1")).toHaveText("This collection isn't available.");
-        await browserExpect(page.locator("body")).not.toContainText("Private title");
-      }
-      for (const path of [
         "/not-a-page",
         "/unrelated/reading-guide",
-        `/@${handle}/reading-guide/useful-collection`,
+        `/c/${sourceId}/useful-collection`,
       ]) {
-        await ready(page, path);
+        const response = await page.goto(`${origin}${path}`);
+        expect(response?.status()).toBe(404);
         await browserExpect(page.locator("h1")).toHaveText("This page isn't available.");
+        await browserExpect(page.locator("body")).not.toContainText("Private title");
       }
       hubMode = "failure";
-      await ready(page, `/@${handle}/reading-guide`);
+      await ready(page, `/@${handle}`);
       await browserExpect(page.locator("h1")).toHaveText("We couldn't load this page.");
       await browserExpect(page.locator("body")).not.toContainText(longTitle);
       await browserExpect(page.locator("body")).not.toContainText("PRIVATE HUB DETAIL");
@@ -1151,15 +1148,15 @@ describe("explore to resource: production browser journey", () => {
     }
   }, 25000);
 
-  it("revalidates pretty history and scopes shared access away from public hub discovery", async () => {
+  it("revalidates collection history and scopes shared access away from public hub discovery", async () => {
     const { page, close } = await freshPage();
     try {
-      await ready(page, `/@${handle}/reading-guide`);
+      await ready(page, `/c/${sourceId}`);
       await page.getByRole("link", { name: `@${handle}`, exact: true }).click();
       await change(sourceId, "unpublish");
       await page.goBack();
       await browserExpect(page.locator("h1")).toHaveText("This collection isn't available.");
-      await ready(page, `/@${handle}/reading-guide?s=${linkToken}`);
+      await ready(page, `/c/${sourceId}?s=${linkToken}`);
       await browserExpect(page.locator("h1")).toHaveText(longTitle);
       await browserExpect(
         page.getByRole("link", { name: `@${handle}`, exact: true }),
@@ -1179,7 +1176,7 @@ describe("explore to resource: production browser journey", () => {
         .send({ enabled: true, rotate: true })
         .expect(200);
       linkToken = rotated.body.data.token;
-      await ready(page, `/@${handle}/reading-guide?s=${previousToken}`);
+      await ready(page, `/c/${sourceId}?s=${previousToken}`);
       await browserExpect(page.locator("h1")).toHaveText("This collection isn't available.");
       await ready(page, `/@${handle}`);
       await browserExpect(page.getByRole("link", { name: longTitle, exact: true })).toHaveCount(0);
@@ -1432,7 +1429,7 @@ describe("explore to resource: production browser journey", () => {
   }, 15000);
 
   it("renders guide headings and unavailable references without exposing private targets", async () => {
-    const guideId = await create("An independent guide", "independent-guide", true);
+    const guideId = await create("An independent guide", true);
     const { page, close } = await freshPage();
     try {
       const first = await request(app.getHttpServer())
@@ -1478,7 +1475,7 @@ describe("explore to resource: production browser journey", () => {
       const { page, close } = await freshPage(js);
       try {
         await page.setViewportSize({ width: 390, height: 844 });
-        for (const path of [`/c/${privateId}?s=expired-token`, `/@${handle}/private-reading`]) {
+        for (const path of [`/c/${privateId}?s=expired-token`, `/c/${privateId}`]) {
           await ready(page, path);
           const feedback = page.locator("main .feedback");
           await browserExpect(feedback).toContainText("It may be private or no longer exist.");
@@ -1636,7 +1633,7 @@ describe("explore to resource: production browser journey", () => {
       } finally {
         await other.close();
       }
-      await ready(page, `/@${handle}/private-reading`);
+      await ready(page, `/c/${privateId}`);
       await browserExpect(page.locator("h1")).toHaveText("Private title should never leak");
       await prisma.session.updateMany({ data: { expiresAt: new Date(0) } });
       await page
@@ -1934,7 +1931,6 @@ describe("management: production browser journey", () => {
         .post("/api/v1/collections")
         .auth(target.headers["set-auth-token"], { type: "bearer" })
         .send({
-          slug: `browser-${crypto.randomUUID()}`,
           title: "Moderation browser fixture",
           published: true,
         })
@@ -3467,7 +3463,7 @@ it("saves several links with tags into a newly named collection, typing no title
     await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(token, { type: "bearer" })
-      .send({ published: false, slug: `existing-${crypto.randomUUID()}`, title: "Existing shelf" })
+      .send({ published: false, title: "Existing shelf" })
       .expect(201);
     await browserSignIn(page, email, "/hub");
     await browserExpect(page.getByLabel("Account menu", { exact: true })).toBeVisible();
@@ -3592,7 +3588,7 @@ it("shows collection descriptions and hub attribution without repeated separator
       .auth(token, { type: "bearer" })
       .send({
         title: "A field guide to readable interfaces",
-        slug: `description-${crypto.randomUUID()}`,
+
         published: true,
         description: "Collected notes and practical references. A second line for reading.",
       })
@@ -3641,7 +3637,7 @@ describe("collection discussion", () => {
           .auth(curator, { type: "bearer" })
           .send({
             title: "Discussion guide",
-            slug: `discussion-${crypto.randomUUID()}`,
+
             published: true,
           })
           .expect(201)
@@ -3912,7 +3908,7 @@ it("continues replies on an older question page with the share token and answer 
   const result = await request(app.getHttpServer())
     .post("/api/v1/collections")
     .auth(bearer, { type: "bearer" })
-    .send({ published: false, title: "Reply pages", slug: `replies-${crypto.randomUUID()}` })
+    .send({ published: false, title: "Reply pages" })
     .expect(201);
   const id = result.body.data.id as string;
   const sharing = await request(app.getHttpServer())
@@ -4110,7 +4106,7 @@ describe("activity and attribution", () => {
       .auth(owner.token, { type: "bearer" })
       .send({
         published: false,
-        slug: `history-${crypto.randomUUID().slice(0, 8)}`,
+
         title: "Shared guide",
       })
       .expect(201);
@@ -4367,7 +4363,6 @@ it("shares Manage across owner and service contexts without exposing service con
     .post("/api/v1/collections")
     .auth(token, { type: "bearer" })
     .send({
-      slug: `manage-${crypto.randomUUID()}`,
       title: "My private managed collection",
       published: false,
     })
@@ -4447,7 +4442,7 @@ it("sizes discussion by its own content within the reader frame, with and withou
       .auth(signed.headers["set-auth-token"] as string, { type: "bearer" })
       .send({
         title: "Flexible discussion",
-        slug: `sizing-${crypto.randomUUID()}`,
+
         published: true,
       })
       .expect(201);
@@ -4555,7 +4550,7 @@ it("appends Manage table pages with fixed headers, retry and native fallback", a
     data: Array.from({ length: 45 }, (_, i) => ({
       hubId: hub.id,
       title: `${prefix} Collection ${i}`,
-      slug: `${prefix}-${i}`,
+
       creatorUserId: op.id,
     })),
   });
@@ -4919,7 +4914,6 @@ it("shows recorded audit effects, honest legacy gaps, international dates and op
     .send({
       published: false,
       title: "Audit evidence fixture",
-      slug: `audit-evidence-${crypto.randomUUID()}`,
     })
     .expect(201);
   const id = created.body.data.id as string;
@@ -5047,7 +5041,6 @@ it("uses action dialogs and owner collection operations with native fallback", a
       .send({
         published: false,
         title: "Collection action fixture",
-        slug: `actions-${crypto.randomUUID()}`,
       })
       .expect(201);
     const id = made.body.data.id;
@@ -5260,7 +5253,7 @@ it("shares profiles, hubs, collections and the site through one contextual page"
         .auth(token, { type: "bearer" })
         .send({
           title: published ? "Shareable collection" : "Restricted share fixture",
-          slug: `share-${crypto.randomUUID()}`,
+
           published,
         })
         .expect(201)
@@ -5391,7 +5384,7 @@ it("records authenticated copy links and successful opens across all share targe
     await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(signed.headers["set-auth-token"], { type: "bearer" })
-      .send({ title: "Sharing cycle guide", slug: `cycle-${crypto.randomUUID()}`, published: true })
+      .send({ title: "Sharing cycle guide", published: true })
       .expect(201)
   ).body.data;
   const { page, close } = await freshPage();
@@ -5472,7 +5465,7 @@ it("records authenticated copy links and successful opens across all share targe
         .auth(signed.headers["set-auth-token"], { type: "bearer" })
         .send({
           title: "Private tracked collection",
-          slug: `private-cycle-${crypto.randomUUID()}`,
+
           published: false,
         })
         .expect(201)
@@ -5633,25 +5626,19 @@ it("shows sharing analytics to operators and admins and refreshes after copying 
 
 describe("item details routes", () => {
   for (const js of [true, false]) {
-    it(`opens items beyond the first page on both addresses, preserves access and toggles inline (${js})`, async () => {
+    it(`opens items beyond the first page at the ID address, preserves access and toggles inline (${js})`, async () => {
       const signed = await signInHubOwner(app.getHttpServer(), {
         email: `item-routes-${crypto.randomUUID()}@example.com`,
         name: "Item owner",
       });
       const owner = signed.headers["set-auth-token"] as string;
-      const profile = await request(app.getHttpServer())
-        .get("/api/v1/profile")
-        .auth(owner, { type: "bearer" })
-        .expect(200);
-      const handle = profile.body.data.handle;
-      const slug = `item-routes-${crypto.randomUUID()}`;
       const created = await request(app.getHttpServer())
         .post("/api/v1/collections")
         .auth(owner, { type: "bearer" })
         .send({
           published: false,
           title: "Item route guide",
-          slug,
+
           description: "A guide with enough context to fold while reading its items.",
         })
         .expect(201);
@@ -5713,7 +5700,7 @@ describe("item details routes", () => {
       const cursor = first.body.meta.nextCursor;
       const { page, close } = await freshPage(js);
       try {
-        for (const base of [`/c/${id}`, `/@${handle}/${slug}`]) {
+        for (const base of [`/c/${id}`]) {
           const query = new URLSearchParams({ s: token, cursor });
           await ready(page, `${base}?${query}`);
           const sectionGroup = page.locator(".resource-section");
@@ -5930,7 +5917,7 @@ describe("item details routes", () => {
           .auth(owner, { type: "bearer" })
           .send({ enabled: false })
           .expect(200);
-        for (const base of [`/c/${id}`, `/@${handle}/${slug}`]) {
+        for (const base of [`/c/${id}`]) {
           const destination = `${base}?s=${token}&item=${link.id}`;
           await page.goto(origin + destination);
           await browserExpect(page.getByRole("dialog")).toHaveCount(0);
@@ -5959,7 +5946,7 @@ it("preserves private sharing destinations and resumes access, link and transfer
       await request(app.getHttpServer())
         .post("/api/v1/collections")
         .auth(signed.headers["set-auth-token"], { type: "bearer" })
-        .send({ published: false, title: "Resume sharing", slug: `resume-${crypto.randomUUID()}` })
+        .send({ published: false, title: "Resume sharing" })
         .expect(201)
     ).body.data.id as string;
     const path = `/share?${new URLSearchParams({ kind: "collection", id, returnTo: `/c/${id}` })}`;
@@ -6080,7 +6067,6 @@ it("binds resumed collection commands to their account and rechecks current auth
           data: {
             hubId: hub.id,
             title: "Pending authority",
-            slug: `pending-${crypto.randomUUID()}`,
           },
         });
         await ready(page, `/c/${collection.id}/actions?action=delete`);
@@ -6301,7 +6287,7 @@ it("tracks copies and opens of newly created and repeatedly rotated collection l
   const created = await request(app.getHttpServer())
     .post("/api/v1/collections")
     .auth(signed.headers["set-auth-token"], { type: "bearer" })
-    .send({ published: false, title: "Issued link guide", slug: `issued-${crypto.randomUUID()}` })
+    .send({ published: false, title: "Issued link guide" })
     .expect(201);
   const id = created.body.data.id as string;
   const { page, close } = await freshPage();
@@ -6375,7 +6361,6 @@ describe("section authoring", () => {
           .send({
             published: false,
             title: "A practical guide",
-            slug: `sections-${crypto.randomUUID()}`,
           })
           .expect(201)
       ).body.data.id as string;
@@ -6489,7 +6474,7 @@ describe("reorder", () => {
         await request(app.getHttpServer())
           .post("/api/v1/collections")
           .auth(token, { type: "bearer" })
-          .send({ title: "Ordered guide", slug: `order-${crypto.randomUUID()}`, published: true })
+          .send({ title: "Ordered guide", published: true })
           .expect(201)
       ).body.data.id as string;
       await prisma.resource.createMany({
@@ -6774,7 +6759,7 @@ it("shows public Gravatar pictures and links Settings to Support with native fal
       .auth(signed.headers["set-auth-token"], { type: "bearer" })
       .send({
         title: "A picture beside a contribution",
-        slug: `avatar-${crypto.randomUUID()}`,
+
         published: true,
       })
       .expect(201);
@@ -7881,19 +7866,19 @@ it("saves collection URLs through Add a link for owners and contributors with an
       where: { ownerUserId: contributor.body.user.id },
     });
     const target = await prisma.collection.create({
-      data: { hubId: hub.id, title: "C programming", slug: crypto.randomUUID(), published: true },
+      data: { hubId: hub.id, title: "C programming", published: true },
     });
     const foreign = await prisma.collection.create({
       data: {
         hubId: otherHub.id,
         title: "Another library",
-        slug: crypto.randomUUID(),
+
         published: true,
       },
     });
     for (const actor of [signed, contributor]) {
       const source = await prisma.collection.create({
-        data: { hubId: hub.id, title: "Software Engineering", slug: crypto.randomUUID() },
+        data: { hubId: hub.id, title: "Software Engineering" },
       });
       if (actor === contributor)
         await prisma.collectionShare.create({
@@ -7951,8 +7936,7 @@ it("confirms owner reference cleanup and refreshes changed impact with and witho
       name: "Recipient",
     });
     const { page, close } = await freshPage(javascript);
-    const create = (title: string) =>
-      prisma.collection.create({ data: { hubId: hub.id, slug: crypto.randomUUID(), title } });
+    const create = (title: string) => prisma.collection.create({ data: { hubId: hub.id, title } });
     try {
       for (const raw of signed.headers["set-cookie"] as unknown as string[]) {
         const [name, ...value] = raw.split(";")[0].split("=");
@@ -8307,7 +8291,7 @@ it("creates CSV collections and sections without destination mapping with and wi
     const userId = signed.body.user.id;
     const hub = await prisma.hub.findUniqueOrThrow({ where: { ownerUserId: userId } });
     const existing = await prisma.collection.create({
-      data: { hubId: hub.id, title: "CSV library", slug: `existing-${crypto.randomUUID()}` },
+      data: { hubId: hub.id, title: "CSV library" },
     });
     const { page, close } = await freshPage(javascript);
     const stem = `https://fixture-links.dev/csv-${crypto.randomUUID()}`;
@@ -8536,12 +8520,12 @@ it("keeps slow import uploads attributed to their visitors after proof expiry", 
   expect(await prisma.importDraft.count({ where: { userId: signed.body.user.id } })).toBe(1);
 }, 60000);
 
-it("keeps transfer slug conflicts out of impact refreshes before and after sign-in", async () => {
+it("transfers same-title collections at stable IDs before and after sign-in", async () => {
   for (const javascript of [true, false]) {
     await prisma.requestBudget.deleteMany();
-    const email = `slug-owner-${crypto.randomUUID()}@example.com`;
+    const email = `title-owner-${crypto.randomUUID()}@example.com`;
     const signed = await signInHubOwner(app.getHttpServer(), { email, name: "Owner" });
-    const recipientEmail = `slug-recipient-${crypto.randomUUID()}@example.com`;
+    const recipientEmail = `title-recipient-${crypto.randomUUID()}@example.com`;
     const recipient = await signInHubOwner(app.getHttpServer(), {
       email: recipientEmail,
       name: "Recipient",
@@ -8552,12 +8536,11 @@ it("keeps transfer slug conflicts out of impact refreshes before and after sign-
     const recipientHub = await prisma.hub.findUniqueOrThrow({
       where: { ownerUserId: recipient.body.user.id },
     });
-    const slug = `shared-slug-${crypto.randomUUID()}`;
     const target = await prisma.collection.create({
-      data: { hubId: ownerHub.id, title: "Transfer conflict", slug },
+      data: { hubId: ownerHub.id, title: "Same title" },
     });
     await prisma.collection.create({
-      data: { hubId: recipientHub.id, title: "Existing collection", slug },
+      data: { hubId: recipientHub.id, title: "Same title" },
     });
     await prisma.collectionShare.create({
       data: {
@@ -8582,23 +8565,28 @@ it("keeps transfer slug conflicts out of impact refreshes before and after sign-
       await page.waitForURL(/\/manage\/collections$/);
       await ready(page, `/c/${target.id}/actions?action=transfer`);
       await page.getByLabel("New owner's email").fill(recipientEmail);
+      if (!javascript) {
+        await prisma.session.updateMany({
+          where: { user: { email } },
+          data: { expiresAt: new Date(0) },
+        });
+      }
       await page.getByRole("button", { name: "Yes, transfer ownership", exact: true }).click();
-      await browserExpect(page.locator("main").getByRole("alert")).toContainText(
-        "The action could not be completed.",
-      );
-      expect(new URL(page.url()).searchParams.get("notice")).not.toBe("impact-changed");
-      await page.getByLabel("New owner's email").fill(recipientEmail);
-      await prisma.session.updateMany({
-        where: { user: { email } },
-        data: { expiresAt: new Date(0) },
-      });
-      await page.getByRole("button", { name: "Yes, transfer ownership", exact: true }).click();
-      await browserExpect(page.locator(".verify-reason")).toContainText("transfer this collection");
-      await verify();
-      await page.waitForURL(/\/manage\/collections\?notice=conflict/);
+      if (!javascript) {
+        await browserExpect(page.locator(".verify-reason")).toContainText(
+          "transfer this collection",
+        );
+        await verify();
+      }
+      await page.waitForURL(/\/manage\/collections\?notice=done/);
       expect((await prisma.collection.findUniqueOrThrow({ where: { id: target.id } })).hubId).toBe(
-        ownerHub.id,
+        recipientHub.id,
       );
+      expect(
+        await prisma.collection.count({ where: { hubId: recipientHub.id, title: "Same title" } }),
+      ).toBe(2);
+      await ready(page, `/c/${target.id}`);
+      await browserExpect(page.locator("h1")).toHaveText("Same title");
     } finally {
       await close();
     }
@@ -8612,7 +8600,7 @@ it("preserves capture input typed before hydration through preview and native sa
   });
   const hub = await prisma.hub.findUniqueOrThrow({ where: { ownerUserId: actor.body.user.id } });
   const destination = await prisma.collection.create({
-    data: { hubId: hub.id, title: "Early reference", slug: crypto.randomUUID() },
+    data: { hubId: hub.id, title: "Early reference" },
   });
   const session =
     (actor.headers["set-cookie"] as unknown as string[])
@@ -8620,7 +8608,7 @@ it("preserves capture input typed before hydration through preview and native sa
       .find((raw) => raw.startsWith("better-auth.session_token=")) ?? "";
   for (const hydrate of [true, false]) {
     const collection = await prisma.collection.create({
-      data: { hubId: hub.id, title: `Early input ${hydrate}`, slug: crypto.randomUUID() },
+      data: { hubId: hub.id, title: `Early input ${hydrate}` },
     });
     const collectionId = collection.id;
     const { page, close } = await freshPage();

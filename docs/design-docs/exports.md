@@ -7,7 +7,8 @@ Status: implemented in the API; the web export screen is pending.
 Export one or more collections as Markdown, PDF, or Word — synchronously.
 `POST /exports { format, collectionIds[], expand? }` authorizes every id up
 front and responds with the file itself (a zip when several collections are
-selected, one document per collection). By default (`expand: false`), references
+selected, one document per collection). Filenames are `<collectionId>.<extension>`;
+duplicate titles never overwrite archive entries. By default (`expand: false`), references
 stay immutable `/c/<id>` hyperlinks using the configured web origin. The title
 is H1 with its description below, and ordered heading resources become H2.
 Explicit `expand: true` includes readable referenced collections as H2 sections;

@@ -43,7 +43,7 @@ describe("Collection routes (e2e)", () => {
     const collection = await request(server)
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ slug, title: "E2E Collection", published: true })
+      .send({ title: "E2E Collection", published: true })
       .expect(201);
     const created = (collection.body as { data: { id: string; hubId: string } }).data;
     collectionId = created.id;
@@ -83,18 +83,10 @@ describe("Collection routes (e2e)", () => {
       .expect(404);
   });
 
-  it("looks up a collection by hub and slug", async () => {
-    const res = await request(app.getHttpServer())
-      .get(`/api/v1/hubs/${hubId}/collections/${slug}`)
-      .expect(200);
-
-    const body = res.body as { data: { slug: string } };
-    expect(body.data.slug).toBe(slug);
+  it("removes hub/slug lookups without aliases", async () => {
+    await request(app.getHttpServer()).get(`/api/v1/hubs/${hubId}/collections/${slug}`).expect(404);
   });
-
-  // The durable permalink: the immutable id keeps resolving after a slug
-  // rename, which the hub+slug URL by definition does not.
-  it("looks up a collection by its immutable id (survives a slug rename)", async () => {
+  it("looks up a collection by its immutable id (survives a title rename)", async () => {
     const res = await request(app.getHttpServer())
       .get(`/api/v1/collections/${collectionId}`)
       .expect(200);
@@ -104,20 +96,36 @@ describe("Collection routes (e2e)", () => {
     await request(app.getHttpServer())
       .patch(`/api/v1/collections/${collectionId}`)
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ version: current, slug: `renamed-${sfx}` })
+      .send({ version: current, title: `Renamed ${sfx}` })
       .expect(200);
 
     const after = await request(app.getHttpServer())
       .get(`/api/v1/collections/${collectionId}`)
       .expect(200);
-    expect((after.body as { data: { slug: string } }).data.slug).toBe(`renamed-${sfx}`);
+    expect(after.body.data).toMatchObject({ id: collectionId, title: `Renamed ${sfx}` });
+    expect(after.body.data).not.toHaveProperty("slug");
+  });
+
+  it("allows duplicate titles and rejects retired slug input", async () => {
+    const create = () =>
+      request(app.getHttpServer()).post("/api/v1/collections").auth(bearer, { type: "bearer" });
+    const a = (await create().send({ title: "Same title" }).expect(201)).body.data;
+    const b = (await create().send({ title: "Same title" }).expect(201)).body.data;
+    expect(a.id).not.toBe(b.id);
+    expect(a).not.toHaveProperty("slug");
+    await create().send({ title: "Same title", slug: "retired" }).expect(400);
+    await request(app.getHttpServer())
+      .patch(`/api/v1/collections/${a.id}`)
+      .auth(bearer, { type: "bearer" })
+      .send({ version: a.version, slug: "retired" })
+      .expect(400);
   });
 
   it("hides an unpublished collection id from anonymous readers with 404", async () => {
     const priv = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ published: false, slug: `priv-${sfx}`, title: "Private" })
+      .send({ published: false, title: "Private" })
       .expect(201);
     const privId = (priv.body as { data: { id: string } }).data.id;
 

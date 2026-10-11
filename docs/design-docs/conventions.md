@@ -67,7 +67,7 @@ Useful actionable codes include:
 | `validation_failed` | Highlight declared fields using `details.issues` |
 | `invalid_cursor` | Discard the cursor and reload the first page |
 | `version_conflict` | Reload current state before retrying the edit |
-| `slug_conflict`, `handle_unavailable` | Choose another value |
+| `handle_unavailable` | Choose another value |
 | `handle_invalid`, `handle_reserved` | Correct the requested handle |
 | `handle_change_cooldown` | Keep the current handle; display the profile’s next eligible change date |
 | `duplicate_resource`, `position_conflict` | Resolve the existing resource/order |

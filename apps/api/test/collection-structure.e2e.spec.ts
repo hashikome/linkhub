@@ -20,11 +20,11 @@ describe("Independent collection resources (e2e)", () => {
     return res.headers["set-auth-token"] as string;
   };
 
-  const createCollection = async (bearer: string, slug: string) => {
+  const createCollection = async (bearer: string, title: string) => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ slug, title: slug, published: false })
+      .send({ title, published: false })
       .expect(201);
     return (res.body as { data: { id: string } }).data.id;
   };

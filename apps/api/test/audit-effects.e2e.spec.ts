@@ -19,7 +19,6 @@ describe("bounded audit evidence (HTTP)", () => {
       .send({
         published: false,
         title: "Private title never captured",
-        slug: `audit-${randomUUID()}`,
       })
       .expect(201);
     return result.body.data;

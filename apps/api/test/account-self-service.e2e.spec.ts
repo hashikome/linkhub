@@ -70,7 +70,7 @@ describe("self-service account lifecycle", () => {
       data: { ownerUserId: owner.id, handle: `lifecycle-${crypto.randomUUID().slice(0, 8)}` },
     });
     const collection = await prisma.collection.create({
-      data: { hubId: hub.id, title: "Lifecycle", slug: "lifecycle", published: true },
+      data: { hubId: hub.id, title: "Lifecycle", published: true },
     });
     await prisma.collectionShare.create({
       data: {

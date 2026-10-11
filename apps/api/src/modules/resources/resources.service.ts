@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
 import type { AuditAction, PersonRef, Resource as WireResource } from "@linkhub/types";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { CursorQueryDto } from "src/common/dto/cursor-query.dto";
 import { ResourceKind } from "src/common/enums/resource-kind.enum";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";
@@ -59,14 +59,7 @@ export class ResourcesService {
   async collectionAtUrl(url: string) {
     const address = localCollectionAddress(url);
     if (!address) return null;
-    if ("id" in address) return this.prisma.collection.findUnique({ where: { id: address.id } });
-    const hub = await this.prisma.hub.findUnique({
-      where: { handle: address.handle },
-      select: { id: true },
-    });
-    return hub
-      ? this.prisma.collection.findFirst({ where: { hubId: hub.id, slug: address.slug } })
-      : null;
+    return this.prisma.collection.findUnique({ where: { id: address.id } });
   }
 
   async referenceTarget(collection: Pick<Collection, "id" | "hubId">, user: AuthUser, url: string) {

@@ -167,8 +167,7 @@ export class CollectionsController {
     return apiOk(await this.collectionsService.unsave(id, user));
   }
 
-  // Durable permalink read: the immutable id survives slug renames (hub+slug
-  // is the pretty URL, this is the reference clients keep).
+  // The immutable collection ID resolves current ownership and authorization.
   @UseGuards(OptionalAuthGuard)
   @Get(":id")
   async getById(

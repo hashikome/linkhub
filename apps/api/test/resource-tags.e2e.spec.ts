@@ -32,7 +32,7 @@ describe("collection resource tag summary", () => {
     const created = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(token, { type: "bearer" })
-      .send({ published: false, slug: "unicode-tags", title: "Unicode tags" })
+      .send({ published: false, title: "Unicode tags" })
       .expect(201);
     const input = `İ${"a".repeat(77)} b`;
     expect(input.length).toBe(80);
@@ -55,11 +55,11 @@ describe("collection resource tag summary", () => {
       name: "Tag curator",
     });
     const token = login.headers["set-auth-token"] as string;
-    const create = async (slug: string) => {
+    const create = async (title: string) => {
       const response = await request(app.getHttpServer())
         .post("/api/v1/collections")
         .auth(token, { type: "bearer" })
-        .send({ slug, title: slug, published: false })
+        .send({ title, published: false })
         .expect(201);
       return response.body.data.id as string;
     };
@@ -68,7 +68,7 @@ describe("collection resource tag summary", () => {
     await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(token, { type: "bearer" })
-      .send({ slug: "authored-tags", title: "Authored", tags: ["forbidden"] })
+      .send({ title: "Authored", tags: ["forbidden"] })
       .expect(400);
     await request(app.getHttpServer())
       .patch(`/api/v1/collections/${id}`)
@@ -174,7 +174,7 @@ describe("collection resource tag summary", () => {
     const created = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(login.headers["set-auth-token"], { type: "bearer" })
-      .send({ published: false, slug: "sync", title: "Sync" })
+      .send({ published: false, title: "Sync" })
       .expect(201);
     const id = created.body.data.id as string;
     const rows = await Promise.all(

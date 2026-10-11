@@ -19,7 +19,6 @@ export interface Collection {
   restriction?: { reason: import("./operations.js").OperationReason; supportUrl: string };
   id: string;
   hubId: string;
-  slug: string;
   title: string;
   description: string | null;
   /** Unique tags on this collection’s own items, most-used first, alphabetical ties. Stored relation, read-only. */
@@ -52,7 +51,6 @@ export interface CollectionShareView {
 }
 
 export interface CreateCollectionRequest {
-  slug: string;
   title: string;
   description?: string;
   published?: boolean;
@@ -61,7 +59,6 @@ export interface CreateCollectionRequest {
 export interface UpdateCollectionRequest {
   commentsEnabled?: boolean;
   version: number;
-  slug?: string;
   title?: string;
   description?: string;
   published?: boolean;

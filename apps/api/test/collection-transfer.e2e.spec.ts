@@ -26,11 +26,11 @@ describe("Collection transfer (e2e)", () => {
     return { bearer, email, userId: (profile.body as { data: { id: string } }).data.id };
   };
 
-  const createCollection = async (bearer: string, slug: string) => {
+  const createCollection = async (bearer: string, title: string) => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ slug, title: slug, published: false })
+      .send({ title, published: false })
       .expect(201);
     return (res.body as { data: { id: string } }).data.id;
   };
@@ -50,6 +50,9 @@ describe("Collection transfer (e2e)", () => {
     const alice = await signUp("owner");
     const bob = await signUp("editor");
     const cid = await createCollection(alice.bearer, `xfer-${sfx}`);
+
+    const existing = await createCollection(bob.bearer, `xfer-${sfx}`);
+    expect(existing).not.toBe(cid);
 
     // Alice shares with Bob as editor (the precondition for transfer).
     await request(app.getHttpServer())

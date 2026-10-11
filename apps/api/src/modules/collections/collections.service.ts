@@ -1,5 +1,4 @@
 import { createHash, randomBytes } from "node:crypto";
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type {
   CollectionShareView,
   CursorMeta,
@@ -12,6 +11,7 @@ import type {
   Collection as WireCollection,
 } from "@linkhub/types";
 import { type ActivityEntry, auditActions, contentActions } from "@linkhub/types";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { isUUID } from "class-validator";
 import { CursorQueryDto } from "src/common/dto/cursor-query.dto";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";
@@ -67,20 +67,9 @@ export class CollectionsService {
       throw appError("version_conflict");
     }
 
-    if (dto.slug && dto.slug !== collection.slug) {
-      const exists = await this.prisma.collection.findUnique({
-        where: { hubId_slug: { hubId: collection.hubId, slug: dto.slug } },
-        select: { id: true },
-      });
-      if (exists) {
-        throw appError("slug_conflict");
-      }
-    }
-
     // Details that shape the collection's content make its owner a contributor
     // (ADR-0015); publishing is recorded on its own.
     const detailsChanged =
-      (dto.slug !== undefined && dto.slug !== collection.slug) ||
       (dto.title !== undefined && dto.title !== collection.title) ||
       (dto.description !== undefined && dto.description !== collection.description) ||
       (dto.commentsEnabled !== undefined && dto.commentsEnabled !== collection.commentsEnabled);
@@ -108,7 +97,6 @@ export class CollectionsService {
         include: collectionTags,
         where: { id: collection.id, hubId: collection.hubId, version: collection.version },
         data: {
-          slug: dto.slug ?? collection.slug,
           title: dto.title ?? collection.title,
           description: dto.description ?? collection.description,
           published: dto.published ?? collection.published,
@@ -345,17 +333,6 @@ export class CollectionsService {
 
     const recipientHub = await ensurePersonalHub(this.prisma, recipient.id);
 
-    const conflict = await this.prisma.collection.findFirst({
-      where: {
-        hubId: recipientHub.id,
-        slug: collection.slug,
-      },
-      select: { slug: true },
-    });
-    if (conflict) {
-      throw appError("slug_conflict");
-    }
-
     const previousOwnerId = user.userId;
     await this.mutateOwned(
       collection,
@@ -569,24 +546,6 @@ export class CollectionsService {
     });
   }
 
-  async getHubCollectionBySlug(
-    hubId: string,
-    slug: string,
-    viewer: AuthUser | null,
-    shareToken?: string,
-  ) {
-    const collection = await this.prisma.collection.findUnique({
-      where: { hubId_slug: { hubId, slug } },
-      include: collectionTags,
-    });
-    if (!collection) {
-      throw new NotFoundException("Collection not found");
-    }
-    return this.readCollectionView(collection, viewer, shareToken);
-  }
-
-  // Durable lookup by the immutable collection id — the reference that
-  // survives a slug rename (hub+slug is the pretty URL, this is the permalink).
   async getById(id: string, viewer: AuthUser | null, shareToken?: string) {
     const collection = await this.requireCollection(id);
     return this.readCollectionView(collection, viewer, shareToken);
@@ -890,14 +849,6 @@ export class CollectionsService {
 
   // Collections are independent containers.
   private async createInHub(user: AuthUser, hubId: string, dto: CreateCollectionDto) {
-    const exists = await this.prisma.collection.findUnique({
-      where: { hubId_slug: { hubId, slug: dto.slug } },
-      select: { id: true },
-    });
-    if (exists) {
-      throw appError("slug_conflict");
-    }
-
     const saved = await this.prisma.$transaction(async (tx) => {
       const created = await tx.collection.create({
         include: collectionTags,
@@ -906,7 +857,6 @@ export class CollectionsService {
           // Immutable creator/provenance: unchanged if ownership is later
           // transferred (the owning hubId changes, the creator does not).
           creatorUserId: user.userId,
-          slug: dto.slug,
           title: dto.title,
           description: dto.description,
           published: dto.published ?? true,
@@ -1008,7 +958,6 @@ export class CollectionsService {
     return {
       id: collection.id,
       hubId: collection.hubId,
-      slug: collection.slug,
       title: collection.title,
       description: collection.description,
       tags: collection.tags.map(({ tag }) => tag.name),

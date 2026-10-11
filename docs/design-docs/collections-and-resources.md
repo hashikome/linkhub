@@ -16,10 +16,9 @@ Collections have no structural parent. Resources are ordered rows with versions:
   the backend recognizes collection URLs at the configured web origin. A readable
   target in the source's hub becomes a reference; foreign, unreadable, missing
   and self destinations stay ordinary URLs with a generic Collection hint.
-  Both durable `/c/:id` and current `/@handle/:slug` addresses are recognized
-  today; [ADR-0053](../engineering-decisions/0053-id-only-collection-addresses.md)
-  selects removal of slug recognition for the next milestone;
-  stored references use only the immutable ID. Query tokens grant no authority.
+  Only `/c/:id` addresses are recognized
+  ([ADR-0053](../engineering-decisions/0053-id-only-collection-addresses.md));
+  stored references use the immutable ID. Query tokens grant no authority.
 - `POST /collections/:id/resources/collection`: `linkedCollectionId`, optional
   tags and position; its title is the target's. Requires source write and target read,
   within the same hub (owner or source contributor). One reference per source/target pair; cycles
@@ -139,8 +138,8 @@ Title links open the resource destination. **Copy link to this item** copies
 the containing collection address with its token/cursor and `?item=<itemId>`,
 without navigating. Success is announced; clipboard failure shows a selectable
 URL. The copy label stays consistent before and after hydration. Without
-JavaScript, **Open item link to copy its address** is a native permalink. On either
-collection address, the URL opens authorized item context inline, including an
+JavaScript, **Open item link to copy its address** is a native permalink. At the
+collection ID address, the URL opens authorized item context inline, including an
 item beyond the first page. Reloading restores default section visibility and
 URL-selected content. See [sharing](sharing.md) for the complete copy contract.
 
@@ -188,7 +187,7 @@ The command
 uses the existing collection policy and resource canonicalization, and shares
 the authority transaction. Its destination is first, new, or an explicit owned
 collection ID. First-save concurrency uses a nullable immutable collection ID
-on the hub, never a title/slug; only unshared collections matching the intent's publication choice can be
+on the hub, never a title; only unshared collections matching the intent's publication choice can be
 implicitly reused by intents begun before that first collection was created.
 Returning intents require a destination choice. Retry receipts recheck current
 ownership/access and resource existence; deletion never recreates content on replay.

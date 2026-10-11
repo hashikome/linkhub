@@ -26,7 +26,7 @@ describe("people and optional hubs", () => {
       await api()
         .post("/api/v1/collections")
         .auth(person.token, { type: "bearer" })
-        .send({ title: "A useful collection", slug: `links-${randomUUID()}`, published })
+        .send({ title: "A useful collection", published })
         .expect(201)
     ).body.data;
   }
@@ -329,8 +329,8 @@ describe("people and optional hubs", () => {
       const at = `2026-10-09T12:00:00.${fraction}Z`;
       // INSERT preserves exact fixture timestamps without disabling update triggers.
       const [row] = await db.$queryRaw<Array<{ id: string }>>`
-        INSERT INTO collections (hub_id, slug, title, published, creator_user_id, updated_at)
-        VALUES (${hub}::uuid, ${`precision-${randomUUID()}`}, 'Precision', true,
+        INSERT INTO collections (hub_id, title, published, creator_user_id, updated_at)
+        VALUES (${hub}::uuid, 'Precision', true,
           ${person.id}::uuid, ${at}::timestamptz) RETURNING id`;
       rows.push({ id: row.id, at });
       await db.auditLog.create({

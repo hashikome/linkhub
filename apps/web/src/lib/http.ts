@@ -152,9 +152,6 @@ export function routeHandle(segment: string): string | undefined {
 export function hubPath(handle: string): string {
   return `/@${encodeURIComponent(handle)}`;
 }
-export function prettyPath(handle: string, slug: string): string {
-  return `${hubPath(handle)}/${encodeURIComponent(slug)}`;
-}
 export function collectionPath(id: string): ApiPath {
   return `/api/v1/collections/${encodeURIComponent(id)}`;
 }
@@ -266,10 +263,7 @@ export function safeDocumentReturn(value: unknown): string {
 export function safeReturn(value: unknown): string {
   const path = safeDocumentReturn(value);
   const parsed = new URL(path, "http://local.invalid");
-  if (
-    /^\/c\/[a-f0-9-]{36}$/.test(parsed.pathname) ||
-    /^\/@[a-z0-9-]{3,60}\/[a-z0-9-]{2,120}$/.test(parsed.pathname)
-  ) {
+  if (/^\/c\/[a-f0-9-]{36}$/.test(parsed.pathname)) {
     const token = parsed.searchParams.get("s");
     const query = new URLSearchParams();
     if (token && /^[A-Za-z0-9_-]{1,512}$/.test(token)) query.set("s", token);

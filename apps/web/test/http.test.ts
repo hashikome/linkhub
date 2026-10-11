@@ -22,7 +22,7 @@ describe("web HTTP boundary", () => {
   });
   it("preserves item destinations through sign-in without accepting arbitrary item values", () => {
     const id = "019a0000-0000-7000-8000-000000000001";
-    for (const base of [`/c/${id}`, "/@someone/guide"]) {
+    for (const base of [`/c/${id}`]) {
       const destination = `${base}?s=token&item=${id}`;
       expect(safeReturn(destination)).toBe(destination);
       expect(safeReturn(`${base}?item=bad-id`)).toBe(base);
@@ -151,21 +151,29 @@ it("restricts post-login returns to local documents without authentication loops
   expect(safeReturn("/c/019f0000-0000-7000-8000-000000000001")).toBe(
     "/c/019f0000-0000-7000-8000-000000000001",
   );
-  expect(safeReturn("/@reader/my-guide?s=abc_123&returnTo=https://evil.test")).toBe(
-    "/@reader/my-guide?s=abc_123",
+  expect(
+    safeReturn("/c/01990000-0000-7000-8000-000000000001?s=abc_123&returnTo=https://evil.test"),
+  ).toBe("/c/01990000-0000-7000-8000-000000000001?s=abc_123");
+  expect(safeReturn("/c/01990000-0000-7000-8000-000000000001?s=bad%26token")).toBe(
+    "/c/01990000-0000-7000-8000-000000000001",
   );
-  expect(safeReturn("/@reader/my-guide?s=bad%26token")).toBe("/@reader/my-guide");
   const tracked =
     "/c/019f0000-0000-7000-8000-000000000001?via=019f0000-0000-7000-8000-000000000002";
   expect(safeReturn(`${tracked}&next=https://evil.test`)).toBe(tracked);
   expect(safeReturn(safeReturn(tracked))).toBe(tracked);
-  expect(safeReturn("/@reader/my-guide?via=invalid")).toBe("/@reader/my-guide");
-  expect(safeReturn("/@reader/my-guide?s=abc_123&compose=comment&next=https://evil.test")).toBe(
-    "/@reader/my-guide?s=abc_123&compose=comment#comment-composer",
+  expect(safeReturn("/c/01990000-0000-7000-8000-000000000001?via=invalid")).toBe(
+    "/c/01990000-0000-7000-8000-000000000001",
   );
-  expect(safeReturn("/@reader/my-guide?compose=anything#other")).toBe("/@reader/my-guide");
-  expect(safeReturn(safeReturn("/@reader/my-guide?compose=comment"))).toBe(
-    "/@reader/my-guide?compose=comment#comment-composer",
+  expect(
+    safeReturn(
+      "/c/01990000-0000-7000-8000-000000000001?s=abc_123&compose=comment&next=https://evil.test",
+    ),
+  ).toBe("/c/01990000-0000-7000-8000-000000000001?s=abc_123&compose=comment#comment-composer");
+  expect(safeReturn("/c/01990000-0000-7000-8000-000000000001?compose=anything#other")).toBe(
+    "/c/01990000-0000-7000-8000-000000000001",
+  );
+  expect(safeReturn(safeReturn("/c/01990000-0000-7000-8000-000000000001?compose=comment"))).toBe(
+    "/c/01990000-0000-7000-8000-000000000001?compose=comment#comment-composer",
   );
   for (const origin of [
     "https://secret@example.test",

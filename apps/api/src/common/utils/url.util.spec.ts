@@ -41,12 +41,9 @@ describe("public link addresses", () => {
 describe("collection address recognition", () => {
   const origin = "https://links.fixture-links.dev";
   const id = "01990000-0000-7000-8000-000000000001";
-  it("recognizes durable and pretty routes only at the configured origin", () => {
+  it("recognizes only ID routes only at the configured origin", () => {
     expect(collectionAddress(`${origin}/c/${id}?s=not-authority#item`, origin)).toEqual({ id });
-    expect(collectionAddress(`${origin}/@reader/my-guide`, origin)).toEqual({
-      handle: "reader",
-      slug: "my-guide",
-    });
+    expect(collectionAddress(`${origin}/@reader/my-guide`, origin)).toBeNull();
     for (const url of [
       `https://links.fixture-links.dev.evil.dev/c/${id}`,
       `http://links.fixture-links.dev/c/${id}`,

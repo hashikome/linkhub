@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { Injectable } from "@nestjs/common";
 import type {
   AuditLogEntry,
   ManagedCollection,
@@ -12,6 +11,7 @@ import type {
   OperatorAccountDetail,
   OperatorCollection,
 } from "@linkhub/types";
+import { Injectable } from "@nestjs/common";
 import { isUUID } from "class-validator";
 import { revokeAccountAccess } from "../../auth/revoke-account";
 import {
@@ -289,13 +289,7 @@ export class OperationsService {
           /* No matching link. */
         }
         const rawId = isUUID(q) ? q : /^\/c\/([0-9a-f-]{36})\/?$/i.exec(path)?.[1];
-        const pretty = /^\/@([a-z0-9-]{1,60})\/([a-z0-9-]{1,120})\/?$/i.exec(path);
-        search =
-          rawId && isUUID(rawId)
-            ? { id: rawId.toLowerCase() }
-            : pretty
-              ? { slug: pretty[2], hub: { handle: pretty[1] } }
-              : { id: { in: [] } };
+        search = rawId && isUUID(rawId) ? { id: rawId.toLowerCase() } : { id: { in: [] } };
       }
       const page = this.page(query, `managed-collections:${req.user.userId}:${operator}:${q}`);
       const access: Prisma.CollectionWhereInput[] = [

@@ -56,14 +56,13 @@ async function main() {
     const created = await prisma.collection.create({
       data: {
         hubId: hub.id,
-        slug: c.slug,
         title: c.title,
         description: c.description,
         published: c.published,
         creatorUserId: user.id,
       },
     });
-    ids.set(c.slug, created.id);
+    ids.set(c.key, created.id);
     // Attribution comes from activity entries, as for anything saved in the app.
     await prisma.auditLog.create({
       data: {
@@ -76,7 +75,7 @@ async function main() {
   }
   let resolved = 0;
   for (const c of seedCollections) {
-    const collectionId = ids.get(c.slug) as string;
+    const collectionId = ids.get(c.key) as string;
     for (const [position, item] of c.items.entries()) {
       if (item[0] === "h") {
         await prisma.resource.create({

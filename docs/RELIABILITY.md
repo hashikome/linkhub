@@ -137,7 +137,7 @@ per-draft creation preference and never overwrites an existing destination.
 
 Capture receipts persist the exact immutable resource IDs returned by a save.
 Retries check those resources still exist in the destination and recheck access;
-target handle/slug changes do not change the result. Legacy receipts without IDs
+target handle/title changes do not change the result. Legacy receipts without IDs
 are upgraded on a resolvable retry; aliases already lost before migration cannot
 be reconstructed reliably. See
 [ADR-0051](engineering-decisions/0051-durable-interrupted-actions.md).

@@ -18,7 +18,6 @@ export function CollectionExample({ selectedItemId }: { selectedItemId?: string 
       owner: ada,
     },
     creator: ada,
-    slug: "a-web-worth-keeping",
     title: "A web worth keeping",
     description: "A few good reads on collecting, organizing, and sharing what you find.",
     tags: ["curation", "knowledge"],

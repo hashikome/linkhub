@@ -173,7 +173,7 @@ for deactivation and deletion. Suspension:
   proofs. Pending mail is cancelled where possible; mail already sent cannot
   authenticate after suspension or regain validity on reactivation.
 - Hides the suspended owner's hub and collections from all non-owners,
-  including public discovery, handle/slug/ID reads, direct shares, link tokens,
+  including public discovery, hub and collection ID reads, direct shares, link tokens,
   resources, sections and exports. The suspended owner has no authenticated
   access either. Collections they merely created and later transferred to
   someone else's hub are unaffected; current ownership determines scope.
@@ -334,7 +334,7 @@ Acceptance must prove active user versus operator versus suspended/revoked
 operator, cookie and bearer boundaries, cross-hub privacy, no implicit grants,
 rejected email changes/re-invitation, admin protection and invitation races, pending-code/session races, audit
 rollback, stale/replayed actions, and restriction races with transfer/reference creation.
-Exercise ID/pretty/reference/resource/export routes, public/shared/saved lists,
+Exercise ID/reference/resource/export routes, public/shared/saved lists,
 independent reference-target holds, owner corrections, reactivation and explicit release.
 Use isolated synthetic users, disposable DB/queues and capture email. Check
 no-JavaScript sign-in/recovery, keyboard, narrow screens, freshness/history and

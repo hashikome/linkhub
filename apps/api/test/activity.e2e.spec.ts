@@ -47,7 +47,7 @@ describe("activity and attribution", () => {
     const created = await api()
       .post("/api/v1/collections")
       .auth(owner, { type: "bearer" })
-      .send({ published: false, slug: `act-${randomUUID().slice(0, 8)}`, title: "Guide" })
+      .send({ published: false, title: "Guide" })
       .expect(201);
     const id = created.body.data.id as string;
     for (const [email, role] of [
@@ -177,7 +177,7 @@ describe("activity and attribution", () => {
     const created = await api()
       .post("/api/v1/collections")
       .auth(owner, { type: "bearer" })
-      .send({ published: false, slug: `act-fail-${randomUUID().slice(0, 8)}`, title: "Fails" })
+      .send({ published: false, title: "Fails" })
       .expect(201);
     const id = created.body.data.id as string;
     const url = `https://fixture-links.dev/act-dup-${randomUUID()}`;
@@ -205,7 +205,7 @@ describe("activity and attribution", () => {
       const created = await api()
         .post("/api/v1/collections")
         .auth(token, { type: "bearer" })
-        .send({ published: false, slug: `access-${randomUUID()}`, title: "Private access fixture" })
+        .send({ published: false, title: "Private access fixture" })
         .expect(201);
       ids.push(created.body.data.id);
     }
@@ -277,7 +277,7 @@ describe("activity and attribution", () => {
       const created = await api()
         .post("/api/v1/collections")
         .auth(token, { type: "bearer" })
-        .send({ published: false, slug: `people-${randomUUID()}`, title: "Private people fixture" })
+        .send({ published: false, title: "Private people fixture" })
         .expect(201);
       ids.push(created.body.data.id);
       for (const email of [editorEmail, readerEmail])

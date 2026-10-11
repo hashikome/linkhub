@@ -9,6 +9,12 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Use `/c/<collectionId>` for every collection address. Remove slug storage,
+  creation/update fields, pretty routes and transfer collisions; matching titles
+  are allowed. Preserve IDs, resources and current authorization through the
+  migration. Capture, moderation search, sharing and exports use immutable IDs;
+  export filenames also use IDs so duplicate titles remain distinct (ADR-0053).
+
 - Allocate local web/API defaults to 3004/4004, align auth and transport origins,
   and resolve both apps’ local env files before startup. Refuse occupied ports
   without affecting existing listeners. Keep PostgreSQL 5436, Redis 6383 and

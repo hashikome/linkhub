@@ -925,11 +925,11 @@ Delivery sequence and remaining work (completed foundations are marked):
     document extraction and AI use the reviewed-import foundation, not a parallel
     unreviewed importer.
 
-Accepted next milestone: use `/c/<collectionId>` for every collection address,
-with handles resolving hub pages only. Remove collection slugs and their transfer
-conflicts; IDs and URLs survive ownership transfers while current access policy
-still applies. Runtime removal is pending in the
-[implementation plan](docs/exec-plans/active/use-id-only-collection-addresses.md),
+Collection addresses use `/c/<collectionId>` for every collection address,
+with handles resolving hub pages only. Collection slugs and their transfer
+conflicts are removed; IDs and URLs survive ownership transfers while current access policy
+still applies. Implementation and evidence are recorded in the
+[implementation plan](docs/exec-plans/completed/use-id-only-collection-addresses.md),
 under [ADR-0053](docs/engineering-decisions/0053-id-only-collection-addresses.md).
 
 ## 12. References

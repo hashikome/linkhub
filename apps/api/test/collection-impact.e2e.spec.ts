@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { randomUUID } from "node:crypto";
+import { publicOrigins } from "@linkhub/config/public-origins";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { publicOrigins } from "@linkhub/config/public-origins";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
@@ -19,7 +19,7 @@ describe("owner collection reference lifecycle", () => {
       data: {
         hubId: actor.hubId,
         title: `Collection ${randomUUID()}`,
-        slug: randomUUID(),
+
         published: true,
       },
     });
@@ -108,12 +108,11 @@ describe("owner collection reference lifecycle", () => {
     expect(row.url).toBeNull();
     expect(row.linkedCollectionId).toBe(target.id);
     expect(await db.linkMetadata.findFirst({ where: { url } })).toBeNull();
-    const hub = await db.hub.findUniqueOrThrow({ where: { id: owner.hubId } });
     const aliases = {
       ...body,
       operationId: randomUUID(),
       links: [
-        { url: `${origin}/@${hub.handle}/${target.slug}`, tags: [] },
+        { url: `${origin}/c/${target.id}/`, tags: [] },
         { url, tags: [] },
       ],
     };

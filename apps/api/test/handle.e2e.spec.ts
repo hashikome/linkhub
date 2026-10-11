@@ -277,11 +277,11 @@ describe("Hub handles (e2e)", () => {
     });
     const prisma = app.get(PrismaService);
     const hub = await prisma.hub.findUniqueOrThrow({ where: { ownerUserId: signed.body.user.id } });
-    for (const slug of ["first", "second", "private", "held"]) {
+    for (const title of ["first", "second", "private", "held"]) {
       const item = await prisma.collection.create({
-        data: { hubId: hub.id, slug, title: slug, published: slug !== "private" },
+        data: { hubId: hub.id, title, published: title !== "private" },
       });
-      if (slug === "held")
+      if (title === "held")
         await prisma.collectionHold.create({
           data: { collectionId: item.id, actorUserId: signed.body.user.id, reason: "spam" },
         });
@@ -327,7 +327,6 @@ describe("Hub handles (e2e)", () => {
       .post("/api/v1/collections")
       .auth(token, { type: "bearer" })
       .send({
-        slug: "links",
         title: "Useful references",
         description: "A focused reading list",
         published: true,
@@ -430,7 +429,7 @@ describe("Hub handles (e2e)", () => {
     const created = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .auth(token, { type: "bearer" })
-      .send({ title: "Attribution references", slug: "references", published: true })
+      .send({ title: "Attribution references", published: true })
       .expect(201);
     for (const invalid of [null, "false", 0]) await patch({ showOwner: invalid }).expect(400);
     for (const enabled of [false, true]) {

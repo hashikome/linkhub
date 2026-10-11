@@ -32,7 +32,6 @@ export const apiErrors = {
   validation_failed: { status: 400, message: "Validation failed" },
   invalid_cursor: { status: 400, message: "Invalid cursor" },
   version_conflict: { status: 409, message: "Version mismatch" },
-  slug_conflict: { status: 409, message: "Collection slug already exists" },
   username_invalid: { status: 400, message: "Invalid username" },
   username_reserved: { status: 400, message: "Username is reserved" },
   username_unavailable: { status: 409, message: "Username is unavailable" },

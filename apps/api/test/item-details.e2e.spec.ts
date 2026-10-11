@@ -44,12 +44,12 @@ describe("collaborators and single-item reads", () => {
     owner = await login("owner");
     viewer = await login("viewer");
     contributor = await login("contributor");
-    const create = async (slug: string) =>
+    const create = async (title: string) =>
       (
         await api()
           .post("/api/v1/collections")
           .auth(owner.token, { type: "bearer" })
-          .send({ published: false, title: slug, slug })
+          .send({ published: false, title })
           .expect(201)
       ).body.data.id as string;
     source = await create("source-items");

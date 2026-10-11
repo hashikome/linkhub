@@ -51,7 +51,6 @@ method and a perspective on cultivating and sharing knowledge.
 | Discover | `/discover`; `GET /api/v1/discover` | Open a collection |
 | Hub | `/@handle` or `/h/<hubId>`; hub lookup and authorized collection list | Open a collection |
 | Collection | `/c/<id>`; collection, resources and discussion APIs | Open a resource or referenced collection |
-| Pretty collection URL | `/@handle/<slug>`; handle then hub/slug resolution | Read the same collection |
 | Item details | `?item=<id>` on either collection address; authorized single-resource API | Expand metadata and attribution inline; open the destination |
 | Capture | `/capture`, `/capture/<draftId>` | Save one or two links |
 | Section authoring | `/c/<id>/sections`, optional `?section=<id>` | Owner/contributor adds a nonempty section or edits its description |
@@ -63,7 +62,7 @@ method and a perspective on cultivating and sharing knowledge.
 The contextual [Share page](sharing.md) serves collections, hubs, profiles and
 the site. Controls emit immutable subject addresses; only an explicit
 access-link action may include the supplied collection token. Never attach
-it to an external URL, pretty browse link or referenced collection. A failed
+it to an external URL or referenced collection. A failed
 optional hub lookup must not hide an otherwise authorized collection read.
 
 ### Unified sign-in entry
@@ -207,7 +206,7 @@ Audit Log each use one permission-scoped projection; API permissions remain sepa
 
 Missing, private and removed collections all say “This collection isn't
 available. It may be private or no longer exist.” Offer Discover and, when
-signed out, sign-in with the permalink or pretty destination and supplied share
+signed out, sign-in with the collection ID destination and supplied share
 token preserved. Reveal no title, owner or existence information. Request access
 awaits the owner approval workflow.
 
@@ -218,7 +217,7 @@ never trigger mutation retry loops. Backend authorization applies to every
 request; hidden controls are not a security boundary.
 
 Prove journeys with keyboard, narrow screens and no JavaScript. Permalinks
-survive handle/slug changes and collection transfers. Revocation and unpublishing
+survive handle/title changes and collection transfers. Revocation and unpublishing
 remove access on revalidation; private responses never enter shared caches.
 Browser verification and source checks are described in the
 [verification runbook](../runbooks/verification.md); live provider and deployment

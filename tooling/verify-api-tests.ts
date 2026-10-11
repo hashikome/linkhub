@@ -39,7 +39,13 @@ const status = await withTestDatabase(
     env.DATABASE_URL = url;
     env.REDIS_URL = process.env.TEST_REDIS_URL ?? "redis://127.0.0.1:6383";
     let result = await run(["bunx", "prisma", "migrate", "deploy"]);
-    if (result === 0) result = await run(["bun", "test", "../../tooling/tag-migration.test.ts"]);
+    if (result === 0)
+      result = await run([
+        "bun",
+        "test",
+        "../../tooling/tag-migration.test.ts",
+        "../../tooling/collection-id-migration.test.ts",
+      ]);
     if (result === 0)
       for (const file of tests("test")) {
         await sql`DELETE FROM request_budgets`;

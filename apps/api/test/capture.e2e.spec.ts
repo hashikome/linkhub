@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { publicOrigins } from "@linkhub/config/public-origins";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { publicOrigins } from "@linkhub/config/public-origins";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
@@ -216,7 +216,7 @@ describe("atomic link capture", () => {
       expect(refused.body.error.code).toBe("link_not_public");
     }
   });
-  it("replays saved reference IDs after slug and handle changes, but rejects deleted receipts", async () => {
+  it("replays saved reference IDs after title and handle changes, but rejects deleted receipts", async () => {
     const target = (await send(input("new")).expect(201)).body.data;
     const collection = await prisma.collection.findUniqueOrThrow({
       where: { id: target.collectionId },
@@ -226,7 +226,7 @@ describe("atomic link capture", () => {
       ...input("new"),
       links: [
         {
-          url: `${publicOrigins(process.env).webOrigin}/@${collection.hub.handle}/${collection.slug}`,
+          url: `${publicOrigins(process.env).webOrigin}/c/${collection.id}?item=01990000-0000-7000-8000-000000000001`,
         },
         { url: `${publicOrigins(process.env).webOrigin}/c/${collection.id}` },
       ],
@@ -235,7 +235,7 @@ describe("atomic link capture", () => {
     expect(saved.resourceIds).toHaveLength(1);
     await prisma.collection.update({
       where: { id: collection.id },
-      data: { slug: `renamed-${randomUUID()}` },
+      data: { title: "Renamed collection" },
     });
     expect((await send(body).expect(201)).body.data).toEqual(saved);
     await prisma.hub.update({
@@ -246,6 +246,34 @@ describe("atomic link capture", () => {
     await prisma.resource.delete({ where: { id: saved.resourceIds[0] } });
     await send(body).expect(404);
   });
+  it("replays pre-removal reference receipts without accepting retired URLs for new saves", async () => {
+    const target = (await send(input("new")).expect(201)).body.data;
+    const body = {
+      ...input("new"),
+      links: [{ url: `${publicOrigins(process.env).webOrigin}/c/${target.collectionId}` }],
+    };
+    const saved = (await send(body).expect(201)).body.data;
+    const oldBody = {
+      ...body,
+      links: [{ url: `${publicOrigins(process.env).webOrigin}/@retired/old-guide` }],
+    };
+    // Simulate an already-completed pre-removal operation. Its saved IDs are the
+    // authority for replay, not a new lookup of the retired address.
+    const fingerprint = createHash("sha256")
+      .update(
+        JSON.stringify([oldBody.links.map((link) => ({ url: link.url, tags: [] })), "new", null]),
+      )
+      .digest("hex");
+    await prisma.captureReceipt.update({
+      where: { userId_operationId: { userId: owner.id, operationId: body.operationId } },
+      data: { fingerprint },
+    });
+    expect((await send(oldBody).expect(201)).body.data).toEqual(saved);
+    await send({ ...oldBody, operationId: randomUUID() }).expect(400);
+    await prisma.resource.delete({ where: { id: saved.resourceIds[0] } });
+    await send(oldBody).expect(404);
+  });
+
   it("upgrades a legacy receipt on a resolvable retry", async () => {
     const body = input("new"),
       saved = (await send(body).expect(201)).body.data;
@@ -306,7 +334,7 @@ it("accepts an unpublished creation choice while ordinary creation defaults to p
       await api()
         .post("/api/v1/collections")
         .auth(token, { type: "bearer" })
-        .send({ title: "Default public", slug: `default-${randomUUID()}` })
+        .send({ title: "Default public" })
         .expect(201)
     ).body.data;
     expect(created.published).toBe(true);

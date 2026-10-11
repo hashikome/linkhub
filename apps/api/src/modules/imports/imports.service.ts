@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
-import { Injectable } from "@nestjs/common";
 import type { ImportCommitResult } from "@linkhub/types";
+import { Injectable } from "@nestjs/common";
 import { appError } from "../../common/errors/app-exception";
 import { AuthUser } from "../../common/interfaces/auth-user.interface";
 import { decodeCursor, encodeCursor } from "../../common/utils/cursor.util";
@@ -735,7 +734,6 @@ export class ImportsService {
       if (!folder.newTitle.trim()) throw appError("invalid_import");
       const created = await this.collections.create(user, {
         title: folder.newTitle,
-        slug: `import-${randomUUID()}`,
         published: folder.published,
       });
       folder.targetCollectionId = created.id;

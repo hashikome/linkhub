@@ -1,6 +1,4 @@
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
-import { Controller, Get, HttpException, INestApplication } from "@nestjs/common";
-import { Test } from "@nestjs/testing";
 import type {
   AuditLogEntry,
   Collection,
@@ -12,6 +10,8 @@ import type {
   SavedCollection,
   SharedCollection,
 } from "@linkhub/types";
+import { Controller, Get, HttpException, INestApplication } from "@nestjs/common";
+import { Test } from "@nestjs/testing";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
@@ -59,7 +59,6 @@ const collectionShape = {
       number(v.total)),
   id: uuid,
   hubId: uuid,
-  slug: string,
   title: string,
   description: nullableString,
   tags: strings,
@@ -227,7 +226,7 @@ describe("W3 serialized contracts and safe HTTP errors", () => {
     const created = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${owner}`)
-      .send({ slug: `contract-${suffix}`, title: "Contract", published: true })
+      .send({ title: "Contract", published: true })
       .expect(201);
     cid = created.body.data.id;
     shape(created.body.data, collectionShape);
@@ -283,7 +282,7 @@ describe("W3 serialized contracts and safe HTTP errors", () => {
     const child = await request(server)
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${owner}`)
-      .send({ published: false, slug: `child-${suffix}`, title: "Child" })
+      .send({ published: false, title: "Child" })
       .expect(201);
     await request(server)
       .post(`/api/v1/collections/${cid}/resources/collection`)
@@ -376,12 +375,6 @@ describe("W3 serialized contracts and safe HTTP errors", () => {
       .send({ version: 1, title: "stale" })
       .expect(409);
     expect(stale.body.error.code).toBe("version_conflict");
-    const collision = await request(server)
-      .post("/api/v1/collections")
-      .set("Authorization", `Bearer ${owner}`)
-      .send({ slug: `contract-${suffix}`, title: "collision" })
-      .expect(409);
-    expect(collision.body.error.code).toBe("slug_conflict");
   });
 
   it("bounds validation and never echoes submitted values, unknown field names or raw errors", async () => {
@@ -389,10 +382,13 @@ describe("W3 serialized contracts and safe HTTP errors", () => {
     const invalid = await request(server)
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${owner}`)
-      .send({ slug: secret, title: "", [secret]: secret })
+      .send({ title: "", [secret]: secret })
       .expect(400);
     expect(invalid.body.error.code).toBe("validation_failed");
-    expect(invalid.body.error.details.issues).toContainEqual({ field: "slug", rule: "format" });
+    expect(invalid.body.error.details.issues).toContainEqual({
+      field: "title",
+      rule: "min_length",
+    });
     expect(invalid.body.error.details.issues).toContainEqual({ field: "$", rule: "unknown_field" });
     const nested = await request(server)
       .patch(`/api/v1/collections/${cid}/resources/reorder`)

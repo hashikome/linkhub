@@ -6,7 +6,7 @@
 export type SeedItem = ["h", string] | ["l", string, string, string[]?] | ["c", string, string[]?];
 
 export interface SeedCollection {
-  slug: string;
+  key: string;
   title: string;
   description: string;
   published: boolean;
@@ -23,7 +23,7 @@ export const seedHub = {
 
 export const seedCollections: SeedCollection[] = [
   {
-    slug: "thinking-like-an-engineer",
+    key: "thinking-like-an-engineer",
     title: "Thinking like an engineer",
     description:
       "Short reads on asking well, learning deliberately and deciding what matters. Start here before the technical guides.",
@@ -72,7 +72,7 @@ export const seedCollections: SeedCollection[] = [
     ],
   },
   {
-    slug: "developer-reference-shelf",
+    key: "developer-reference-shelf",
     title: "Developer reference shelf",
     description:
       "Free references and learning paths worth keeping a tab open for. No account needed for any of them.",
@@ -94,7 +94,7 @@ export const seedCollections: SeedCollection[] = [
     ],
   },
   {
-    slug: "code-style-and-conventions",
+    key: "code-style-and-conventions",
     title: "Code style and conventions",
     description:
       "Linters, formatters and conventions by language, plus the repository habits that keep a codebase easy to work in.",
@@ -132,7 +132,7 @@ export const seedCollections: SeedCollection[] = [
     ],
   },
   {
-    slug: "how-the-web-reaches-you",
+    key: "how-the-web-reaches-you",
     title: "How the web reaches you",
     description:
       "From typing an address to a page arriving: DNS, servers, load balancing and HTTPS, in the order a request meets them.",
@@ -193,7 +193,7 @@ export const seedCollections: SeedCollection[] = [
     ],
   },
   {
-    slug: "backend-building-blocks",
+    key: "backend-building-blocks",
     title: "Backend building blocks",
     description:
       "Data stores, API design, caching and authentication: the pieces most backend work is assembled from.",
@@ -259,7 +259,7 @@ export const seedCollections: SeedCollection[] = [
     ],
   },
   {
-    slug: "accessibility-from-the-start",
+    key: "accessibility-from-the-start",
     title: "Accessibility from the start",
     description:
       "Why accessibility is part of the work rather than a feature, how to check it, and who to keep reading.",

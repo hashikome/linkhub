@@ -1,5 +1,5 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
 import { publicOrigins } from "@linkhub/config/public-origins";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { zipSync } from "fflate";
 import { ResourceKind } from "src/common/enums/resource-kind.enum";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";
@@ -57,13 +57,12 @@ export class ExportsService {
     const expand = dto.expand ?? false;
     const extension = EXPORT_FILE_EXTENSIONS[dto.format];
     const files: Array<{ name: string; body: Buffer }> = [];
-    const usedNames = new Set<string>();
 
     for (const id of ids) {
       const collection = byId.get(id) as Collection;
       const document = await this.buildDocument(collection, expand, user);
       const body = await this.render(dto.format, document);
-      files.push({ name: this.uniqueName(usedNames, collection.slug, extension), body });
+      files.push({ name: `${collection.id}.${extension}`, body });
     }
 
     if (files.length === 1) {
@@ -190,18 +189,5 @@ export class ExportsService {
       case "docx":
         return renderDocx(document);
     }
-  }
-
-  // Slugs are unique per hub, but an export can span hubs (shared/published
-  // collections), so zip entry names still need dedup.
-  private uniqueName(used: Set<string>, slug: string, extension: string): string {
-    let name = `${slug}.${extension}`;
-    let counter = 2;
-    while (used.has(name)) {
-      name = `${slug}-${counter}.${extension}`;
-      counter += 1;
-    }
-    used.add(name);
-    return name;
   }
 }

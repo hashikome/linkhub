@@ -211,7 +211,7 @@ try {
     const code=unseal(intent.payload,secret).text.match(/\\b\\d{8}\\b/)[0];
     const r=await fetch(root+'/auth/code/verify',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email,code,name:'Restore'})});if(!r.ok)process.exit(1);
     const t=r.headers.get('set-auth-token');
-    const c=await fetch(root+'/collections',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+t},body:JSON.stringify({slug:'restore-check',title:'Restore check',published:true})});if(!c.ok)process.exit(1);
+    const c=await fetch(root+'/collections',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+t},body:JSON.stringify({title:'Restore check',published:true})});if(!c.ok)process.exit(1);
     await db.$disconnect();`;
   await docker(["exec", api, "bun", "-e", fixture]);
   await start(worker, [

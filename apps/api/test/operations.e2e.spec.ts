@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { randomUUID } from "node:crypto";
+import type { OperationAction } from "@linkhub/types";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import type { OperationAction } from "@linkhub/types";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
@@ -37,7 +37,7 @@ describe("service operator authority (HTTP)", () => {
     request(server())[method](path).set("Cookie", actor.cookie).set("Origin", origin);
   async function create(published = true) {
     const r = await as("post", "/api/v1/collections", owner)
-      .send({ slug: `ops-${randomUUID()}`, title: "Operator public fixture", published })
+      .send({ title: "Operator public fixture", published })
       .expect(201);
     return r.body.data;
   }
@@ -96,7 +96,7 @@ describe("service operator authority (HTTP)", () => {
       "2026-01-01T00:00:00.123800Z",
     ]) {
       const created = await as("post", "/api/v1/collections", actor)
-        .send({ slug: `cursor-${randomUUID()}`, title: "Cursor fixture" })
+        .send({ title: "Cursor fixture" })
         .expect(201);
       ids.push(created.body.data.id);
       await prisma.$executeRaw`UPDATE collections SET created_at = ${timestamp}::timestamptz
@@ -243,7 +243,7 @@ describe("service operator authority (HTTP)", () => {
   it("deletes only due accounts, cascades owned content and anonymizes retained contributions", async () => {
     const target = await login("deletion-due");
     const own = await as("post", "/api/v1/collections", target)
-      .send({ slug: `delete-${randomUUID()}`, title: "Owned content" })
+      .send({ title: "Owned content" })
       .expect(201);
     const foreign = await create();
     const comment = await prisma.collectionComment.create({
@@ -554,7 +554,7 @@ describe("service operator authority (HTTP)", () => {
       version: 1,
     });
     const c = await as("post", "/api/v1/collections", target)
-      .send({ slug: `s-${randomUUID()}`, title: "Suspended fixture", published: true })
+      .send({ title: "Suspended fixture", published: true })
       .expect(201);
     const account = await as("get", `/api/v1/operations/accounts/${target.id}`).expect(200);
     await command("account.suspend", target.id, account.body.data.version).expect(201);
@@ -592,7 +592,7 @@ describe("service operator authority (HTTP)", () => {
     for (const link of [
       `http://localhost:3004/c/${c.id}`,
       `/c/${c.id}`,
-      `https://nslinkhub.dev/@${hub.handle}/${c.slug}`,
+      `https://nslinkhub.dev/c/${c.id}`,
     ]) {
       const found = await as(
         "get",
@@ -671,7 +671,6 @@ describe("service operator authority (HTTP)", () => {
       .send({
         published: false,
         title: "Operator own private collection",
-        slug: `audit-own-${randomUUID()}`,
       })
       .expect(201);
     const at = new Date(Date.now() - 1000);
@@ -912,7 +911,7 @@ describe("service operator authority (HTTP)", () => {
   it("revokes pending code proofs and composes suspension with a retained collection hold", async () => {
     const target = await login("proof-revocation");
     const c = await as("post", "/api/v1/collections", target)
-      .send({ slug: `proof-${randomUUID()}`, title: "Held through reactivation", published: true })
+      .send({ title: "Held through reactivation", published: true })
       .expect(201);
     await command("collection.hold", c.body.data.id, 0).expect(201);
     await request(server())
@@ -999,7 +998,7 @@ describe("service operator authority (HTTP)", () => {
     const seeded = await prisma.collection.createManyAndReturn({
       data: Array.from({ length: 5 }, (_, i) => ({
         hubId: collection.hubId,
-        slug: `held-page-${randomUUID()}`,
+
         title: `Private held title ${i}`,
       })),
     });

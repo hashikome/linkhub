@@ -59,7 +59,7 @@ describe("canonical sharing descriptors (HTTP)", () => {
           .auth(owner.token, { type: "bearer" })
           .send({
             title: published ? "Public guide" : "Private guide",
-            slug: `share-${randomUUID()}`,
+
             published,
           })
           .expect(201)

@@ -26,10 +26,10 @@ There are no memberships, invitations into hubs or hub roles.
 Collaboration is per-collection sharing only; a hub is never a space others
 join.
 
-The accepted next URL milestone ([ADR-0053](docs/engineering-decisions/0053-id-only-collection-addresses.md))
+The collection URL contract ([ADR-0053](docs/engineering-decisions/0053-id-only-collection-addresses.md))
 uses `/c/<collectionId>` for all collection addresses and handles only for hub
-resolution. Slug storage and browse lookup in the current codemap below remain
-implemented until that migration; collection IDs already survive transfers.
+resolution. Collection IDs and addresses survive renames and transfers; current
+authorization still applies.
 
 ## System Shape
 
@@ -81,7 +81,7 @@ ref/               disposable, git-ignored implementation context
 | `email` (`apps/api/src/email`) | encrypted PostgreSQL outbox, BullMQ relay/worker, capture/Resend providers, signed delivery webhooks and cleanup |
 | `sharing` | canonical previews, share entries and reported opens at `/share`; creator/resource-owner analytics and admin metadata obey existing access boundaries |
 | `users` | self-service profile at `/profile` (username, full name, optional hub identity, name visibility); public person profiles at `/people/:id` and `/people/by-username/:username` |
-| `collections` | collection CRUD, Save a link (`/capture`), publish/unpublish, link + direct sharing, ownership transfer, saves, `/discover`, public hub pages + handle resolution (`/hubs/by-handle/:handle`), `/me/{shared,saved,people}`, hub+slug lookup and the durable id permalink (`GET /collections/:id`) |
+| `collections` | collection CRUD, Save a link (`/capture`), publish/unpublish, link + direct sharing, ownership transfer, saves, `/discover`, public hub pages + handle resolution (`/hubs/by-handle/:handle`), `/me/{shared,saved,people}`, the immutable ID lookup (`GET /collections/:id`) |
 | `resources` | items (links with server-resolved titles, same-owner collection references, headings), tags, reorder with version checks, public-address rule, link preview |
 | `imports` | private reviewed bookmarks/CSV/TXT drafts, shared metadata lookups and owner-authorized batched commits |
 | `recovery` | service-authenticated, encrypted temporary payload storage for oversized interrupted web actions; no domain access authority |
@@ -105,7 +105,7 @@ Hub             — the user's optional publishing space. hubId immutable; owner
                   identity; name and description.
 HubHandleReservation — issued handle and originating hub ID; survives hub deletion.
 Collection      — belongs to a hub (hubId = owner). creatorUserId immutable
-                  (provenance). slug (unique per hub), title, description,
+                  (provenance). title (not unique), description,
                   published, linkSharingEnabled, share_token_hash, version.
 Resource        — an item in a collection; the smallest unit of content.
                   kind = external_link (its own canonical `url`, one per

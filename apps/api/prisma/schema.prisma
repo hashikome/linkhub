@@ -83,7 +83,6 @@ model Hub {
 model Collection {
   id                 String   @id @default(dbgenerated("app_uuid_v7()")) @db.Uuid
   hubId              String   @map("hub_id") @db.Uuid
-  slug               String   @db.VarChar(120)
   title              String   @db.VarChar(255)
   description        String?
   published          Boolean  @default(true)
@@ -106,7 +105,6 @@ model Collection {
   saves            CollectionSave[]
   comments         CollectionComment[]
 
-  @@unique([hubId, slug], map: "collections_hub_slug_unique")
   @@index([published, updatedAt(sort: Desc)], map: "idx_collections_published_updated_at")
   @@map("collections")
 }

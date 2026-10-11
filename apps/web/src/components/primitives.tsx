@@ -1,5 +1,5 @@
 import type { Collection, PersonRef, Resource } from "@linkhub/types";
-import { hubPath, permalink, prettyPath } from "../lib/http";
+import { hubPath, permalink } from "../lib/http";
 import { ItemDetails } from "./item-details";
 import { ItemDisclosure } from "./item-disclosure";
 import { Updated } from "./local-time";
@@ -23,7 +23,7 @@ export function CollectionRow({ item, handle }: { item: Collection; handle?: str
   return (
     <li className="collection-row">
       <h2>
-        <a href={handle ? prettyPath(handle, item.slug) : permalink(item.id)}>{item.title}</a>
+        <a href={permalink(item.id)}>{item.title}</a>
       </h2>
       {item.description && <p className="preview">{item.description}</p>}
       <CollectionMeta item={item} handle={handle} compact />

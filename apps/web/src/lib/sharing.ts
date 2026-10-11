@@ -26,7 +26,7 @@ export function shareReturn(value: unknown, fallback: string) {
       ? "Back to home"
       : path === "/manage/collections"
         ? "Back to collections"
-        : path.startsWith("/c/") || /^\/@[^/]+\/[^/]+$/.test(path)
+        : path.startsWith("/c/")
           ? "Back to collection"
           : path === "/hub" || path.startsWith("/h/") || /^\/@[^/]+$/.test(path)
             ? "Back to hub"

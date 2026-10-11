@@ -1,6 +1,6 @@
 # ADR-0047: Same-owner collection references through ordinary link capture
 
-**Status:** accepted
+**Status:** accepted; pretty-address recognition superseded by [ADR-0053](0053-id-only-collection-addresses.md)
 
 **Date:** 2026-10-10
 

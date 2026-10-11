@@ -1,6 +1,6 @@
 # ADR-0053: Collection addresses use only immutable collection IDs
 
-**Status:** accepted; implementation pending
+**Status:** accepted; implemented
 
 **Date:** 2026-10-11
 
@@ -28,7 +28,8 @@ retain `/c/<collectionId>?item=<resourceId>`.
 Remove collection slugs, their unique constraint, generation, lookup contracts
 and transfer conflicts. This partially supersedes ADR-0002's allowance for
 `/@handle/<slug>` browse URLs; all immutable-identity and authorization rules
-remain binding. Hub-handle rename and reservation rules are unchanged.
+remain binding. It also supersedes ADR-0047’s pretty-address recognition;
+reference authorization and same-owner rules remain binding. Hub-handle rename and reservation rules are unchanged.
 
 ## Rationale
 
@@ -45,12 +46,12 @@ and owner, avoiding duplicate routing and artificial transfer conflicts.
 - Under ADR-0006's pre-deployment policy, remove obsolete routes outright rather
   than adding alias redirects. Preserve existing collections, IDs and resources;
   no development database reset is part of this work.
-- The decision is accepted now; existing slug behavior remains until the linked
-  implementation plan is completed. Do not describe removal as shipped yet.
+- Exports use `<collectionId>.<extension>` filenames, preserving uniqueness for
+  same-title collections without storing another address identifier.
 
 ## Links
 
 - [Immutable identities](0002-immutable-identities.md)
 - [Pre-deployment policy](0006-pre-deployment-no-compat.md)
 - [Identity and URL design](../design-docs/identity-and-handles.md)
-- [Implementation plan](../exec-plans/active/use-id-only-collection-addresses.md)
+- [Implementation plan](../exec-plans/completed/use-id-only-collection-addresses.md)

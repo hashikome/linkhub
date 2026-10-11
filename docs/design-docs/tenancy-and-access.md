@@ -103,8 +103,8 @@ contribute. No date-range filter until there is a concrete use for one.
   one collection to an existing contributor. The collection moves to their hub, creating it atomically if absent;
   its resource references keep pointing to unchanged destinations. Recipient
   shares on this collection are removed, the previous owner receives contributor
-  access, and the immutable creator is untouched. Self-transfer and destination
-  slug collisions are rejected.
+  access, and the immutable creator is untouched. Self-transfer is rejected.
+  Matching collection titles in the destination do not block transfer.
 - **Account/hub transfer** is not a model. Account email is fixed; see
   [identity and handles](identity-and-handles.md).
 

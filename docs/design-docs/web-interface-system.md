@@ -151,7 +151,7 @@ inspects the production bundle for synthetic secret canaries.
 ## Browser acceptance
 
 Use the actual web origin and isolated API/database fixtures. Exercise discovery,
-hub, pretty URL, permalink and reference reads; cursor continuation; anonymous
+hub, collection ID and reference reads; cursor continuation; anonymous
 404 equivalence; session expiry; cross-user isolation; unpublish/link rotation;
 timeout and unavailable API. Check cookie issuance and browser-origin auth,
 then every mutation content type including multipart before shipping writes.
@@ -200,10 +200,8 @@ Webpack resolves the shared contracts' NodeNext `.js` specifiers to TS source.
 Public hub continuation adapts the public `HubPage` envelope (`hub` + `collections`)
 using `/hubs/:hubId`, never the owner-visible collection-list endpoint.
 Invalid-cursor recovery stays on the current hub or reader; duplicate rows are
-suppressed and announcements count newly appended items. Hub rows use pretty
-URLs today, while copied links and collection references retain immutable ID URLs.
-[ADR-0053](../engineering-decisions/0053-id-only-collection-addresses.md) selects
-ID URLs for hub rows too; implementation is pending. Next's encoded
+suppressed and announcements count newly appended items. Hub rows, copied links
+and collection references use immutable ID URLs (ADR-0053). Next's encoded
 dynamic route parameters are decoded once before validating the literal `@`
 prefix and permitted path shapes. No share token reaches public hub discovery.
 

@@ -34,7 +34,7 @@ describe("Resource + tag fields (e2e)", () => {
     const collection = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ published: false, slug: `rf-col-${sfx}`, title: "RF" })
+      .send({ published: false, title: "RF" })
       .expect(201);
     const cid = (collection.body as { data: { id: string; tags: string[] } }).data.id;
     expect((collection.body as { data: { tags: string[] } }).data.tags).toEqual([]);

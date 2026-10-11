@@ -50,26 +50,23 @@ otherwise first ownership or explicit Create hub does (ADR-0044).
 
 ## Web URL scheme
 
-**Accepted next milestone:** [ADR-0053](../engineering-decisions/0053-id-only-collection-addresses.md)
+**Implemented:** [ADR-0053](../engineering-decisions/0053-id-only-collection-addresses.md)
 makes `/c/<collectionId>` the only collection address, including browse links.
 `/@handle` resolves hubs only; no hub or handle is embedded in collection URLs.
 Collection IDs and addresses survive ownership transfer; access remains subject
-to current policy. Remove collection slugs and their uniqueness/lookup contracts.
-The [implementation plan](../exec-plans/active/use-id-only-collection-addresses.md)
-is pending. The table and rules below describe the existing implementation until
-that milestone lands, including the pretty route being retired.
+to current policy. Collection slugs and their uniqueness/lookup contracts are
+removed; obsolete routes return 404 without aliases.
 
 Durable references carry only the immutable id of the thing itself; every
-mutable attribute — handle, slug, owning hub — lives in the payload, never
+mutable attribute — handle, title, owning hub — lives in the payload, never
 the address. The public URL shapes are:
 
 | URL | Job |
 | --- | --- |
-| `/c/<collectionId>` | **Permalink** — any collection. Survives slug renames and ownership transfers. Backed by `GET /api/v1/collections/:id`. |
-| `/c/<collectionId>?item=<resourceId>` | Item details within its authorized collection; also supported on the pretty collection address. |
+| `/c/<collectionId>` | **Permalink** — any collection. Survives title renames and ownership transfers. Backed by `GET /api/v1/collections/:id`. |
+| `/c/<collectionId>?item=<resourceId>` | Item details within its authorized collection. |
 | `/h/<hubId>` | Stable hub page, backed by `GET /api/v1/hubs/:hubId`. Survives handle and name changes; hubs are not transferable. |
 | `/@handle` | Hub page. Backed by `GET /api/v1/hubs/by-handle/:handle`. |
-| `/@handle/<slug>` | **Pretty browse URL** — human-readable, *allowed to break* on rename/transfer (Drive path vs file id). Backed by `GET /api/v1/hubs/:hubId/collections/:slug` after handle resolution. Slugs are unique per hub. |
 
 Owners see their own collections at both hub address forms; visitors see only
 published collections. The web resolves the authenticated profile's immutable
@@ -80,9 +77,8 @@ which always uses public queries. This view choice never grants API access.
 Rules that keep it drift-proof:
 
 - Collection references navigate directly to `/c/<id>` with no parent context.
-- **"Copy link" / share buttons always emit the `/c/<id>` permalink**, never
-  the slug URL. Slug URLs are for address bars and link previews only.
-- Pretty URLs have exactly a handle and slug. Bare `/name` paths are reserved
+- Hub cards, discovery, copied links and references all emit `/c/<id>`.
+- Bare `/name` paths are reserved
   for people's profiles (`/username`, specified in
   [people-and-hubs.md](people-and-hubs.md)).
 

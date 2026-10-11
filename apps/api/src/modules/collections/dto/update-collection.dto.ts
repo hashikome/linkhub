@@ -1,23 +1,7 @@
 import type { UpdateCollectionRequest } from "@linkhub/types";
-import {
-  IsBoolean,
-  IsInt,
-  IsOptional,
-  IsString,
-  Matches,
-  MaxLength,
-  Min,
-  MinLength,
-} from "class-validator";
+import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from "class-validator";
 
 export class UpdateCollectionDto implements UpdateCollectionRequest {
-  @IsOptional()
-  @IsString()
-  @Matches(/^[a-z0-9-]+$/)
-  @MinLength(2)
-  @MaxLength(120)
-  slug?: string;
-
   @IsOptional()
   @IsString()
   @MinLength(1)

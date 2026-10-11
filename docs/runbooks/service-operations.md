@@ -85,7 +85,7 @@ submission once; network errors never trigger automatic retries.
   and operator grants stay revoked.
 - **End all sessions:** forces fresh sign-in without changing account availability.
   Using it on yourself signs you out too.
-- **Hold distribution:** paste a public collection's permalink or pretty URL on `/manage/collections`.
+- **Hold distribution:** paste a public collection's ID address on `/manage/collections`.
   Inspect it with normal reader access, then hold its distribution to all
   non-owners, including shares, links and sections. The active owner can read
   and correct it. No private preview is retained for the operator.

@@ -40,7 +40,6 @@ describe("Foundation conventions (e2e)", () => {
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${bearer}`)
       .send({
-        slug: `fnd-col-${sfx}`,
         title: "Fnd Collection",
         published: true,
       })
@@ -89,7 +88,7 @@ describe("Foundation conventions (e2e)", () => {
     const res = await request(app.getHttpServer())
       .post("/api/v1/collections")
       .set("Authorization", `Bearer ${bearer}`)
-      .send({ slug: "x y z!!", title: "" })
+      .send({ title: "" })
       .expect(400);
 
     const body = res.body as {

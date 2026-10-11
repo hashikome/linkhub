@@ -36,9 +36,8 @@ Like YouTube channels (`/@handle`) and GitHub people (`/username`):
   their hub if they have one, and the public collections they have contributed
   to. Saved collections stay private (a public-saves opt-in can come later if
   wanted).
-- Permanent addresses keep using ids: `/h/<hubId>`, `/c/<id>`; readable
-  collection addresses stay `/@handle/<slug>`, with `?item=<itemId>` opening one
-  item on either address.
+- Permanent addresses use IDs: `/h/<hubId>` and `/c/<id>`. Collections have only
+  the ID address, with `?item=<itemId>` opening one item.
 
 In the interface hubs read as **@handle** and people as their plain
 **username**, both linked, so the two never look alike.

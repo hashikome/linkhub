@@ -89,7 +89,7 @@ beforeEach(async () => {
     await api()
       .post("/api/v1/collections")
       .auth(token, { type: "bearer" })
-      .send({ published: false, title: "Destination", slug: `import-${randomUUID()}` })
+      .send({ published: false, title: "Destination" })
       .expect(201)
   ).body.data.id;
 });

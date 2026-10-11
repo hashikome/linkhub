@@ -25,7 +25,7 @@ describe("section context and membership", () => {
       await api()
         .post("/api/v1/collections")
         .auth(token, { type: "bearer" })
-        .send({ title: "A sectioned guide", slug: `sections-${randomUUID()}`, published: true })
+        .send({ title: "A sectioned guide", published: true })
         .expect(201)
     ).body.data;
   }
