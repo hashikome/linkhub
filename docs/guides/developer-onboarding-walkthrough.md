@@ -12,7 +12,7 @@ answer in your own words before continuing. Reading the whole file in one go
 is the failure mode this structure exists to prevent. Every file is a
 clickable link.
 
-**Pin:** verified against commit `5074c2c533359cc6925c7314ef393b0e0e15e286`. This is enforced, not honor
+**Pin:** verified against commit `4f36dd54ad38e573ec6b06b091499f268bce0754`. This is enforced, not honor
 system: `check:guide-pin` (part of `bun run verify`) fails when any file this
 guide links changes after the pinned commit. To clear it, reread the affected
 sessions, fix any drift, and move the pin to the latest commit — in a
@@ -328,7 +328,8 @@ Read:
    [web-interface-system.md](../design-docs/web-interface-system.md) and
    [DESIGN.md](../../DESIGN.md) for journeys, interaction and theme values.
 4. [release.md](../runbooks/release.md) for API/web image rehearsal, the opt-in
-   GitHub-to-Dokploy production workflow and its acceptance requirements.
+   GitHub-to-Dokploy production workflow, accepted first rollout and remaining
+   launch checks.
    Production uses shared product PostgreSQL/queue Redis with scoped roles/ACLs;
    migration and grant verification precede application promotion. Secret providers
    are optional: plain env files remain supported, while our deploy job can fetch
