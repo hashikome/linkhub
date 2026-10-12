@@ -12,7 +12,7 @@ answer in your own words before continuing. Reading the whole file in one go
 is the failure mode this structure exists to prevent. Every file is a
 clickable link.
 
-**Pin:** verified against commit `043891c`. This is enforced, not honor
+**Pin:** verified against commit `4ddbe1990fcd4f6e6bf3748afeda2ca45aafacf6`. This is enforced, not honor
 system: `check:guide-pin` (part of `bun run verify`) fails when any file this
 guide links changes after the pinned commit. To clear it, reread the affected
 sessions, fix any drift, and move the pin to the latest commit — in a
@@ -327,8 +327,10 @@ Read:
 3. [web-product-experience.md](../design-docs/web-product-experience.md),
    [web-interface-system.md](../design-docs/web-interface-system.md) and
    [DESIGN.md](../../DESIGN.md) for journeys, interaction and theme values.
-4. [release.md](../runbooks/release.md) for image rehearsal and outstanding
-   public-release requirements. [Engineering decisions](../engineering-decisions/README.md)
+4. [release.md](../runbooks/release.md) for API/web image rehearsal, the opt-in
+   GitHub-to-Dokploy staging workflow and separate production-release requirements.
+   Staging uses shared product PostgreSQL/queue Redis with scoped roles/ACLs;
+   migration and grant verification precede application promotion. [Engineering decisions](../engineering-decisions/README.md)
    owns settled rationale; [PRODUCT.md §11](../../PRODUCT.md#11-delivery)
    owns delivery status and order.
 
@@ -375,7 +377,7 @@ already delivered features.
 - Engineering principles → [CORE_BELIEFS.md](../CORE_BELIEFS.md)
 - Shared Hashikome sign-on direction (not implemented) →
   [identity-sso.md](../design-docs/identity-sso.md)
-- Observability direction (LogTape/Sentry + shared Alloy) →
+- Monitoring baseline (Kuma/Dokploy; app telemetry retained, Alloy deferred) →
   [observability.md](../design-docs/observability.md)
 - Prisma migration discipline → [migrations.md](../runbooks/migrations.md)
 - Local commands and DB reset →
