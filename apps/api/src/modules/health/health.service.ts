@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { DependencyStatus, Health, Readiness, SystemStatus } from "@linkhub/types";
+import type { DependencyStatus, Health, Readiness, SystemStatus } from "@ntumie/types";
 import { PrismaService } from "src/database/prisma.service";
 import { emitEvent } from "../../common/observability/telemetry";
 import { RedisQueueReadinessService } from "./redis-queue-readiness.service";

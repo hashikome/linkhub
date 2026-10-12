@@ -1,5 +1,5 @@
 "use client";
-import { type AuditLogEntry, auditReadActions } from "@linkhub/types";
+import { type AuditLogEntry, auditReadActions } from "@ntumie/types";
 import { useEffect, useRef, useState } from "react";
 import { auditActionLabel, auditTarget } from "../lib/audit-presentation";
 import { readAuditPage } from "../lib/browser-api";

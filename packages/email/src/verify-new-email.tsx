@@ -17,9 +17,9 @@ export async function renderNewEmailVerification(
   if (errors.length > 0) {
     throw new Error(`Invalid new-email verification input: ${errors.join("; ")}`);
   }
-  return renderCodeEmail("Verify your new linkhub email", input, {
-    preview: "Verify your new linkhub email",
-    lead: "Here's your verification code to verify this address as the new email for your linkhub account:",
+  return renderCodeEmail("Verify your new ntumie. email", input, {
+    preview: "Verify your new ntumie. email",
+    lead: "Here's your verification code to verify this address as the new email for your ntumie. account:",
     note: "If you didn't expect this, you can ignore this email and nothing will change.",
   });
 }

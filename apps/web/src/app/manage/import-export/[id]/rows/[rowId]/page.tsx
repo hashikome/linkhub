@@ -1,4 +1,4 @@
-import { type ImportRowView, importRowStatuses } from "@linkhub/types";
+import { type ImportRowView, importRowStatuses } from "@ntumie/types";
 import { notFound, redirect } from "next/navigation";
 import { queryValue } from "../../../../../../lib/http";
 import { serverRead } from "../../../../../../lib/server-api";

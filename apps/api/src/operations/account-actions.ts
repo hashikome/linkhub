@@ -1,4 +1,4 @@
-import type { AccountOperationAction, OperatorAccount } from "@linkhub/types";
+import type { AccountOperationAction, OperatorAccount } from "@ntumie/types";
 
 export function availableAccountActions(
   account: Pick<

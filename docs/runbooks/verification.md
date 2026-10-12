@@ -73,7 +73,8 @@ classes/parameters; it stays enabled for `packages/*`, `tooling/`, and
 
 Requirements: `bun run infra:up` (PostgreSQL + Redis) for the e2e stage.
 For shared reader/preview changes, also run `bun run test:dev`: it checks the
-development-rendered example for fictional record links, in addition to the
+development-rendered example for fictional record links and copy buttons being
+absent before hydration, in addition to the
 production browser journey.
 
 ## Local Enforcement
@@ -158,6 +159,11 @@ Escape-cancelled document navigation and reload recovery after access revocation
 API suites cover readiness and dependency failures with isolated fixtures;
 shared development services stay running. Browser journeys also cover account
 settings, capture, discussion, attribution/History, invitations and operations.
+Reader acceptance includes home/About preview layout and native footer links,
+desktop resource continuation, and the browser-local same-tab preference with
+and without JavaScript. Authentication journeys exercise six-digit email entry;
+API integration tests assert generated code length and verification budgets
+across resends.
 Tests leave synthetic screenshots under `/tmp/w3-*.png`; their
 processes and database are owned fixtures. Do not run two web builds or dev
 and production browser builds concurrently in the same checkout (`.next` is shared).

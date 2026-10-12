@@ -97,14 +97,14 @@ await withTestDatabase(async ({ url }) => {
     exampleLinks.length !== 4 ||
     resourceLinks.length !== 2 ||
     itemLinks.length !== 2 ||
-    copyButtons.length !== 2 ||
+    copyButtons.length !== 0 ||
     itemLinks.some((href) => {
       const link = new URL(href, "http://localhost");
       return link.hash !== `#item-${link.searchParams.get("item")}`;
     })
   )
     throw new Error(
-      "Dev example must show resource titles, copy buttons and demo-only native item links",
+      "Dev example must show resource titles and demo-only native item links, with no copy buttons before hydration",
     );
   const signIn = await fetch(`http://127.0.0.1:${webPort}/sign-in`);
   if (!signIn.ok || !(await signIn.text()).includes('action="/forms/email-start"'))

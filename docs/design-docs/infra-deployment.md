@@ -7,7 +7,7 @@ inputs, local evidence limits, migration ordering and outstanding live proof.
 
 The owner confirmed a shared Hashikome foundation on 11 October 2026. This
 supersedes the earlier direction of a separate personal namestarlit VPS/Dokploy
-instance and an nsinfra repository. LinkHub is now a company product; WorkLog and
+instance and an nsinfra repository. ntumie. is now a company product; WorkLog and
 the portfolio remain personal. This ownership change does not deploy anything.
 
 ## Direction
@@ -79,9 +79,9 @@ GitHub Actions (per product repo)
 Hashikome infrastructure
   -> Dokploy management services and deployment queue
   -> Dokploy-managed Traefik
-       -> linkhub web + api
+       -> ntumie. web + api
        -> shared identity (when implemented)
-  -> product workers (the linkhub email and link-metadata worker)
+  -> product workers (the ntumie. email and link-metadata worker)
   -> PostgreSQL 18 (one instance, one database per product)
   -> dedicated queue Redis per product that needs one
   -> shared services (uptime/observability) as company infrastructure adds them
@@ -123,7 +123,7 @@ credentials and authorization remain backend-owned. See
   values are never logged and never baked into images.
 - Health and readiness endpoints are part of each product's API contract.
 - Migrations run as an explicit release step owned by the product repo
-  (`prisma migrate deploy` for linkhub), ordered before the new app
+  (`prisma migrate deploy` for ntumie.), ordered before the new app
   version serves traffic.
 - Dokploy project/environment names stay configurable — operational naming is
   not a durable contract (the naming-boundaries rule).

@@ -36,7 +36,7 @@ export function createAuth({
           level === "error" ? "error" : level === "warn" ? "warn" : "info",
         ),
     },
-    appName: "linkhub",
+    appName: "ntumie.",
     onAPIError: { errorURL: `${webOrigin}/sign-in?notice=google-failed` },
     account: {
       encryptOAuthTokens: true,

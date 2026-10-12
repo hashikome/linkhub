@@ -1,4 +1,4 @@
-import type { Collection, CollectionShareView } from "@linkhub/types";
+import type { Collection, CollectionShareView } from "@ntumie/types";
 import { serverRead } from "../lib/server-api";
 import { CollectionOperationForm } from "./collection-operation-form";
 

@@ -1,6 +1,6 @@
-import { browserApiOrigin } from "@linkhub/config/web-browser";
-import type { ApiWarning, CursorMeta } from "@linkhub/types";
-import { isApiErrorCode, SHARE_ATTRIBUTION_KEYS } from "@linkhub/types";
+import { browserApiOrigin } from "@ntumie/config/web-browser";
+import type { ApiWarning, CursorMeta } from "@ntumie/types";
+import { isApiErrorCode, SHARE_ATTRIBUTION_KEYS } from "@ntumie/types";
 
 import { isUuid } from "./validation";
 
@@ -305,7 +305,7 @@ export function safeReturn(value: unknown): string {
   if (/^\/capture\/[a-f0-9-]{36}$/.test(parsed.pathname)) return parsed.pathname;
   if (parsed.pathname === "/settings") {
     const section = parsed.searchParams.get("section");
-    return section === "hub" || section === "notifications"
+    return section === "hub" || section === "notifications" || section === "device"
       ? `/settings?section=${section}`
       : "/settings";
   }

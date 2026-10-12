@@ -128,3 +128,13 @@ Current implementation guidance lives in the linked design documents.
 - [0054-progressive-input-and-browser-evidence.md](0054-progressive-input-and-browser-evidence.md) — Preserve early native input; pinned browser, sanitized failure artifacts and measured production readiness.
 
 - [0055-allocated-local-host-ports.md](0055-allocated-local-host-ports.md) — Consistent +4 local web/API allocation, env precedence and occupied-port refusal.
+
+- [0056-about-collection-and-footer-navigation.md](0056-about-collection-and-footer-navigation.md) — About holds site sharing and useful links; quieter footer variants and direct sign-up.
+
+- [0057-default-email-code-length.md](0057-default-email-code-length.md) — Use Better Auth’s six-digit email default with unchanged expiry, attempt and resend limits.
+
+- [0058-curated-guides-positioning.md](0058-curated-guides-positioning.md) — Maintained guides and context between resources define the product; its working-name decision is superseded by ADR-0059.
+
+- [0059-ntumie-product-name.md](0059-ntumie-product-name.md) — Select ntumie. and ntumie.link; its retained-codebase and deferred-branding decisions are superseded by ADR-0060.
+
+- [0060-ntumie-repository-and-branding.md](0060-ntumie-repository-and-branding.md) — Apply ntumie. branding and ntumie repository/package names; migrate portfolio and handbook addresses while preserving data and legacy links.

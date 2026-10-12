@@ -13,6 +13,10 @@ entry and implicit ordinary email creation policy, adds a shared verified creati
 screen and permits an optional named hub during signup. Other decisions remain
 accepted unless already marked superseded.
 
+[ADR-0057](0057-default-email-code-length.md) supersedes only the eight-digit
+length below: email codes now use Better Auth’s six-digit default. All other
+authentication and proof-boundary decisions remain accepted.
+
 ## Context
 
 Passwords add reset flows, breach exposure and support load for a product that

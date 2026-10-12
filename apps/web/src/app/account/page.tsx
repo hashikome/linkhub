@@ -1,4 +1,4 @@
-import { type AccountAction, accountActions, type Profile } from "@linkhub/types";
+import { type AccountAction, accountActions, type Profile } from "@ntumie/types";
 import type { Metadata } from "next";
 import { NativeForm } from "../../components/native-form";
 import { readAccountFlow, readFlow } from "../../lib/form-server";

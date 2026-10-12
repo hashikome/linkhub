@@ -62,10 +62,10 @@ describe("email-entry service invitations (HTTP)", () => {
     });
     const payload = unseal(mail.payload as string, emailConfig().secret);
     if (invitation) {
-      expect(payload.subject).toBe("Verify your email to accept your linkhub invitation");
+      expect(payload.subject).toBe("Verify your email to accept your ntumie. invitation");
       expect(payload.text).toContain("activate your invited role");
     }
-    const code = payload.text.match(/^\d{8}$/m)?.[0];
+    const code = payload.text.match(/^\d{6}$/m)?.[0];
     if (!code) throw new Error("Missing captured code");
     return code;
   }
@@ -297,7 +297,7 @@ describe("email-entry service invitations (HTTP)", () => {
     expect(await p.operatorGrant.findUnique({ where: { userId: target.id } })).toBeNull();
     await as("get", "/api/v1/operations/accounts", target).expect(403);
     const code = await codeFor(target.email);
-    const wrong = code === "00000000" ? "11111111" : "00000000";
+    const wrong = code === "000000" ? "111111" : "000000";
     for (let n = 0; n < 3; n++)
       await as("post", "/api/v1/auth/invitations/verify", target)
         .send({ token: i.token, code: wrong })

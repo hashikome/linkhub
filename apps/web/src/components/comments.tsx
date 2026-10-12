@@ -1,4 +1,4 @@
-import type { CommentThreads, CommentView } from "@linkhub/types";
+import type { CommentThreads, CommentView } from "@ntumie/types";
 import type { ReactNode } from "react";
 import { CommentFocus } from "./comment-focus";
 import { FormNotice } from "./form-notice";

@@ -1,5 +1,5 @@
 // Compile-time checks run in api:typecheck, including optional keys.
-import type * as Wire from "@linkhub/types";
+import type * as Wire from "@ntumie/types";
 import type { CaptureDto, CaptureLinkDto } from "../src/modules/collections/dto/capture.dto";
 import type { CreateCollectionDto } from "../src/modules/collections/dto/create-collection.dto";
 import type { CreateShareDto } from "../src/modules/collections/dto/create-share.dto";

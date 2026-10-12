@@ -1,4 +1,4 @@
-import type { HubPage } from "@linkhub/types";
+import type { HubPage } from "@ntumie/types";
 import { PaginatedList } from "./paginated-list";
 import { ShareAction } from "./share-action";
 

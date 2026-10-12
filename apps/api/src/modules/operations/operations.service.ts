@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Injectable } from "@nestjs/common";
 import type {
   AuditLogEntry,
   ManagedCollection,
@@ -10,8 +11,7 @@ import type {
   OperatorAccount,
   OperatorAccountDetail,
   OperatorCollection,
-} from "@linkhub/types";
-import { Injectable } from "@nestjs/common";
+} from "@ntumie/types";
 import { isUUID } from "class-validator";
 import { revokeAccountAccess } from "../../auth/revoke-account";
 import {

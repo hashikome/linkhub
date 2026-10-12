@@ -9,6 +9,11 @@ implementation work in [../exec-plans/active/](../exec-plans/active/).
 Each document distinguishes implemented contracts from planned behavior.
 [PRODUCT.md §11](../../PRODUCT.md#11-delivery) owns delivery status and order.
 
+## Product direction
+
+- [product-positioning.md](product-positioning.md): curated guides, the GoodLinks
+  comparison, feature/copy decision questions and the unresolved final name.
+
 ## Domain and system
 
 - [tenancy-and-access.md](tenancy-and-access.md): the access model (owner →

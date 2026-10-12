@@ -23,11 +23,11 @@ Start from `docs/exec-plans/TEMPLATE.md`.
 
 ## Shared Hashikome workspace
 
-LinkHub is listed in the shared planning workspace (`../workspace/`, local and
+ntumie. is listed in the shared planning workspace (`../workspace/`, local and
 not in Git) as one product row that points here; the workspace never holds a copy
 of this product's definition. Until plans are moved there, records map as follows:
 
-| Workspace convention | LinkHub today |
+| Workspace convention | ntumie. today |
 | --- | --- |
 | Product brief (`backlog/<idea>.md`) | `PRODUCT.md`, linked from the workspace row |
 | Plan `README.md` (scope, state, next actions) | `PRODUCT.md` §11 Delivery |

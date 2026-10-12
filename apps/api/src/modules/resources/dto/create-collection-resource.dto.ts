@@ -1,4 +1,4 @@
-import type { CreateCollectionResourceRequest, CreateHeadingResourceRequest } from "@linkhub/types";
+import type { CreateCollectionResourceRequest, CreateHeadingResourceRequest } from "@ntumie/types";
 import {
   ArrayMaxSize,
   IsArray,

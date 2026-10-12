@@ -1,4 +1,4 @@
-import { browserApiOrigin, webBrowserConfig } from "@linkhub/config/web-browser";
+import { browserApiOrigin, webBrowserConfig } from "@ntumie/config/web-browser";
 import { type ApiPath, readJson, safePath } from "./http";
 
 export async function browserRead<T>(path: ApiPath, signal: AbortSignal, token?: string) {

@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import type { ShareKind } from "@linkhub/types";
+import type { ShareKind } from "@ntumie/types";
 import {
   Allow,
   IsDateString,

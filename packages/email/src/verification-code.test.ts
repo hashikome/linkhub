@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { verificationPurposes } from "@linkhub/types";
+import { verificationPurposes } from "@ntumie/types";
 import type { CodeEmailBaseInput } from "./code-email.js";
 import { renderEmailChangeConfirmation } from "./email-change-confirm.js";
 import { renderVerificationCode } from "./verification-code.js";
@@ -35,7 +35,7 @@ describe("code emails", () => {
       }
       // Subjects never carry the code.
       expect(email.subject).not.toContain(valid.code);
-      expect(email.subject.toLowerCase()).toContain("linkhub");
+      expect(email.subject.toLowerCase()).toContain("ntumie.");
     }
   });
 

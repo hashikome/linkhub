@@ -62,9 +62,9 @@ function stop(code: number) {
 }
 console.log(`Starting API at http://localhost:${apiPort} and web at http://localhost:${webPort}.`);
 for (const [name, workspace, script] of [
-  ["api", "@linkhub/api", "start:dev"],
-  ["worker", "@linkhub/api", "email:worker:dev"],
-  ["web", "@linkhub/web", builtWeb ? "start" : "dev"],
+  ["api", "@ntumie/api", "start:dev"],
+  ["worker", "@ntumie/api", "email:worker:dev"],
+  ["web", "@ntumie/web", builtWeb ? "start" : "dev"],
 ] as const) {
   console.log(`Starting ${name}: bun run ${script}`);
   const child = spawn("bun", ["run", "--filter", workspace, script], {

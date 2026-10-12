@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { recoveryPayloadLimit, recoveryTtl } from "@linkhub/config/action-recovery";
+import { recoveryPayloadLimit, recoveryTtl } from "@ntumie/config/action-recovery";
 import type { ApiPath } from "./http";
 
 export interface PendingAction {

@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
+import { Controller, Get, HttpException, INestApplication } from "@nestjs/common";
+import { Test } from "@nestjs/testing";
 import type {
   AuditLogEntry,
   Collection,
@@ -9,9 +11,7 @@ import type {
   Resource,
   SavedCollection,
   SharedCollection,
-} from "@linkhub/types";
-import { Controller, Get, HttpException, INestApplication } from "@nestjs/common";
-import { Test } from "@nestjs/testing";
+} from "@ntumie/types";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";

@@ -14,7 +14,7 @@ The [experience](web-product-experience.md) owns journeys and copy direction;
   per save); never crowd fields side by side or drop labels to save space.
 - **Copy scans at a glance.** Short paragraphs with clear space between them;
   emphasis is bold text, not extra panels competing with the actions.
-- **The wordmark is the logo.** Lowercase "linkhub" text only; no icon or mark.
+- **The wordmark is the logo.** Lowercase "ntumie." text only; no icon or mark.
 
 ## Layout and hierarchy
 
@@ -23,7 +23,11 @@ centered content. The navigation wraps at narrow widths and enlarged text.
 The collection is the main reading surface. Discover and hub views use compact
 rows grouped with whitespace in two desktop columns, collapsing to one on phones. No
 nested cards, dashboard metrics or decorative covers.
-The collection title and resource titles provide the visual hierarchy.
+The reader uses an `h1` collection title, `h2` section headings and `h3` resource
+titles. Section headings sit between the other two in visual size. Their
+descriptions are curator prose and use regular body ink, a shorter reading measure
+and generous line spacing. Size and weight distinguish headings; muted text is
+reserved for metadata such as domains, dates and attribution. See DESIGN for values.
 
 Desktop page gutter is 32 px and the shell stops at 1120 px. Every page starts
 at the shell's left content edge (the wordmark's edge); narrower surfaces keep
@@ -43,12 +47,12 @@ Do not make a row containing secondary controls into one enclosing link.
 | Component | Required behavior |
 | --- | --- |
 | Collection row | Title (ink, not accent) is the main link and underlines on hover; description and metadata wrap. Meta items are separated by a muted dot on wide screens and by spacing below 640 px. Tags are outlined text until actual filtering exists. Hover tints the row surface, which bleeds slightly past the content edge so text stays aligned; focus stays visibly attached to the link. |
-| Resource row | One primary destination in ink, then one meta line: hostname (leading `www.` dropped), a small arrow-up-right external glyph, and optional tags inline. External links use normal browser behavior and a no-referrer policy. No script/data URL navigation. |
+| Resource row | One primary destination in ink, then one meta line: hostname (leading `www.` dropped), a small arrow-up-right external glyph, and optional tags inline. External links use new-tab navigation by default and a no-referrer policy; a browser-specific opt-in keeps them in the same tab. New-tab links have a new-tab hint and no opener. No script/data URL navigation. |
 | Collection reference | Viewer-authorized destination title, then a meta line with a stacked-squares icon and an accent “Collection” label; links to its immutable ID without source tokens. Unavailable targets show a neutral muted entry. |
-| Heading resource | Plain section heading in resource order, with spacing rather than a card or separator. |
+| Heading resource | Section heading in resource order, with supporting description and native expand/collapse behavior. The reader uses the 24 px section role above 18 px resource titles. |
 | Expanded resource | Keep a persistent neutral surface and fine inset boundary around the title, destination, details and copy action. A small outer gap separates the open item from its neighbors. The grouping follows native `open` state, including without JavaScript; hover is not required, and keyboard focus remains distinct. |
 | Button | Filled accent for the primary action, bordered neutral with ink text for secondary, accent text for low emphasis. Shared primary/secondary button sizing: 32 px with a mouse/trackpad, 44 px touch targets on coarse pointers. Fields remain 38 px with fine pointers. Default/hover/focus/active/disabled/pending states share geometry. Signed-out navigation renders Sign in as a compact secondary button. |
-| Sharing | Profile, hub and collection sharing use contextual controls; Share linkhub belongs in the shared footer. Contributors occupy the top of the collection sidebar; Discussion sits directly below them and grows with its own content on wide, tall screens, capped by the available page space above the footer before scrolling internally. Empty discussions stay compact. Its position is independent of the collection header. The footer contains Share linkhub and Support beside the product identity. |
+| Sharing | Profile, hub and collection sharing use contextual controls; Share ntumie. belongs on About. Contributors occupy the top of the collection sidebar; Discussion sits directly below them and grows with its own content on wide, tall screens, capped by the available page space above the footer before scrolling internally. Empty discussions stay compact. Its position is independent of the collection header. The footer contains About ntumie. and the tagline; home/About use the variants below. |
 | Toast | Transient confirmations (saved, resent, signed out, done, copied) appear top-center as a small card in the page's own surface, border and radius, with a tone mark (✓ success, dot info), fitted to the message; they clear after ~5 s and the `?notice=` code is removed afterwards. Errors, warnings and anything needing action stay inline: info (neutral blue), warning (amber), error (red). |
 | Email verification | One flow for every purpose (sign in, first link, continue, resume, confirm, invitation): the start screen (reason line; the known address in bold or an email field; what happens next; Send code, plus Cancel where backing out makes sense) and the code screen (where it went in bold, the code, the purpose's button, "Didn't receive the code? Send a new code"). Short paragraphs with clear space; no extra panels. |
 | Pagination | Visible continuation control with pending state and result-count announcement; prevent duplicate loads; preserve existing results on a retryable page failure. |
@@ -168,7 +172,7 @@ production browser fixtures.
 ## Client architecture
 
 `apps/web` is a separate HTTP client, including its Server Components. It imports
-wire contracts from `@linkhub/types` and runtime config from `@linkhub/config`;
+wire contracts from `@ntumie/types` and runtime config from `@ntumie/config`;
 it never imports Prisma, Nest modules, database models or backend-owned business
 logic. Database-backed browser fixtures live under `apps/api/test/browser`,
 not in the web application. Backend validation and authorization remain decisive.
@@ -213,7 +217,7 @@ client status page or dependency details in the UI.
 ## Sign-in and service operations
 
 Ordinary sign-in offers email and configured Google. Email entry leads to a
-passkey or an eight-digit email code; first-link capture goes directly to the
+passkey or a six-digit email code; first-link capture goes directly to the
 code path. Email verification uses native POST forms, visible resend/failure
 feedback and a safe local return.
 The code flow is held in a short-lived encrypted HttpOnly cookie; email and codes
@@ -225,10 +229,22 @@ The notification badge counts items newer than the account's last visit to
 Notifications (`users.notifications_seen_at`); “Clear all” sets
 `notifications_cleared_at`. `GET /api/v1/notifications`, `POST …/seen` and
 `POST …/clear` are account-owned and separate from audited operator APIs.
-The footer stacks the current-year product copyright above a smaller, muted
-“Good links belong together.” line, with Share linkhub and Support links beside
-it. Site sharing stays in the footer. Privacy and Terms join it when those pages exist. Service status is reserved for API monitoring and
-has no client page or navigation entry.
+Product footers show About ntumie. left and “Good links belong together.” right,
+with body-size text, no year and no top divider. The homepage shows only About
+ntumie. About shows Join ntumie. to `/sign-up`, or Discover to `/discover` for
+signed-in visitors. All variants render in initial HTML and remain native links.
+About reuses the landing hero and question animation with the prompts “Found a
+good read?”, “Built a useful collection?” and “Know someone who would enjoy it?”.
+Its paragraph reads “Give someone else a place for their good finds. Get a little
+help, meet the person building it, or share ntumie.” Its Share
+ntumie. action opens site sharing and returns to About, while shared site URLs
+still point to the homepage. The minimal collection contains Support and Paul
+John's portfolio at `https://namestarlit.com`; no invented metadata or Example
+badge. Internal links stay in this tab, and the portfolio follows the device
+preference. Add Terms/Privacy only once actual pages exist. Embedded collections
+follow reader typography, with heading levels offset beneath the hero h1.
+See [ADR-0056](../engineering-decisions/0056-about-collection-and-footer-navigation.md).
+Service status remains API monitoring without a navigation entry.
 A single icon button beside the avatar cycles System → Light → Dark → System.
 Its icon shows the current mode; its accessible label and tooltip name the current
 and next modes. System remains the default.
@@ -307,9 +323,9 @@ and browser `WEB_ORIGIN`; only the public backend origin enters browser config.
 
 ## Profile and appearance
 
-`/settings` has left-hand navigation for Profile, Hub, Notifications and Security.
-Profile, Hub and Notifications show one panel at a time; selection uses
-`?section=hub` or `?section=notifications`, with Profile as the default. Security
+`/settings` has left-hand navigation for Profile, Hub, Notifications, On this device and Security.
+Profile, Hub, Notifications and On this device show one panel at a time; selection uses
+`?section=hub`, `?section=notifications` or `?section=device`, with Profile as the default. Security
 opens `/settings/security`. Account access and deletion uses a separate `/account`
 confirmation flow linked from Profile; signed-out recovery appears only after
 verified email sign-in identifies an eligible account. On mobile, the navigation becomes
@@ -327,7 +343,11 @@ and Description last. The description aligns with the input column and has a
 readable multiline height. Without a hub, the Hub section shows first-save
 guidance. **Show owner** edits `Hub.showOwner`; no visibility field lives on User.
 Notifications contains invitation delivery information; future notification
-preferences also belong here.
+preferences also belong here. On this device contains the off-by-default
+**Open external resources in the same tab** switch and an explicit **Save preference**
+button. Its help explains that ntumie. links stay in the same tab and other
+browsers keep their own choice. Native and enhanced saving share the same cookie;
+failed enhanced saves retain the choice and offer a retry through the save button.
 
 Section changes with JavaScript keep drafts mounted and autosaving. Native
 links and explicit Save changes work without JavaScript, retaining the selected
@@ -425,7 +445,7 @@ Routine profile-save confirmation is a compact green “Saved” with a check be
 the form; errors remain prominent. Show the public-address preview below the
 handle and only show format/availability guidance when it changes. Keep native
 field values intact through hydration and preserve edits made during a request.
-Page titles use the current surface name followed by “· linkhub”; hub titles
+Page titles use the current surface name followed by “· ntumie.”; hub titles
 use the public hub display name. Account/private collection data and tokens do not appear
 in metadata titles.
 
@@ -489,7 +509,7 @@ no-JavaScript rendering retains readable cursor pagination. Long pages use the
 document scrollbar; main has no separate scroll container.
 
 Collection rows show title, up to two description lines, then hub attribution and
-updated date. Keep the header/footer dividers; omit repeated
+updated date. Keep the header divider; use spacing above the footer and omit repeated
 row and example-content rules. Account navigation retains **Sign in**. Capture
 reuses labelled native controls, private defaults and explicit success/failure.
 
@@ -510,11 +530,11 @@ item disclosures, with one item open initially. Sections and items retain native
 keyboard and no-JavaScript disclosure behavior; resource titles open real
 external links. Preview mode suppresses fictional identity navigation, automatic URL selection
 updates and initial item scrolling. Both preview and reader offer **Copy link to
-this item** from the first render: a quiet text button, live copied confirmation
+this item** once its JavaScript handler is ready: a quiet text button, live copied confirmation
 and a selectable URL if clipboard access fails. Copying keeps the item open and
 never navigates. Preview addresses reopen the selected item on the landing page;
 real collection addresses reopen it inside its collection. Neither uses fictional
-collection routes. The button becomes available after hydration; without JavaScript,
+collection routes. The button is absent before hydration; without JavaScript,
 a native **Open item link to copy its address** fallback remains available.
 The item context has an explicit client boundary shared by reader and preview,
 so development and production use the same presentation contract.
@@ -563,7 +583,7 @@ immutable ID. Private listing authorization remains backend-owned.
 
 One self-hosted typeface (Schibsted Grotesk) keeps the brand consistent across
 platforms; the wordmark stays the plain text
-`linkhub` with no icon. All routes share one left content edge, one row
+`ntumie.` with no icon. All routes share one left content edge, one row
 vocabulary (collections and resources), one button vocabulary and one form
 control style (fields under `main` share border, hover and focus states).
 Accent blue is reserved for primary actions, inline text links, focus and
@@ -589,6 +609,20 @@ collection-list rows use whitespace without decorative separators. Exact values 
   Only scrolling in the collection sheet triggers the fold, not the independent
   discussion column. Small/short viewports
   retain natural document scrolling; without JavaScript the full heading remains.
+  At desktop panel sizes (at least 1024px wide and 600px tall), scrolling down
+  within 192px of the resource list's end loads the next batch. Opening the page,
+  resizing, or collapsing a section does not start automatic loads. Retain rows,
+  scroll position and focus, announce appended results, and permit only one
+  request at a time and one automatic attempt per cursor. Errors require explicit
+  retry and respect cooldowns; authorization failures still revalidate the page.
+  A centered More resources control remains for mobile/short viewports, native
+  navigation, keyboard use and short/collapsed lists. It retains bottom padding
+  equal to the sheet's horizontal content inset. Mobile does not auto-load, so
+  discussion below the list stays reachable.
+  Resource titles stay ink at rest and turn primary blue only on direct hover
+  (fine pointers) or keyboard focus, without underlines or disclosure chevrons.
+  Title focus outlines identify the link itself. Whitespace continues toggling
+  inline details; links, copy actions and text selection remain independent.
   From 1024 px a Contributors section shows linked avatars and a total at the top
   of the sidebar. The collection header shows up to three stored item-derived tag names,
   then +N tags for the remaining names; omit the tag row when empty.
@@ -672,7 +706,7 @@ only the final deletion confirmation receives destructive emphasis.
 
 Separate `/sign-in` and `/sign-up` share a centered 400px email-first column,
 slightly above the viewport midpoint, with stable placement across subsequent
-screens. Sign-in reads Sign in to linkhub; signup reads Create your account.
+screens. Sign-in reads Sign in to ntumie.; signup reads Create your account.
 Visible email label/input, full-width primary Continue with email, quiet or, then
 full-width secondary Continue with Google. The footer switches entry while keeping
 the validated destination. Passkeys and factors appear only in subsequent steps.
@@ -709,3 +743,14 @@ for self-deactivation, Cancel deletion for an unexpired deletion schedule. Expla
 whether the person was signing in or saving a link. Keep the known email visible,
 use one primary consent button, and preserve the destination for fresh sign-in.
 A public visit without proof offers sign-in rather than both recovery options.
+
+### Reader refinement acceptance
+
+Collection tag overflow uses a native disclosure: the first three tags remain
+visible in the collapsed summary. Expansion shows one continuous wrapping list
+of all tags, with Fewer tags below it. It works with keyboard or touch, including
+without JavaScript. The tag region has bounded height and keyboard scrolling.
+Tags themselves remain labels, not filters. Discussion text uses the body scale;
+actions and timestamps align to the shared button height, including 44 px touch
+targets. The collection reader is the reference for the next screen-by-screen
+design adaptation; this pass does not imply other screens have been audited.

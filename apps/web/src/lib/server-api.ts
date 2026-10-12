@@ -1,5 +1,5 @@
 import "server-only";
-import { webServerConfig } from "@linkhub/config/web-server";
+import { webServerConfig } from "@ntumie/config/web-server";
 import { headers } from "next/headers";
 import { type ApiPath, authCookies, sessionCookie } from "./http";
 import { serverGet, serverSend } from "./server-transport";

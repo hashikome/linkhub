@@ -1,4 +1,4 @@
-import type { Profile } from "@linkhub/types";
+import type { Profile } from "@ntumie/types";
 import { redirect } from "next/navigation";
 import { Feedback } from "../../components/feedback";
 import { FormNotice } from "../../components/form-notice";

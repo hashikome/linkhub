@@ -22,7 +22,7 @@ has its own name and @handle; subscriptions are a later slice. See
 
 ## Navigation and entry
 
-The lowercase `linkhub` wordmark links to the signed-in person's `/h/<hubId>`
+The lowercase `ntumie.` wordmark links to the signed-in person's `/h/<hubId>`
 or the `/hub` entry with explicit Create hub when they have no hub, and `/` when signed out. Discover stays in the header beside account controls.
 Signed-in visitors also have Save a link, the appearance control and an
 avatar-only account menu: Profile, Hub, Notifications, Settings, Manage when
@@ -37,8 +37,9 @@ sections and resource disclosures, with one item's details initially expanded.
 Section headings collapse or expand their links; resource titles open working
 external destinations. Fictional identities have no profile or hub links, and
 ordinary disclosure toggles never change the landing URL or scroll on arrival.
-Both demo and real collections offer “Copy link to this item” from the first
-render, with visible confirmation and a manual-copy fallback. Demo links reopen
+Both demo and real collections offer “Copy link to this item” once its JavaScript
+handler is ready, with visible confirmation and a manual-copy fallback. With
+JavaScript disabled, a native link opens the item address for copying. Demo links reopen
 the selected item on the landing page; collection links reopen it in its collection. The
 compact preview omits the full reader's sharing and discussion controls.
 Its “A web worth keeping” collection pairs Forte Labs' bookmark-organization
@@ -48,10 +49,11 @@ method and a perspective on cultivating and sharing knowledge.
 | Surface | Route and data | Main action |
 | --- | --- | --- |
 | Landing | `/` | Save your first link; Discover in the header |
+| About | `/about`; real Support and maker-portfolio links | Share ntumie.; Join ntumie. in the footer goes directly to `/sign-up` (Discover when signed in) |
 | Discover | `/discover`; `GET /api/v1/discover` | Open a collection |
 | Hub | `/@handle` or `/h/<hubId>`; hub lookup and authorized collection list | Open a collection |
 | Collection | `/c/<id>`; collection, resources and discussion APIs | Open a resource or referenced collection |
-| Item details | `?item=<id>` on either collection address; authorized single-resource API | Expand metadata and attribution inline; open the destination |
+| Item details | `/c/<collectionId>?item=<id>`; authorized single-resource API | Expand metadata and attribution inline; open the destination |
 | Capture | `/capture`, `/capture/<draftId>` | Save one or two links |
 | Section authoring | `/c/<id>/sections`, optional `?section=<id>` | Owner/contributor adds a nonempty section or edits its description |
 | Collection editing | `/c/<id>/edit` | Owner edits collection details; owners/contributors manage sections and reorder items |
@@ -121,6 +123,13 @@ unavailable entries. Headings group resources without creating access boundaries
 There are no title overrides, parent breadcrumbs, remote thumbnails or favicon
 fetches. Preserve backend ordering and ordinary anchor/modified-click behavior.
 Descriptions render as text with line breaks; do not inject API strings as HTML.
+Resource titles turn blue on direct hover or keyboard focus, without underlines
+or repeated chevrons. Other item space still expands/collapses details inline.
+Desktop resource panels load the next batch as the reader scrolls near the end;
+mobile and short viewports retain a centered **More resources** control, keeping
+discussion reachable. The manual control also remains a desktop fallback for
+keyboard use and short/collapsed lists. Loading preserves position and focus;
+failures require explicit retry, with existing results retained.
 
 Owners edit title, description and comment settings together through a native form. Validation
 failures retain the draft. Version conflicts show current values and require a
@@ -151,7 +160,7 @@ private collection in one transaction. A failed save leaves no empty hub.
 
 ## Account and appearance
 
-Settings has Profile, Hub and Notifications sections, plus Security at
+Settings has Profile, Hub, Notifications and On this device sections, plus Security at
 `/settings/security`. Profile edits username, full name and bio; email and
 member-since are read-only. Hub
 edits name, **Show owner**, description and handle, and shows its immutable ID.
@@ -164,6 +173,18 @@ editing. Handle availability is advisory; backend validation decides the write.
 Missing hubs show a first-save action instead of empty required fields.
 Hub.showOwner controls the public ownership connection in both directions;
 profile names remain visible, and authorization is unchanged.
+
+External resources open in new tabs by default, keeping the collection available
+while the reader explores another site. On this device offers **Open external
+resources in the same tab**, off by default.
+The preference belongs to this browser, not the account: desktop and mobile can
+choose independently. A one-year cookie retains the opt-in across sign-out;
+clearing browser data or turning it off restores new-tab behavior. Native links
+honor it before hydration and without JavaScript, including paginated resources.
+All ntumie. destinations stay same-tab, regardless of collection ownership or
+whether an absolute ntumie. URL was stored as an ordinary link. External links
+retain no-referrer behavior and new tabs receive no opener; new-tab links carry
+an accessible hint. Browser modifier keys and menus retain their usual behavior.
 
 Account access and deletion is linked from Profile. Signed-in users choose
 email-confirmed deactivation or deletion. Signed-out visitors encounter recovery
@@ -180,8 +201,10 @@ a missing image is never presented as proof that no provider account exists.
 See [the avatar contract](identity-and-handles.md#profile-pictures).
 Appearance lives only in the header: System → Light → Dark → System. Signed-out
 visitors follow the system preference; saved appearance applies only with a
-valid session. The footer has copyright, “Good links belong together.”, Share linkhub and
-Support. Readiness is API monitoring, with no client status page.
+valid session. Product footers show About ntumie. and “Good links belong together.” Home shows
+only About ntumie.; About shows Join ntumie. to `/sign-up`, or Discover when signed
+in. About holds site sharing, Support and the maker’s portfolio. No year or divider.
+See [ADR-0056](../engineering-decisions/0056-about-collection-and-footer-navigation.md). Readiness is API monitoring, with no client status page.
 
 Notifications currently lists service invitations as expandable messages,
 unread first. Opening it resets the badge; Clear all hides existing entries.

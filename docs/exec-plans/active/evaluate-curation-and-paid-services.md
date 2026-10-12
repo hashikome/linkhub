@@ -46,7 +46,7 @@ public creation defaults; billing and quota enforcement remain unimplemented.
   intake/application handling are accepted future scope in
   [ADR-0050](../../engineering-decisions/0050-community-entities-and-intake-integration.md).
   The [owning backlog task](../../backlog/curation-and-paid-services.md#community-access-and-intake-integration-task)
-  links the shared product brief with team and client views, LinkHub first and
+  links the shared product brief with team and client views, ntumie. first and
   portfolio next. Community implementation requires a separate selected milestone;
   documenting the service does not start another active implementation.
 

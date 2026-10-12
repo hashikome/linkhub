@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { webServerConfig } from "@linkhub/config/web-server";
+import { webServerConfig } from "@ntumie/config/web-server";
 import {
   permalink,
   postJson,
@@ -198,6 +198,9 @@ it("keeps only recognized Settings sections in sign-in return paths", async () =
   const { safeReturn } = await import("../src/lib/http");
   expect(safeReturn("/settings?section=hub&next=https://evil.test")).toBe("/settings?section=hub");
   expect(safeReturn("/settings?section=notifications")).toBe("/settings?section=notifications");
+  expect(safeReturn("/settings?section=device&next=https://evil.test")).toBe(
+    "/settings?section=device",
+  );
   expect(safeReturn("/settings?section=unknown")).toBe("/settings");
   expect(safeReturn("/manage/analytics?scope=service")).toBe("/manage/analytics");
 });

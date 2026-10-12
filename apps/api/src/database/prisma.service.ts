@@ -5,7 +5,7 @@ import { readSecret } from "src/config/secret";
 import { type Prisma, PrismaClient } from "src/generated/prisma/client";
 import { AUTHORITY_LOCK, authorityContext } from "./authority-context";
 
-// 5436 = postgres default +4, linkhub's stack-wide local port offset.
+// 5436 = postgres default +4, ntumie.'s stack-wide local port offset.
 const DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:5436/nslinkhub";
 
 @Injectable()

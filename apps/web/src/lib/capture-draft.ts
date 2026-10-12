@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { type CaptureLink, maxCaptureLinks } from "@linkhub/types";
+import { type CaptureLink, maxCaptureLinks } from "@ntumie/types";
 import { captureUrl, isUuid } from "./validation";
 
 export const draftTtl = 1800;

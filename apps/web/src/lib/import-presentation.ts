@@ -1,4 +1,4 @@
-import type { ImportRowStatus } from "@linkhub/types";
+import type { ImportRowStatus } from "@ntumie/types";
 
 export const importStatusLabels: Record<ImportRowStatus, string> = {
   looking_up: "Processing",

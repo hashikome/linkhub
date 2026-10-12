@@ -1,4 +1,4 @@
-import type { ManagedCollectionAction } from "@linkhub/types";
+import type { ManagedCollectionAction } from "@ntumie/types";
 import { sharePath } from "./sharing";
 
 /** Destination for an API-authorized action. Each destination rechecks access. */

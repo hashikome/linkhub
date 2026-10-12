@@ -2,17 +2,23 @@
 
 import { useEffect, useState } from "react";
 
-const questions = [
+const homeQuestions = [
   "A reading list?",
   "A project reference?",
   "A little corner of the web worth sharing?",
+];
+const aboutQuestions = [
+  "Found a good read?",
+  "Built a useful collection?",
+  "Know someone who would enjoy it?",
 ];
 const characterDelay = 65;
 const holdDelay = 3200;
 
 // Types each question, holds it, then moves on; loops quietly. Screen readers
 // get the full set once, and reduced-motion/no-JS readers get static text.
-export function LandingQuestions() {
+export function LandingQuestions({ about = false }: { about?: boolean }) {
+  const questions = about ? aboutQuestions : homeQuestions;
   const [frame, setFrame] = useState({ question: 0, characters: 0 });
   const [reduced, setReduced] = useState(false);
 
@@ -37,7 +43,7 @@ export function LandingQuestions() {
       finished ? holdDelay : characterDelay,
     );
     return () => window.clearTimeout(timer);
-  }, [frame, reduced]);
+  }, [frame, reduced, questions]);
 
   return (
     <div className="landing-questions">

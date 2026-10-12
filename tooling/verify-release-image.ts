@@ -208,7 +208,7 @@ try {
     const sent=await fetch(root+'/auth/code/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})});if(!sent.ok)process.exit(1);
     const secret=readSecret('BETTER_AUTH_SECRET');
     const intent=await db.emailOutbox.findFirstOrThrow({where:{recipientKey:emailKey(readSecret('EMAIL_SUPPRESSION_SECRET'),'recipient',email),state:'pending'}});
-    const code=unseal(intent.payload,secret).text.match(/\\b\\d{8}\\b/)[0];
+    const code=unseal(intent.payload,secret).text.match(/^\\d{6}$/m)[0];
     const r=await fetch(root+'/auth/code/verify',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email,code,name:'Restore'})});if(!r.ok)process.exit(1);
     const t=r.headers.get('set-auth-token');
     const c=await fetch(root+'/collections',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+t},body:JSON.stringify({title:'Restore check',published:true})});if(!c.ok)process.exit(1);

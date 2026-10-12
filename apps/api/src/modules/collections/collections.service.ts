@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type {
   CollectionShareView,
   CursorMeta,
@@ -9,9 +10,8 @@ import type {
   ShareDescriptor,
   SharedCollection,
   Collection as WireCollection,
-} from "@linkhub/types";
-import { type ActivityEntry, auditActions, contentActions } from "@linkhub/types";
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+} from "@ntumie/types";
+import { type ActivityEntry, auditActions, contentActions } from "@ntumie/types";
 import { isUUID } from "class-validator";
 import { CursorQueryDto } from "src/common/dto/cursor-query.dto";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";

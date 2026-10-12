@@ -1,4 +1,4 @@
-import type { Collection } from "@linkhub/types";
+import type { Collection } from "@ntumie/types";
 import type { Metadata } from "next";
 import { Feedback } from "../../components/feedback";
 import { PaginatedList } from "../../components/paginated-list";

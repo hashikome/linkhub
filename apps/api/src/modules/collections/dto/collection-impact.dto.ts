@@ -1,4 +1,4 @@
-import type { CollectionImpactRequest } from "@linkhub/types";
+import type { CollectionImpactRequest } from "@ntumie/types";
 import { IsIn, IsOptional, Matches } from "class-validator";
 
 export class CollectionImpactDto implements CollectionImpactRequest {

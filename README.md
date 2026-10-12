@@ -1,8 +1,10 @@
-# LinkHub
+# ntumie.
 
-Save, organize, and share web resources in curated collections. LinkHub is a
-[Hashikome](https://github.com/hashikome) product, developed in this repository:
-[hashikome/linkhub](https://github.com/hashikome/linkhub).
+**ntumie. (formerly LinkHub)** turns related web resources into maintained,
+shareable guides. **Good links belong together.**
+
+Source: [hashikome/ntumie](https://github.com/hashikome/ntumie). The selected
+product domain is `ntumie.link`; choosing the domain does not announce a launch.
 
 The application is in development and is not deployed yet. The NestJS API owns
 the product rules; the Next.js web app uses its HTTP contracts.
@@ -34,8 +36,8 @@ extension are not implemented. Shared company infrastructure remains planned.
 Use Bun 1.3.14 (the CI version), Docker with Compose, and Git.
 
 ```bash
-git clone git@github.com:hashikome/linkhub.git
-cd linkhub
+git clone git@github.com:hashikome/ntumie.git
+cd ntumie
 bun install
 bun run infra:up
 (cd apps/api && bunx prisma migrate deploy)
@@ -54,12 +56,12 @@ and the web app. It does not seed synthetic content into development data.
 Local database and Redis configuration is built in; no `.env` is needed for
 the basic stack. Defaults are PostgreSQL on `127.0.0.1:5436` (database
 `nslinkhub`) and Redis on `127.0.0.1:6383`. The Compose project and containers
-use `linkhub`; workspace packages use `@linkhub/*`. The physical database keeps
+use `ntumie`; workspace packages use `@ntumie/*`. The physical database keeps
 its existing name so the rename does not reset development data.
 
 For an existing checkout, keep its PostgreSQL volume through the ignored root
 `.env` settings `POSTGRES_VOLUME_NAME=<existing-volume>` and
-`POSTGRES_VOLUME_EXTERNAL=true`. Fresh checkouts create `linkhub_pgdata`.
+`POSTGRES_VOLUME_EXTERNAL=true`. Fresh checkouts create `ntumie_pgdata`.
 See [local development](docs/runbooks/local-development.md) before switching an
 existing Compose project; never use `down --volumes` for a rename.
 
@@ -138,7 +140,7 @@ and [repository guide](AGENTS.md), then read the relevant authorities:
 - [Planning conventions](PLANS.md)
 - [Changelog](CHANGELOG.md)
 
-Historical decisions and completed plans retain the earlier NSLinkHub/ns-series
-names. Current ownership and branding are Hashikome/LinkHub; shared IAM and
-infrastructure implementation remain separate work. Application authorization
-stays product-owned.
+Historical decisions and completed plans retain the earlier LinkHub and
+NSLinkHub names. [ADR-0060](docs/engineering-decisions/0060-ntumie-repository-and-branding.md)
+records the rename and compatibility boundaries. Shared IAM and infrastructure
+implementation remain separate work. Application authorization stays product-owned.

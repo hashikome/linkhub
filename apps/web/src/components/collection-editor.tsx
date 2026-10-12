@@ -1,5 +1,5 @@
 "use client";
-import type { Collection } from "@linkhub/types";
+import type { Collection } from "@ntumie/types";
 import { useActionState } from "react";
 
 export type CollectionEditState = {

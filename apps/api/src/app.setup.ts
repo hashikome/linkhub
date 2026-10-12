@@ -1,5 +1,5 @@
 import { INestApplication, ValidationPipe } from "@nestjs/common";
-import { publicOrigins } from "@linkhub/config/public-origins";
+import { publicOrigins } from "@ntumie/config/public-origins";
 import { toNodeHandler } from "better-auth/node";
 import type { Express } from "express";
 import { json, raw, urlencoded } from "express";

@@ -1,6 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { Controller, Get, Query } from "@nestjs/common";
-import type { LinkPreview } from "@linkhub/types";
+import type { LinkPreview } from "@ntumie/types";
 import { appError } from "../../common/errors/app-exception";
 import { apiOk } from "../../common/utils/response.util";
 import {

@@ -26,9 +26,9 @@ export async function renderEmailChangeConfirmation(
   if (errors.length > 0) {
     throw new Error(`Invalid email-change confirmation input: ${errors.join("; ")}`);
   }
-  return renderCodeEmail("Confirm your linkhub email change", input, {
-    preview: "Confirm your linkhub email change",
-    lead: `You asked to change your linkhub account email to ${input.newEmail}. Here's your verification code to confirm this change:`,
+  return renderCodeEmail("Confirm your ntumie. email change", input, {
+    preview: "Confirm your ntumie. email change",
+    lead: `You asked to change your ntumie. account email to ${input.newEmail}. Here's your verification code to confirm this change:`,
     note: "If you didn't request this change, you can ignore this email — nothing changes without this confirmation.",
   });
 }

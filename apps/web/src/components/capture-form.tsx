@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { webServerConfig } from "@linkhub/config/web-server";
-import type { Collection } from "@linkhub/types";
+import { webServerConfig } from "@ntumie/config/web-server";
+import type { Collection } from "@ntumie/types";
 import type { CaptureDraft } from "../lib/capture-draft";
 import { queryValue, withCursor } from "../lib/http";
 import { serverRead } from "../lib/server-api";

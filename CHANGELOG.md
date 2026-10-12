@@ -9,6 +9,68 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Rename the product to **ntumie.** (formerly LinkHub), with `ntumie` repository
+  and package names. Update web, email, auth display names, API metadata and
+  current references. Preserve database storage, account origins and durable IDs.
+
+- Reconcile current product, interface and email documentation with the shipped
+  behavior; clarify historical naming exceptions, ID-only item links and completed
+  query batching. Keep the onboarding walkthrough pinned to the reviewed source.
+  Update reader browser regressions to recognize the native tag disclosure.
+  Align development-rendered preview checks with copy buttons appearing only
+  after hydration.
+
+- Record **ntumie.** as the selected product name and `ntumie.link` as the chosen
+  domain. Retain the slogan. ADR-0059 settles the name; ADR-0060 applies it to
+  the application, repository and packages.
+
+- Record curated guides as the defining product value, with a sourced GoodLinks
+  comparison and practical feature/copy decision questions. Retain the slogan
+  and document the original LinkHub working name; ADR-0059 now settles the name.
+
+- Home and About now share the reader’s collection components, including section
+  structure and resource details. Both fit desktop viewports with footer links
+  at the bottom-left; small screens retain natural scrolling.
+
+- Use Better Auth’s default six-digit email codes across sign-in, invitations
+  and account confirmation. Update entry validation and copy while preserving
+  expiry, single-use proofs, resend throttling and shared verification budgets.
+
+- Add About ntumie. with a useful-link collection, Support, the maker’s portfolio
+  and site sharing. Simplify product footers to the About link and the body-size
+  tagline, without a year or divider. Home shows only the About link; About offers
+  direct sign-up, or Discover when signed in. Align the landing example’s heading
+  hierarchy and description styling with the collection reader.
+
+- Show Copy link to this item only once its JavaScript handler is ready. Keep
+  the native item-link fallback when JavaScript is disabled.
+
+- Refine the collection reader with an h1/h2/h3 heading hierarchy, larger section
+  headings and readable section descriptions in regular body ink. Make extra collection tags accessible
+  through native disclosure as one wrapping group, with Fewer tags underneath;
+  improve discussion text and touch targets.
+
+- Give resource titles blue hover/focus feedback without underlines or chevrons.
+  Automatically load the next resource batch when scrolling near the bottom of
+  the desktop panel; retain a centered manual control for mobile, short viewports,
+  keyboard use and native navigation. Preserve position, focus and explicit retry.
+
+- Give the collection reader's More resources control bottom padding matching
+  the resource inset, keeping it clear of the sheet border at every screen size.
+
+- Add Settings → On this device → Open external resources in the same tab, off by
+  default. External resources otherwise open in new tabs, keeping the collection
+  available while browsing elsewhere. Save the choice in this browser instead
+  of syncing it across devices.
+  ntumie. destinations stay in the same tab; external new tabs retain no-referrer
+  protection and have no opener. Native forms, initial HTML and paginated
+  resources honor the preference, including without JavaScript.
+
+- Isolate audit-pagination fixture timestamps from preceding test events to
+  prevent intermittent extra-page failures in verification. Bound the held-
+  collection pagination fixture to three pages instead of scanning collections
+  accumulated by earlier suites and hitting the runner timeout.
+
 - Batch collection-reference authorization in resource pages and exports, and
   accepted-answer/reply loading in discussion. Reuse authorized collections,
   hold checks and returned rows for comment mutation responses. Keep current

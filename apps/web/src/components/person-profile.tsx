@@ -1,4 +1,4 @@
-import type { PersonProfile as PersonProfileData } from "@linkhub/types";
+import type { PersonProfile as PersonProfileData } from "@ntumie/types";
 import { notFound } from "next/navigation";
 import { type ApiPath, withCursor } from "../lib/http";
 import { serverRead } from "../lib/server-api";

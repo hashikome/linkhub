@@ -1,4 +1,4 @@
-import type { ShareAnalytics, ShareKind } from "@linkhub/types";
+import type { ShareAnalytics, ShareKind } from "@ntumie/types";
 import type { Metadata } from "next";
 import { LocalTime } from "../../../components/local-time";
 import { OperatorFailure } from "../../../components/operator-failure";

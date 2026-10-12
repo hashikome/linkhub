@@ -1,6 +1,6 @@
-import type { Collection, Resource } from "@linkhub/types";
-import { CollectionMeta, Tags } from "./primitives";
-import { ResourceSections } from "./resource-sections";
+import type { Collection, Resource } from "@ntumie/types";
+import { CollectionPreview } from "./collection-preview";
+import { CollectionMeta } from "./primitives";
 
 // Fictional, presentation-only data. Preview mode keeps its identities off
 // record routes. Titles open resources; copied item links select this demo.
@@ -8,7 +8,7 @@ export function CollectionExample({ selectedItemId }: { selectedItemId?: string 
   // Stable sample history: age labels progress naturally instead of resetting.
   const updatedAt = "2026-10-08T10:00:00.000Z";
   const ada = { userId: "019a0000-0000-7000-8000-000000000001", username: "ada" };
-  const collection: Collection = {
+  const collection = {
     id: "019a0000-0000-7000-8000-000000000002",
     hubId: "019a0000-0000-7000-8000-000000000003",
     hub: {
@@ -27,7 +27,7 @@ export function CollectionExample({ selectedItemId }: { selectedItemId?: string 
     version: 1,
     createdAt: updatedAt,
     updatedAt,
-  };
+  } satisfies Collection;
   const common = {
     collectionId: collection.id,
     linkedCollectionId: null,
@@ -71,28 +71,17 @@ export function CollectionExample({ selectedItemId }: { selectedItemId?: string 
     },
   ];
   return (
-    <figure className="collection-example collection-sheet" aria-label="Example collection">
-      <div className="sheet-bar">
-        <span className="context">{collection.hub?.name}</span>
-        <span className="example-badge">Example</span>
-      </div>
-      <div className="page-heading">
-        <h2>{collection.title}</h2>
-        <p className="description">{collection.description}</p>
-        <Tags tags={collection.tags} limit={3} />
-        <CollectionMeta item={collection} preview />
-      </div>
-      <ResourceSections
-        items={items}
-        selectedItem={
-          items.find((item) => item.id === selectedItemId && item.kind !== "heading") ?? items[1]
-        }
-        preview
-      />
-      <figcaption className="sr-only">
-        Example collection. Click a section heading to show or hide its links. Click a link title to
-        visit the resource, or the space around it to show its details.
-      </figcaption>
-    </figure>
+    <CollectionPreview
+      context={collection.hub.name}
+      title={collection.title}
+      description={collection.description}
+      tags={collection.tags}
+      metadata={<CollectionMeta item={collection} preview />}
+      example
+      items={items}
+      selectedItem={
+        items.find((item) => item.id === selectedItemId && item.kind !== "heading") ?? items[1]
+      }
+    />
   );
 }

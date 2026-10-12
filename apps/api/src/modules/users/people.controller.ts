@@ -1,6 +1,6 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
-import type { PersonProfile } from "@linkhub/types";
+import type { PersonProfile } from "@ntumie/types";
 import { CursorQueryDto } from "../../common/dto/cursor-query.dto";
 import { appError } from "../../common/errors/app-exception";
 import { apiOk } from "../../common/utils/response.util";

@@ -1,4 +1,4 @@
-import type { UpdateCollectionRequest } from "@linkhub/types";
+import type { UpdateCollectionRequest } from "@ntumie/types";
 import { IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from "class-validator";
 
 export class UpdateCollectionDto implements UpdateCollectionRequest {

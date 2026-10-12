@@ -1,5 +1,5 @@
-import type { ImportDraftView, ImportRowView } from "@linkhub/types";
-import { importRowStatuses } from "@linkhub/types";
+import type { ImportDraftView, ImportRowView } from "@ntumie/types";
+import { importRowStatuses } from "@ntumie/types";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { FormNotice } from "../../../../components/form-notice";

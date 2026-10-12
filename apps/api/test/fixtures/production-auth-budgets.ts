@@ -70,7 +70,7 @@ async function main() {
       },
     });
     const payload = unseal(row.payload ?? "", process.env.BETTER_AUTH_SECRET ?? "");
-    const code = payload.text.match(/\b\d{8}\b/)?.[0];
+    const code = payload.text.match(/^\d{6}$/m)?.[0];
     assert.equal(
       (await post("/code/verify", { email: addresses[1], code })).status,
       200,
@@ -81,12 +81,12 @@ async function main() {
     // the shared identity budget without creating a session or sending mail.
     for (let i = 0; i < 15; i++)
       assert.equal(
-        (await post("/code/verify", { email: addresses[4], code: "00000000" })).status,
+        (await post("/code/verify", { email: addresses[4], code: "000000" })).status,
         400,
         "verification within budget",
       );
     assert.equal(
-      (await post("/code/verify", { email: addresses[4], code: "00000000" })).status,
+      (await post("/code/verify", { email: addresses[4], code: "000000" })).status,
       429,
       "sixteenth identity verification",
     );

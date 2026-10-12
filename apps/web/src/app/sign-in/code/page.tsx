@@ -1,4 +1,4 @@
-import { webServerConfig } from "@linkhub/config/web-server";
+import { webServerConfig } from "@ntumie/config/web-server";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { NativeForm } from "../../../components/native-form";

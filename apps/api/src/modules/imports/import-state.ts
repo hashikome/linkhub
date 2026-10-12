@@ -5,7 +5,7 @@ import type {
   ImportRowStatus,
   ImportRowView,
   ImportSourceKind,
-} from "@linkhub/types";
+} from "@ntumie/types";
 import { appError } from "../../common/errors/app-exception";
 import type { ImportDraft, ImportFolder, ImportRow, Prisma } from "../../generated/prisma/client";
 

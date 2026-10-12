@@ -1,6 +1,6 @@
 # Repository Guide
 
-This repository is the source of truth for the LinkHub product and
+This repository is the source of truth for the ntumie. product and
 engineering decisions. External documents are references only. Keep this file
 short: it is a map for contributors and coding agents, not a complete manual.
 

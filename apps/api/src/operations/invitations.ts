@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import { publicOrigins } from "@linkhub/config/public-origins";
-import { renderServiceInvitation } from "@linkhub/email";
+import { publicOrigins } from "@ntumie/config/public-origins";
+import { renderServiceInvitation } from "@ntumie/email";
 import { isEmail } from "class-validator";
 import { appError } from "../common/errors/app-exception";
 import type { PrismaService } from "../database/prisma.service";

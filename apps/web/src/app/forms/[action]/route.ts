@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { webServerConfig } from "@linkhub/config/web-server";
+import { webServerConfig } from "@ntumie/config/web-server";
 import type {
   CaptureLink,
   CreateCommentRequest,
@@ -11,7 +11,7 @@ import type {
   UpdateCommentRequest,
   UpdateProfileRequest,
   VerifySignInCodeRequest,
-} from "@linkhub/types";
+} from "@ntumie/types";
 import {
   accountActions,
   collectionAddress,
@@ -20,12 +20,13 @@ import {
   operationActions,
   operationReasons,
   signInCodePurposes,
-} from "@linkhub/types";
+} from "@ntumie/types";
 import { auditContinuation, auditQuery } from "../../../lib/audit-query";
 import type { CaptureDraft } from "../../../lib/capture-draft";
 import { draftCookie, draftRoom, readDraft, saveDraft } from "../../../lib/capture-server";
 import { completeSignIn } from "../../../lib/complete-sign-in";
 import { serverCookie } from "../../../lib/cookies";
+import { resourceSameTabCookie } from "../../../lib/device-preferences";
 import {
   accountFlowCookie,
   flowCookie,
@@ -320,6 +321,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
           : "/notifications?notice=unavailable",
     );
   }
+  if (action === "device-preferences") {
+    const values = form.getAll("resourceSameTab");
+    if (values.length > 1 || (values.length === 1 && values[0] !== "on"))
+      return new Response("Invalid resource preference", { status: 400 });
+    const enabled = values[0] === "on";
+    const cookie = resourceSameTabCookie(enabled);
+    if (request.headers.get("accept")?.includes("application/json"))
+      return Response.json(
+        { ok: true, data: { resourceSameTab: enabled } },
+        { headers: { "Set-Cookie": cookie, "Cache-Control": "private, no-store, max-age=0" } },
+      );
+    return redirectResponse("/settings?section=device&notice=device-saved", [cookie]);
+  }
   if (action === "theme") {
     const theme = form.get("theme");
     if (!["light", "dark", "system"].includes(theme ?? ""))
@@ -560,9 +574,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
   if (action === "code-verify") {
     const flow = await readFlow();
     if (!flow) return redirectResponse("/sign-in?notice=expired");
-    // Pasted codes often carry spaces or dashes ("3368 6575"); only digits count.
+    // Pasted codes often carry spaces or dashes ("336 865"); only digits count.
     const code = (form.get("code") ?? "").replace(/[\s-]/g, "");
-    if (!/^\d{8}$/.test(code)) return redirectResponse("/sign-in/code?notice=invalid");
+    if (!/^\d{6}$/.test(code)) return redirectResponse("/sign-in/code?notice=invalid");
     const result = await formPost(
       request,
       flow.invitationToken ? "/api/v1/auth/invitations/verify" : "/api/v1/auth/code/verify",

@@ -1,4 +1,4 @@
-import type { CreateShareRequest } from "@linkhub/types";
+import type { CreateShareRequest } from "@ntumie/types";
 import { IsEmail, IsIn, IsOptional, IsString } from "class-validator";
 
 export class CreateShareDto implements CreateShareRequest {

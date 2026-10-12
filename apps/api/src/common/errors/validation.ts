@@ -1,4 +1,4 @@
-import type { ValidationIssue, ValidationRule } from "@linkhub/types";
+import type { ValidationIssue, ValidationRule } from "@ntumie/types";
 import { getMetadataStorage, type ValidationError } from "class-validator";
 import { appError } from "./app-exception";
 

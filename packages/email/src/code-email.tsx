@@ -90,8 +90,8 @@ const footerStyles = {
   tagline: { fontSize: "12px", lineHeight: "18px", color: "#6b7280", margin: "2px 0 0" },
 } as const;
 
-// The same footer as the web: a support prompt linking the support page (which
-// lists how to reach us), then "© <year> linkhub" over "Good links belong together.".
+// Shared email footer: a support prompt linking the support page (which
+// lists how to reach us), then "© <year> ntumie." over "Good links belong together.".
 export function EmailFooter({
   supportUrl,
   prompt = "Didn't request this? You can safely ignore this email.",
@@ -109,7 +109,7 @@ export function EmailFooter({
           Visit support
         </Link>
       </Text>
-      <Text style={footerStyles.brand}>© {new Date().getUTCFullYear()} linkhub</Text>
+      <Text style={footerStyles.brand}>© {new Date().getUTCFullYear()} ntumie.</Text>
       <Text style={footerStyles.tagline}>Good links belong together.</Text>
     </>
   );
@@ -131,7 +131,7 @@ export function CodeEmail({ input, copy }: { input: CodeEmailBaseInput; copy: Co
       <Preview>{copy.preview}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
-          <Text style={styles.wordmark}>linkhub</Text>
+          <Text style={styles.wordmark}>ntumie.</Text>
           <Text style={styles.lead}>{copy.lead}</Text>
           <Text style={styles.code}>{input.code}</Text>
           <Text style={styles.validity}>

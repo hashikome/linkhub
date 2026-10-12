@@ -1,4 +1,4 @@
-import type { Collection, Resource } from "@linkhub/types";
+import type { Collection, Resource } from "@ntumie/types";
 import type { Metadata } from "next";
 import { CollectionFeedback } from "../../../../components/collection-feedback";
 import { SectionEditor } from "../../../../components/section-editor";

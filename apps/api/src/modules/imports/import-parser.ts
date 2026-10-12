@@ -1,4 +1,4 @@
-import type { ImportSourceKind } from "@linkhub/types";
+import type { ImportSourceKind } from "@ntumie/types";
 import { Parser } from "htmlparser2";
 import { appError } from "../../common/errors/app-exception";
 import { normalizeTags } from "../../common/utils/tags.util";

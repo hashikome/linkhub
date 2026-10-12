@@ -1,5 +1,5 @@
-import type { AuditAction, PersonRef, Resource as WireResource } from "@linkhub/types";
 import { Injectable, NotFoundException } from "@nestjs/common";
+import type { AuditAction, PersonRef, Resource as WireResource } from "@ntumie/types";
 import { CursorQueryDto } from "src/common/dto/cursor-query.dto";
 import { ResourceKind } from "src/common/enums/resource-kind.enum";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";

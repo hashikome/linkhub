@@ -1,4 +1,4 @@
-import type { PersonProfile as PersonProfileData } from "@linkhub/types";
+import type { PersonProfile as PersonProfileData } from "@ntumie/types";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PersonProfile } from "../../../components/person-profile";

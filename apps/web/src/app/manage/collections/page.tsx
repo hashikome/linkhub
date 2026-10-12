@@ -1,4 +1,4 @@
-import type { ManagedCollection, SessionView } from "@linkhub/types";
+import type { ManagedCollection, SessionView } from "@ntumie/types";
 import type { Metadata } from "next";
 import { FormNotice } from "../../../components/form-notice";
 import { managedCollectionsRows } from "../../../components/manage-rows";

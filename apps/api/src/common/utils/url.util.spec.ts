@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { collectionAddress, isPublicLinkHost } from "@linkhub/types";
+import { collectionAddress, isPublicLinkHost } from "@ntumie/types";
 import { publicLinkUrl } from "./url.util";
 
 describe("public link addresses", () => {

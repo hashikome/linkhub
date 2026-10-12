@@ -45,7 +45,7 @@ async function issue() {
     where: { recipientKey: emailKey(suppressionSecret, "recipient", email) },
     orderBy: { createdAt: "desc" },
   });
-  const code = unseal(mail.payload ?? "", secret).text.match(/^\d{8}$/m)?.[0];
+  const code = unseal(mail.payload ?? "", secret).text.match(/^\d{6}$/m)?.[0];
   return { email, code };
 }
 async function pending() {
@@ -110,7 +110,7 @@ it("requires explicit consent after verified absence; creates one account and op
 });
 it("bad and exhausted codes cannot stage account creation", async () => {
   const proof = await issue();
-  const wrong = proof.code === "00000000" ? "11111111" : "00000000";
+  const wrong = proof.code === "000000" ? "111111" : "000000";
   for (let attempt = 0; attempt < 3; attempt++) {
     const response = await call("/code/verify", { email: proof.email, code: wrong });
     expect(response.status).toBe(400);

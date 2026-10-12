@@ -1,4 +1,4 @@
-import type { UpdateProfileRequest } from "@linkhub/types";
+import type { UpdateProfileRequest } from "@ntumie/types";
 import { Transform } from "class-transformer";
 import {
   IsBoolean,

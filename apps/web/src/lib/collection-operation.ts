@@ -1,11 +1,11 @@
 "use server";
-import { webServerConfig } from "@linkhub/config/web-server";
+import { webServerConfig } from "@ntumie/config/web-server";
 import type {
   CreateShareRequest,
   LinkSharingResult,
   SetLinkSharingRequest,
   TransferCollectionRequest,
-} from "@linkhub/types";
+} from "@ntumie/types";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { CollectionOperationState } from "../components/collection-operation-fields";

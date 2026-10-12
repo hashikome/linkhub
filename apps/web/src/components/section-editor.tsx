@@ -1,5 +1,5 @@
 "use client";
-import type { Resource } from "@linkhub/types";
+import type { Resource } from "@ntumie/types";
 import { useActionState } from "react";
 export type SectionEditState = {
   title: string;

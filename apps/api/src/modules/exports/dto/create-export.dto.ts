@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import type { CreateExportRequest } from "@linkhub/types";
+import type { CreateExportRequest } from "@ntumie/types";
 import {
   ArrayMaxSize,
   ArrayMinSize,

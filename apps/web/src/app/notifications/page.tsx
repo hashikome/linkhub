@@ -1,4 +1,4 @@
-import type { NotificationView } from "@linkhub/types";
+import type { NotificationView } from "@ntumie/types";
 import type { Metadata } from "next";
 import { FormNotice } from "../../components/form-notice";
 import { Updated } from "../../components/local-time";

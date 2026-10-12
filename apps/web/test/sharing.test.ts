@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { createShareOpenEvent, shareAttributionFromParams } from "@linkhub/types";
+import { createShareOpenEvent, shareAttributionFromParams } from "@ntumie/types";
 import { safeReturn } from "../src/lib/http";
 
 describe("share event client helpers", () => {

@@ -39,7 +39,7 @@ async function code(email: string) {
     where: { recipientKey: emailKey(suppressionSecret, "recipient", email), state: "pending" },
     orderBy: { createdAt: "desc" },
   });
-  return unseal(row.payload ?? "", secret).text.match(/^\d{8}$/m)?.[0] ?? "";
+  return unseal(row.payload ?? "", secret).text.match(/^\d{6}$/m)?.[0] ?? "";
 }
 async function signup() {
   const email = `account-${crypto.randomUUID()}@example.com`;
@@ -267,7 +267,7 @@ it("discovers only the eligible recovery action after sign-in email proof, witho
     const sent = await call("/code/send", { email: owner.email });
     expect(sent.status).toBe(200);
     expect(await sent.json()).toEqual({ success: true });
-    expect((await call("/code/verify", { email: owner.email, code: "00000000" })).status).toBe(400);
+    expect((await call("/code/verify", { email: owner.email, code: "000000" })).status).toBe(400);
     const proof = await code(owner.email);
     const broken = createDeliveryAuth({
       ...config,
@@ -358,6 +358,6 @@ it("discovers only the eligible recovery action after sign-in email proof, witho
     const before = await prisma.emailOutbox.count();
     expect((await call("/code/send", { email: owner.email })).status).toBe(200);
     expect(await prisma.emailOutbox.count()).toBe(before);
-    expect((await call("/code/verify", { email: owner.email, code: "00000000" })).status).toBe(400);
+    expect((await call("/code/verify", { email: owner.email, code: "000000" })).status).toBe(400);
   }
 });

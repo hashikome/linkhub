@@ -1,4 +1,4 @@
-import type { CreateExternalResourceRequest } from "@linkhub/types";
+import type { CreateExternalResourceRequest } from "@ntumie/types";
 import {
   ArrayMaxSize,
   IsArray,

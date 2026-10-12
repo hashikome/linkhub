@@ -1,6 +1,6 @@
 import "server-only";
-import { webServerConfig } from "@linkhub/config/web-server";
-import { type AccountAction, accountActions } from "@linkhub/types";
+import { webServerConfig } from "@ntumie/config/web-server";
+import { type AccountAction, accountActions } from "@ntumie/types";
 import { cookies } from "next/headers";
 import { serverCookie } from "./cookies";
 import { readFormData } from "./form-body";

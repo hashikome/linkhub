@@ -7,7 +7,7 @@ import {
   type ImportSourceKind,
   importRowStatuses,
   importSourceKinds,
-} from "@linkhub/types";
+} from "@ntumie/types";
 import {
   ArrayMaxSize,
   ArrayMinSize,

@@ -1,4 +1,4 @@
-import { type SignInCodePurpose, signInCodePurposes } from "@linkhub/types";
+import { type SignInCodePurpose, signInCodePurposes } from "@ntumie/types";
 import { emailOTP } from "better-auth/plugins";
 import { AppException, appError } from "../common/errors/app-exception";
 import { AUTHORITY_LOCK } from "../database/authority-context";
@@ -244,7 +244,7 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                 return failure(400);
               if (
                 path.endsWith("confirm") &&
-                (typeof body.code !== "string" || !/^\d{8}$/.test(body.code))
+                (typeof body.code !== "string" || !/^\d{6}$/.test(body.code))
               )
                 return failure(400);
               lifecycle = await accountActionContext(tx, secret, body, signedIn);
@@ -300,7 +300,6 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
               plugins: [
                 emailOTP({
                   disableSignUp: awaitingCreation,
-                  otpLength: 8,
                   expiresIn: 300,
                   allowedAttempts: 3,
                   resendStrategy: "rotate",
@@ -371,7 +370,7 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                 new Map([[`sign-in-otp-${verification.invitation.email}`, invitationIdentifier]]),
               );
               if (verifyInvitation) {
-                if (typeof body.code !== "string" || !/^\d{8}$/.test(body.code))
+                if (typeof body.code !== "string" || !/^\d{6}$/.test(body.code))
                   throw appError("bad_request");
               } else {
                 // Invitation acceptance/resend is its own email-proof flow.
@@ -409,7 +408,7 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
                   return failure(400);
                 emailPurpose = body.purpose as SignInCodePurpose;
               }
-              if (!issuing && (typeof body.code !== "string" || !/^\d{8}$/.test(body.code)))
+              if (!issuing && (typeof body.code !== "string" || !/^\d{6}$/.test(body.code)))
                 return failure(400);
               if (
                 body.name !== undefined &&

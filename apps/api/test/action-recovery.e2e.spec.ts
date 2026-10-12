@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, it } from "bun:test";
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
-import { type RecoveryCommand, recoveryProof } from "@linkhub/config/action-recovery";
+import { type RecoveryCommand, recoveryProof } from "@ntumie/config/action-recovery";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";

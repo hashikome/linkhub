@@ -1,4 +1,4 @@
-import type { ShareTarget } from "@linkhub/types";
+import type { ShareTarget } from "@ntumie/types";
 import type { ReactNode } from "react";
 import { ShareLink } from "./share-link";
 

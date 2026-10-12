@@ -1,4 +1,4 @@
-import type { ReorderResourcesRequest } from "@linkhub/types";
+import type { ReorderResourcesRequest } from "@ntumie/types";
 import { Type } from "class-transformer";
 import {
   ArrayMinSize,

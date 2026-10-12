@@ -100,7 +100,7 @@ describe("canonical sharing descriptors (HTTP)", () => {
 
   it("returns minimal stable descriptors using configured origin, never host headers", async () => {
     const cases = [
-      { kind: "site", path: "/", name: "linkhub", id: null },
+      { kind: "site", path: "/", name: "ntumie.", id: null },
       { kind: "profile", path: `/people/${owner.id}`, name: "A sharer", id: owner.id },
       {
         kind: "hub",

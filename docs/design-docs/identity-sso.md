@@ -20,7 +20,7 @@ and federated login. Operator access may also be considered during the shared
 platform review; no cross-product grants are introduced by this rename.
 Organizations, business tenants, groups and
 service accounts are outside this scope. Product authorization stays in each
-product: LinkHub owns hub ownership, collection grants and service-operator
+product: ntumie. owns hub ownership, collection grants and service-operator
 permissions. An identity-provider claim never grants access to a collection or
 creates an operator grant.
 
@@ -29,7 +29,7 @@ Shared identity (separate service)
   owns: credentials, immutable identity subject, identity sessions,
         MFA/recovery, basic profile, consent and connected services
   authenticates through OIDC
-    -> LinkHub: local user ID, product sessions, onboarding,
+    -> ntumie.: local user ID, product sessions, onboarding,
                   hub ownership, collection policy and product data
     -> other company products: their own users, sessions, policies and data
 ```
@@ -46,7 +46,7 @@ stay in the product.
    and foreign keys continue to use the local UUIDv7 user ID.
 2. **Require product enrollment.** SSO authenticates a person; it does not
    silently enroll them in every product. First use requires that product's
-   explicit signup and app-owned onboarding. LinkHub's
+   explicit signup and app-owned onboarding. the product's
    [people-and-hubs design](people-and-hubs.md) creates a hub only on first
    save, collection creation or receipt of a collection transfer.
 3. **Keep product sessions local.** The IdP authenticates; the product issues

@@ -1,4 +1,4 @@
-import type { TransferCollectionRequest } from "@linkhub/types";
+import type { TransferCollectionRequest } from "@ntumie/types";
 import { IsEmail, MaxLength } from "class-validator";
 
 import { CollectionImpactDto } from "./collection-impact.dto";

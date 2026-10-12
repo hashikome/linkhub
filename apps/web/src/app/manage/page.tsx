@@ -1,4 +1,4 @@
-import type { OperatorAccount, SessionView } from "@linkhub/types";
+import type { OperatorAccount, SessionView } from "@ntumie/types";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { FormNotice } from "../../components/form-notice";

@@ -1,13 +1,15 @@
-import { webServerConfig } from "@linkhub/config/web-server";
+import { webServerConfig } from "@ntumie/config/web-server";
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
 import { ApiOriginProvider } from "../components/api-origin";
 import { FocusMode } from "../components/focus-mode";
 import { FreshDocument } from "../components/fresh-document";
+import { ResourceNavigationProvider } from "../components/resource-navigation";
 import { SessionNav } from "../components/session-nav";
-import { ShareAction } from "../components/share-action";
+import { SiteFooter } from "../components/site-footer";
 import { TimeZoneProvider } from "../components/time-zone";
+import { readResourceNewTab } from "../lib/device-preferences";
 import { readOwnProfile, readSession } from "../lib/session";
 import { readTheme } from "../lib/theme";
 import "./globals.css";
@@ -22,19 +24,20 @@ const brandFont = localFont({
 });
 
 export const metadata: Metadata = {
-  title: { default: "linkhub", template: "%s · linkhub" },
+  title: { default: "ntumie.", template: "%s · ntumie." },
   description: "Useful links, collected and shared.",
   referrer: "strict-origin",
   robots: { index: false, follow: false },
 };
 export default async function Layout({ children }: { children: ReactNode }) {
-  const [session, profile, savedTheme, readerTheme] = await Promise.all([
+  const [session, profile, savedTheme, readerTheme, resourceNewTab] = await Promise.all([
     readSession(),
     readOwnProfile(),
     readTheme(),
     readTheme("reader_appearance"),
+    readResourceNewTab(),
   ]);
-  const { authOrigin } = webServerConfig();
+  const { authOrigin, publicOrigin } = webServerConfig();
   const theme = session ? savedTheme : readerTheme;
   return (
     <html
@@ -46,51 +49,39 @@ export default async function Layout({ children }: { children: ReactNode }) {
     >
       <body>
         <ApiOriginProvider origin={authOrigin}>
-          <TimeZoneProvider
-            key={session?.userId ?? "reader"}
-            initialTimeZone={session ? (profile?.timeZone ?? null) : null}
-          >
-            <a className="skip-link" href="#main">
-              Skip to content
-            </a>
-            <header className="topbar">
-              <nav aria-label="Main navigation" className="shell">
-                <a
-                  className="wordmark"
-                  href={session && profile ? (profile.hubId ? `/h/${profile.hubId}` : "/hub") : "/"}
-                >
-                  linkhub
-                </a>
-                <div className="primary-nav">
-                  <a href="/discover">Discover</a>
-                  <SessionNav session={session} theme={theme} />
-                </div>
-              </nav>
-            </header>
-            {/* biome-ignore lint/a11y/noNoninteractiveTabindex: Main is the keyboard skip-link target. */}
-            <main id="main" aria-label="Main content" tabIndex={0} className="shell">
-              <FocusMode />
-              <FreshDocument />
-              {children}
-            </main>
-            <footer className="site-footer">
-              <div className="shell footer-content">
-                <div className="footer-identity">
-                  <p className="footer-brand">© {new Date().getFullYear()} linkhub</p>
-                  <p className="footer-tagline">Good links belong together.</p>
-                </div>
-                <nav aria-label="Footer" className="footer-nav">
-                  <ShareAction
-                    target={{ kind: "site" }}
-                    returnTo="/"
-                    label="Share linkhub"
-                    className=""
-                  />
-                  <a href="/support">Support</a>
+          <ResourceNavigationProvider initialNewTab={resourceNewTab} publicOrigin={publicOrigin}>
+            <TimeZoneProvider
+              key={session?.userId ?? "reader"}
+              initialTimeZone={session ? (profile?.timeZone ?? null) : null}
+            >
+              <a className="skip-link" href="#main">
+                Skip to content
+              </a>
+              <header className="topbar">
+                <nav aria-label="Main navigation" className="shell">
+                  <a
+                    className="wordmark"
+                    href={
+                      session && profile ? (profile.hubId ? `/h/${profile.hubId}` : "/hub") : "/"
+                    }
+                  >
+                    ntumie.
+                  </a>
+                  <div className="primary-nav">
+                    <a href="/discover">Discover</a>
+                    <SessionNav session={session} theme={theme} />
+                  </div>
                 </nav>
-              </div>
-            </footer>
-          </TimeZoneProvider>
+              </header>
+              {/* biome-ignore lint/a11y/noNoninteractiveTabindex: Main is the keyboard skip-link target. */}
+              <main id="main" aria-label="Main content" tabIndex={0} className="shell">
+                <FocusMode />
+                <FreshDocument />
+                {children}
+              </main>
+              <SiteFooter signedIn={Boolean(session)} />
+            </TimeZoneProvider>
+          </ResourceNavigationProvider>
         </ApiOriginProvider>
       </body>
     </html>

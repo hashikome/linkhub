@@ -1,5 +1,5 @@
 // Fails if a client app imports backend internals or Prisma. Clients consume
-// the API over HTTP and the `@linkhub/types` contract only — never
+// the API over HTTP and the `@ntumie/types` contract only — never
 // `apps/api` source or the persistence layer (ARCHITECTURE dependency rules).
 // Also scan browser-reachable shared contracts/configuration.
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -11,7 +11,7 @@ const SKIP_DIRS = new Set(["node_modules", ".next", "dist", "build", ".turbo"]);
 
 const FORBIDDEN: Array<{ pattern: RegExp; why: string }> = [
   {
-    pattern: /^@linkhub\/(?!types(?:$|\/)|config(?:$|\/))/,
+    pattern: /^@ntumie\/(?!types(?:$|\/)|config(?:$|\/))/,
     why: "backend-owned workspace package",
   },
   {
@@ -85,7 +85,7 @@ if (violations.length > 0) {
   for (const v of violations) {
     console.error(`  ${v.file}\n    imports "${v.spec}" -> ${v.why}`);
   }
-  console.error("\nClients must consume the API over HTTP and @linkhub/types only.");
+  console.error("\nClients must consume the API over HTTP and @ntumie/types only.");
   process.exit(1);
 }
 

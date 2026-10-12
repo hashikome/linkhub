@@ -1,5 +1,5 @@
-import { publicOrigins } from "@linkhub/config/public-origins";
-import { collectionAddress, isPublicLinkHost } from "@linkhub/types";
+import { publicOrigins } from "@ntumie/config/public-origins";
+import { collectionAddress, isPublicLinkHost } from "@ntumie/types";
 import { appError } from "../errors/app-exception";
 
 export function canonicalizeUrl(url: string) {

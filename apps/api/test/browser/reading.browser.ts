@@ -460,7 +460,7 @@ describe("explore to resource: production browser journey", () => {
         for (const theme of ["dark", "light"] as const) {
           await page.emulateMedia({ colorScheme: theme });
           await ready(page, "/");
-          await browserExpect(page).toHaveTitle("linkhub · Good links belong together.");
+          await browserExpect(page).toHaveTitle("ntumie. · Good links belong together.");
           await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "system");
           await browserExpect(page.getByRole("figure")).toContainText("Example");
           for (const width of [320, 390, 768, 1280, 1440]) {
@@ -534,13 +534,13 @@ describe("explore to resource: production browser journey", () => {
         await browserExpect(example).not.toContainText("Published by");
         await browserExpect(
           example.getByRole("button", { name: "Copy link to this item", includeHidden: true }),
-        ).toHaveCount(2);
+        ).toHaveCount(js ? 2 : 0);
         await browserExpect(
           example.getByRole("link", { name: "Link to this item", exact: true }),
         ).toHaveCount(0);
         await browserExpect(
           example.getByRole("link", {
-            name: "Organize Your Bookmarks with the PARA Method for Lightning Fast Web Browsing",
+            name: "Organize Your Bookmarks with the PARA Method for Lightning Fast Web Browsing (opens in a new tab)",
             exact: true,
           }),
         ).toHaveAttribute(
@@ -549,7 +549,7 @@ describe("explore to resource: production browser journey", () => {
         );
         await browserExpect(
           example.getByRole("link", {
-            name: "A Brief History & Ethos of the Digital Garden",
+            name: "A Brief History & Ethos of the Digital Garden (opens in a new tab)",
             exact: true,
           }),
         ).toHaveAttribute("href", "https://maggieappleton.com/garden-history");
@@ -573,7 +573,7 @@ describe("explore to resource: production browser journey", () => {
         await browserExpect(section).toHaveAttribute("open", "");
         await browserExpect(
           example.getByRole("link", {
-            name: "Organize Your Bookmarks with the PARA Method for Lightning Fast Web Browsing",
+            name: "Organize Your Bookmarks with the PARA Method for Lightning Fast Web Browsing (opens in a new tab)",
             exact: true,
           }),
         ).toBeVisible();
@@ -593,7 +593,7 @@ describe("explore to resource: production browser journey", () => {
         } else {
           await browserExpect(
             items.nth(1).getByRole("button", { name: "Copy link to this item" }),
-          ).toBeDisabled();
+          ).toHaveCount(0);
           copied = new URL(
             (await items
               .nth(1)
@@ -611,20 +611,27 @@ describe("explore to resource: production browser journey", () => {
         await browserExpect(items.first()).not.toHaveAttribute("open", "");
         await ready(page, "/");
         // Title clicks navigate; clicking the surrounding summary expands details.
-        await page.route(
-          "https://fortelabs.com/blog/organize-your-bookmarks-with-the-para-method-for-lightning-fast-web-browsing/",
-          (route) =>
-            route.fulfill({ contentType: "text/html", body: "<h1>External resource</h1>" }),
-        );
+        await page
+          .context()
+          .route(
+            "https://fortelabs.com/blog/organize-your-bookmarks-with-the-para-method-for-lightning-fast-web-browsing/",
+            (route) =>
+              route.fulfill({ contentType: "text/html", body: "<h1>External resource</h1>" }),
+          );
+        const popupPromise = page.waitForEvent("popup");
         await example
           .getByRole("link", {
-            name: "Organize Your Bookmarks with the PARA Method for Lightning Fast Web Browsing",
+            name: "Organize Your Bookmarks with the PARA Method for Lightning Fast Web Browsing (opens in a new tab)",
             exact: true,
           })
           .click();
-        await browserExpect(page).toHaveURL(
+        const popup = await popupPromise;
+        await browserExpect(popup).toHaveURL(
           "https://fortelabs.com/blog/organize-your-bookmarks-with-the-para-method-for-lightning-fast-web-browsing/",
         );
+        await browserExpect(popup.locator("h1")).toHaveText("External resource");
+        expect(page.url()).toBe(`${origin}/`);
+        await popup.close();
       } finally {
         await close();
       }
@@ -665,6 +672,237 @@ describe("explore to resource: production browser journey", () => {
     }
   }, 30000);
 
+  it("reader polish keeps tags, hierarchy and touch controls usable without JavaScript too", async () => {
+    const id = await create("A collection with sections and many tags");
+    try {
+      await prisma.resource.create({
+        data: {
+          collectionId: id,
+          kind: "heading",
+          position: 0,
+          titleOverride: "Understanding the building blocks",
+          sectionDescription:
+            "Start with the concepts, then explore each reference at your own pace.",
+        },
+      });
+      const resource = await prisma.resource.create({
+        data: {
+          collectionId: id,
+          kind: "external_link",
+          position: 1,
+          url: "https://fixture-links.dev/reader-polish",
+        },
+      });
+      await request(app.getHttpServer())
+        .patch(`/api/v1/collections/${id}/resources/${resource.id}`)
+        .auth(owner, { type: "bearer" })
+        .send({ version: 1, tags: Array.from({ length: 12 }, (_, i) => `topic-${i}`) })
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`/api/v1/collections/${id}/comments`)
+        .auth(owner, { type: "bearer" })
+        .send({ body: "A readable discussion beside the references." })
+        .expect(201);
+      for (const js of [true, false]) {
+        const context = await browser.newContext({
+          javaScriptEnabled: js,
+          hasTouch: true,
+          viewport: { width: 390, height: 844 },
+          reducedMotion: "reduce",
+        });
+        const close = await diagnosticContext(context);
+        const page = await context.newPage();
+        try {
+          const [name, ...value] = cookie.split("=");
+          await context.addCookies([{ name, value: value.join("="), url: origin }]);
+          await ready(page, `/c/${id}`);
+          await browserExpect(page.getByRole("heading", { level: 1 })).toHaveText(
+            "A collection with sections and many tags",
+          );
+          await browserExpect(
+            page.getByRole("heading", { level: 2, name: "Understanding the building blocks" }),
+          ).toBeVisible();
+          await browserExpect(page.getByRole("heading", { level: 3 })).toContainText(
+            "https://fixture-links.dev/reader-polish",
+          );
+          const toggle = page.locator(".tag-overflow summary");
+          await toggle.tap();
+          await browserExpect(
+            page.getByRole("list", { name: "All collection tags", exact: true }).locator("li"),
+          ).toHaveCount(12);
+          const moreTags = page.getByRole("list", { name: "All collection tags", exact: true });
+          const tagsBounds = await moreTags.boundingBox();
+          const toggleBounds = await toggle.boundingBox();
+          if (!tagsBounds || !toggleBounds) throw new Error("Expanded tags are missing");
+          expect(toggleBounds.y).toBeGreaterThanOrEqual(tagsBounds.y + tagsBounds.height);
+          await toggle.focus();
+          await page.keyboard.press("Enter");
+          await browserExpect(
+            page.getByRole("list", { name: "All collection tags", exact: true }),
+          ).not.toBeVisible();
+          await page.keyboard.press("Enter");
+          await browserExpect(
+            page.getByRole("list", { name: "All collection tags", exact: true }),
+          ).toBeVisible();
+          await page.keyboard.press("Enter");
+          const compose = page.locator(".comment-compose > summary");
+          await compose.tap();
+          await browserExpect(
+            page.getByRole("textbox", { name: "Add to the discussion" }),
+          ).toBeVisible();
+          for (const selector of [
+            ".comment-compose > summary",
+            ".comment-actions .text-button",
+            ".footer-nav a",
+            ".tag-overflow summary",
+          ]) {
+            const sizes = await page.locator(selector).evaluateAll((elements) =>
+              elements.map((el) => ({
+                width: el.getBoundingClientRect().width,
+                height: el.getBoundingClientRect().height,
+              })),
+            );
+            expect(sizes.length).toBeGreaterThan(0);
+            for (const size of sizes) {
+              expect(size.width).toBeGreaterThanOrEqual(44);
+              expect(size.height).toBeGreaterThanOrEqual(44);
+            }
+          }
+          await compose.tap();
+          for (const width of [320, 390, 768, 1280, 1440]) {
+            await page.setViewportSize({ width, height: 900 });
+            if (width >= 768) {
+              await toggle.click();
+              const tagRows = await moreTags
+                .locator("li")
+                .evaluateAll((elements) => elements.map((el) => el.getBoundingClientRect().top));
+              expect(tagRows[3]).toBe(tagRows[0]);
+              await toggle.click();
+            }
+            await page.getByRole("contentinfo").scrollIntoViewIfNeeded();
+            expect(
+              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            ).toBe(true);
+            const support = page
+              .getByRole("navigation", { name: "Footer" })
+              .getByRole("link", { name: "About ntumie.", exact: true });
+            await support.focus();
+            await page.keyboard.press("Shift+Tab");
+            await page.keyboard.press("Tab");
+            await browserExpect(support).toBeFocused();
+            await browserExpect(support).toHaveCSS("outline-style", "solid");
+            await browserExpect(support).toBeInViewport();
+          }
+        } finally {
+          await close();
+        }
+      }
+    } finally {
+      await prisma.collection.delete({ where: { id } });
+    }
+  }, 60000);
+
+  it("fits home and About in desktop viewports with shared collection structure and left footer links", async () => {
+    for (const js of [true, false]) {
+      const { page, close } = await freshPage(js);
+      try {
+        for (const path of ["/", "/about"]) {
+          await ready(page, path);
+          const collection = page.locator(".collection-example");
+          await browserExpect(collection.locator(".collection-heading h2")).toHaveCount(1);
+          await browserExpect(collection.locator(".section-disclosure h3")).toHaveCount(1);
+          await browserExpect(collection.locator(".resource-disclosure h4")).toHaveCount(2);
+          for (const [width, height] of [
+            [1280, 700],
+            [1280, 800],
+            [1440, 900],
+            [1920, 1080],
+          ]) {
+            await page.setViewportSize({ width, height });
+            const bounds = await page.evaluate(() => {
+              const footer = document.querySelector(".footer-nav a")?.getBoundingClientRect();
+              const intro = document.querySelector(".landing-intro")?.getBoundingClientRect();
+              if (!footer || !intro) throw new Error("Missing landing layout");
+              return {
+                height: document.documentElement.scrollHeight,
+                width: document.documentElement.scrollWidth,
+                left: footer.left - intro.left,
+                bottom: footer.bottom,
+              };
+            });
+            expect(bounds.height).toBeLessThanOrEqual(height);
+            expect(bounds.width).toBeLessThanOrEqual(width);
+            expect(Math.abs(bounds.left)).toBeLessThan(2);
+            expect(bounds.bottom).toBeLessThanOrEqual(height);
+          }
+          const panel = collection.getByRole("region", { name: "Resources", exact: true });
+          await page.setViewportSize({ width: 1280, height: 700 });
+          await panel.focus();
+          await page.keyboard.press("End");
+          await browserExpect(collection.locator(".resource-disclosure").last()).toBeInViewport();
+          await page.setViewportSize({ width: 640, height: 400 });
+          await page.getByRole("contentinfo").scrollIntoViewIfNeeded();
+          await browserExpect(page.getByRole("contentinfo").getByRole("link")).toBeInViewport();
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+        }
+      } finally {
+        await close();
+      }
+    }
+  }, 60000);
+
+  it("connects About, joining and useful links through native footer navigation", async () => {
+    for (const js of [true, false]) {
+      const { page, close } = await freshPage(js);
+      try {
+        await ready(page, "/");
+        const footer = page.getByRole("contentinfo");
+        await browserExpect(footer.getByRole("link")).toHaveCount(1);
+        await browserExpect(footer.locator(".footer-tagline")).toHaveCount(0);
+        await footer.getByRole("link", { name: "About ntumie." }).click();
+        await browserExpect(page).toHaveTitle("About ntumie. · ntumie.");
+        await browserExpect(footer.getByRole("link", { name: "Join ntumie." })).toHaveAttribute(
+          "href",
+          "/sign-up",
+        );
+        await browserExpect(footer.locator(".footer-tagline")).toHaveCount(0);
+        const collection = page.getByRole("region", { name: "A few useful links" });
+        await browserExpect(collection.getByRole("link")).toHaveCount(2);
+        const support = collection.getByRole("link", { name: "Support", exact: true });
+        const maker = collection.getByRole("link", { name: /Meet the maker/ });
+        await browserExpect(support).not.toHaveAttribute("target", "_blank");
+        await browserExpect(maker).toHaveAttribute("target", "_blank");
+        await browserExpect(maker).toHaveAttribute("href", "https://namestarlit.com/");
+        const makerDetails = collection.locator(".resource-disclosure").nth(1);
+        await makerDetails.locator("summary").focus();
+        await page.keyboard.press("Enter");
+        await browserExpect(makerDetails).toHaveAttribute("open", "");
+        await browserExpect(collection.getByText(/Explore the projects and notes/)).toBeVisible();
+        await support.click();
+        await browserExpect(page).toHaveURL(`${origin}/support`);
+        await browserExpect(footer.locator(".footer-tagline")).toHaveText(
+          "Good links belong together.",
+        );
+        await footer.getByRole("link", { name: "About ntumie." }).click();
+        await footer.getByRole("link", { name: "Join ntumie." }).click();
+        await browserExpect(page).toHaveURL(`${origin}/sign-up`);
+        await page.context().addCookies([{ name: "resource_same_tab", value: "on", url: origin }]);
+        await ready(page, "/about");
+        await browserExpect(maker).not.toHaveAttribute("target", "_blank");
+        const [name, ...value] = cookie.split("=");
+        await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
+        await page.reload();
+        await browserExpect(footer.getByRole("link", { name: "Join ntumie." })).toHaveCount(0);
+        await footer.getByRole("link", { name: "Discover", exact: true }).click();
+        await browserExpect(page).toHaveURL(`${origin}/discover`);
+      } finally {
+        await close();
+      }
+    }
+  }, 60000);
+
   it("keeps readiness available for monitoring without a client status page", async () => {
     const api = await request(app.getHttpServer()).get("/api/v1/status").expect(200);
     expect(api.body.data.status).toBe("ready");
@@ -672,31 +910,21 @@ describe("explore to resource: production browser journey", () => {
     try {
       await ready(page);
       await browserExpect(page.locator(".wordmark")).toHaveAttribute("href", "/");
-      await browserExpect(page).toHaveTitle("Discover · linkhub");
+      await browserExpect(page).toHaveTitle("Discover · ntumie.");
       await browserExpect(
         page
           .getByRole("navigation", { name: "Main navigation" })
           .getByRole("link", { name: "Discover", exact: true }),
       ).toHaveAttribute("href", "/discover");
       const footer = page.getByRole("contentinfo");
-      await browserExpect(footer.locator(".footer-brand")).toHaveText(
-        `© ${new Date().getFullYear()} linkhub`,
-      );
       await browserExpect(footer.locator(".footer-tagline")).toHaveText(
         "Good links belong together.",
       );
-      await browserExpect(footer.getByRole("link", { name: "Discover", exact: true })).toHaveCount(
-        0,
+      await browserExpect(footer.getByRole("link")).toHaveCount(1);
+      await browserExpect(footer.getByRole("link", { name: "About ntumie." })).toHaveAttribute(
+        "href",
+        "/about",
       );
-      await browserExpect(footer.getByRole("link")).toHaveCount(2);
-      await browserExpect(
-        footer.getByRole("link", { name: "Share linkhub", exact: true }),
-      ).toHaveAttribute("href", /\/share\?kind=site/);
-      await browserExpect(
-        footer
-          .getByRole("navigation", { name: "Footer" })
-          .getByRole("link", { name: "Support", exact: true }),
-      ).toHaveAttribute("href", "/support");
       await browserExpect(page.locator('a[href="/status"]')).toHaveCount(0);
       const response = await page.goto(`${origin}/status`);
       expect(response?.status()).toBe(404);
@@ -810,7 +1038,7 @@ describe("explore to resource: production browser journey", () => {
         }
         await ready(page, `/@${handle}?view=public&s=discovery-must-ignore-this`);
         await browserExpect(page.locator("h1")).toHaveText(publicHubName);
-        await browserExpect(page).toHaveTitle(`${publicHubName} · linkhub`);
+        await browserExpect(page).toHaveTitle(`${publicHubName} · ntumie.`);
         await browserExpect(page.locator(".hub-identity")).toHaveText(`@${handle} by Reader`);
         await browserExpect(page.locator(".hub-collections-heading .meta")).toHaveText("25");
         await browserExpect(page.locator(".hub-heading time")).toHaveCount(0);
@@ -977,9 +1205,15 @@ describe("explore to resource: production browser journey", () => {
         await browserExpect(page.locator("h1")).toHaveText("A useful collection");
         await page.getByRole("link", { name: `@${handle}`, exact: true }).click();
         await page.getByRole("link", { name: longTitle }).click();
-        await page.getByRole("link", { name: "Open the reference", exact: true }).click();
-        await browserExpect(page.locator("body")).toHaveText("External reference opened");
+        const popupPromise = page.waitForEvent("popup");
+        await page
+          .getByRole("link", { name: "Open the reference (opens in a new tab)", exact: true })
+          .click();
+        const popup = await popupPromise;
+        await browserExpect(popup.locator("body")).toHaveText("External reference opened");
         expect(captureReferer).toBeNull();
+        expect(new URL(page.url()).pathname).toBe(`/c/${sourceId}`);
+        await popup.close();
       } finally {
         await close();
       }
@@ -1305,12 +1539,207 @@ describe("explore to resource: production browser journey", () => {
     }
   }, 20000);
 
+  it("resource reader distinguishes title links and loads desktop resources while scrolling", async () => {
+    const { page, close } = await freshPage();
+    try {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      for (const width of [390, 768, 1280, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        await ready(page, `/c/${sourceId}`);
+        await page.waitForFunction(
+          () => performance.getEntriesByName("app:document-ready").length > 0,
+        );
+        const rows = page.locator(".resource-row");
+        const title = rows.locator("h3 a").first();
+        const other = rows.locator("h3 a").nth(1);
+        await page.locator(".wordmark").hover();
+        const ink = await title.evaluate((el) => getComputedStyle(el).color);
+        const otherInk = await other.evaluate((el) => getComputedStyle(el).color);
+        await title.hover();
+        const blue = await title.evaluate((el) => getComputedStyle(el).color);
+        expect(blue).not.toBe(ink);
+        expect(await other.evaluate((el) => getComputedStyle(el).color)).toBe(otherInk);
+        expect(await title.evaluate((el) => getComputedStyle(el).textDecorationLine)).toBe("none");
+        await page.screenshot({
+          path: join(
+            process.env.BROWSER_ARTIFACT_DIR ?? "/tmp",
+            `resource-reader-${width}-hover.png`,
+          ),
+        });
+        await page.keyboard.press("Tab");
+        await title.focus();
+        expect(await title.evaluate((el) => getComputedStyle(el).color)).toBe(blue);
+        expect(await title.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe("solid");
+        const row = title.locator("xpath=ancestor::li[contains(@class,'resource-row')][1]");
+        await row.locator(".resource-meta").click();
+        await browserExpect(row.locator(".resource-disclosure")).toHaveAttribute("open", "");
+        await title.hover();
+        expect(await title.evaluate((el) => getComputedStyle(el).color)).toBe(blue);
+        await row.locator(".resource-meta").click();
+        await browserExpect(row.locator(".resource-disclosure")).not.toHaveAttribute("open", "");
+        const body = page.locator(".sheet-body");
+        const more = page.getByRole("link", { name: "More resources", exact: true });
+        if (width < 1024) {
+          await more.scrollIntoViewIfNeeded();
+          await browserExpect(rows).toHaveCount(20);
+          const centered = await more.evaluate((el) => {
+            const control = el.getBoundingClientRect();
+            const parent = el.parentElement?.getBoundingClientRect();
+            if (!parent) throw new Error("Missing continuation container");
+            return Math.abs(control.left + control.width / 2 - parent.left - parent.width / 2);
+          });
+          expect(centered).toBeLessThan(1);
+          await page.screenshot({
+            path: join(
+              process.env.BROWSER_ARTIFACT_DIR ?? "/tmp",
+              `resource-reader-${width}-more.png`,
+            ),
+          });
+          await more.click();
+        } else {
+          await browserExpect(rows).toHaveCount(20);
+          await body.focus();
+          const before = await body.evaluate((el) => {
+            el.scrollTop = el.scrollHeight - el.clientHeight - 96;
+            return el.scrollTop;
+          });
+          await browserExpect(rows).toHaveCount(22);
+          expect(await body.evaluate((el) => el.scrollTop)).toBe(before);
+          await browserExpect(body).toBeFocused();
+          await body.evaluate((el) => {
+            el.scrollTop = el.scrollHeight;
+          });
+          await page.screenshot({
+            path: join(
+              process.env.BROWSER_ARTIFACT_DIR ?? "/tmp",
+              `resource-reader-${width}-loaded.png`,
+            ),
+          });
+        }
+        await browserExpect(rows).toHaveCount(22);
+        await browserExpect(page.getByRole("link", { name: "All resources loaded" })).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+      }
+    } finally {
+      await close();
+    }
+  }, 30000);
+
+  it("resource reader bounds automatic requests and requires deliberate retry after failure", async () => {
+    const { page, close } = await freshPage();
+    let release = () => {};
+    try {
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await ready(page, `/c/${sourceId}`);
+      await page.waitForFunction(
+        () => performance.getEntriesByName("app:document-ready").length > 0,
+      );
+      let requests = 0;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await page.route("**/api/v1/collections/*/resources?**", async (route) => {
+        requests++;
+        if (requests !== 1) return route.continue();
+        await held;
+        await route.fulfill({
+          status: 429,
+          headers: {
+            ...apiResponseHeaders(),
+            "Retry-After": "1",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ error: { code: "too_many_requests", message: "Slow down" } }),
+        });
+      });
+      const body = page.locator(".sheet-body");
+      const scrollEnd = () =>
+        body.evaluate((el) => {
+          el.scrollTop = el.scrollHeight;
+        });
+      await body.focus();
+      await scrollEnd();
+      await browserExpect(page.getByRole("link", { name: "Loading…", exact: true })).toBeVisible();
+      await body.evaluate((el) => {
+        el.scrollTop -= 40;
+      });
+      await scrollEnd();
+      expect(requests).toBe(1);
+      await page.screenshot({
+        path: join(process.env.BROWSER_ARTIFACT_DIR ?? "/tmp", "resource-reader-loading.png"),
+      });
+      release();
+      await browserExpect(page.getByRole("button", { name: /Try again in/ })).toBeDisabled();
+      await browserExpect(page.locator(".resource-row")).toHaveCount(20);
+      await body.evaluate((el) => {
+        el.scrollTop = 0;
+      });
+      await scrollEnd();
+      await browserExpect(
+        page.getByRole("button", { name: "Try again", exact: true }),
+      ).toBeEnabled();
+      expect(requests).toBe(1);
+      await scrollEnd();
+      await page.screenshot({
+        path: join(process.env.BROWSER_ARTIFACT_DIR ?? "/tmp", "resource-reader-retry.png"),
+      });
+      await page.getByRole("button", { name: "Try again", exact: true }).click();
+      await browserExpect(page.locator(".resource-row")).toHaveCount(22);
+      expect(requests).toBe(2);
+      await browserExpect(page.getByRole("link", { name: "All resources loaded" })).toBeFocused();
+      await page.unroute("**/api/v1/collections/*/resources?**");
+
+      // An unchanged cursor cannot cause repeated automatic requests.
+      requests = 0;
+      await page.route("**/api/v1/collections/*/resources?**", async (route) => {
+        requests++;
+        await route.fulfill({
+          headers: apiResponseHeaders(),
+          contentType: "application/json",
+          body: JSON.stringify({
+            data: [],
+            meta: { nextCursor: new URL(route.request().url()).searchParams.get("cursor") },
+          }),
+        });
+      });
+      await ready(page, `/c/${sourceId}`);
+      await page.waitForFunction(
+        () => performance.getEntriesByName("app:document-ready").length > 0,
+      );
+      await scrollEnd();
+      await browserExpect(page.locator('p[aria-live="polite"]')).toHaveText(
+        "0 more resources loaded.",
+      );
+      await body.evaluate((el) => {
+        el.scrollTop = 0;
+      });
+      await page.waitForTimeout(50);
+      await scrollEnd();
+      await page.waitForTimeout(100);
+      expect(requests).toBe(1);
+      await page.unroute("**/api/v1/collections/*/resources?**");
+      // A short desktop uses document scrolling, just like mobile.
+      await page.setViewportSize({ width: 1280, height: 540 });
+      await ready(page, `/c/${sourceId}`);
+      const more = page.getByRole("link", { name: "More resources", exact: true });
+      await more.scrollIntoViewIfNeeded();
+      await browserExpect(page.locator(".resource-row")).toHaveCount(20);
+      await more.click();
+      await browserExpect(page.locator(".resource-row")).toHaveCount(22);
+    } finally {
+      release();
+      await close();
+    }
+  }, 20000);
+
   it("reads collection references, wraps at all target widths and supports keyboard navigation", async () => {
     const { page, close } = await freshPage();
     try {
       await ready(page, `/c/${sourceId}`);
       await browserExpect(page.locator(".resource-row")).toHaveCount(20);
-      await browserExpect(page.locator(".collection-heading .resource-tag-count")).toHaveText(
+      await browserExpect(page.locator(".collection-heading .tag-overflow summary")).toContainText(
         "+1 tag",
       );
       await browserExpect(page.locator(".sheet-body")).not.toContainText("late-page-tag");
@@ -1388,9 +1817,15 @@ describe("explore to resource: production browser journey", () => {
       await browserExpect(page.locator("h1")).toHaveText("A useful collection");
       await browserExpect(page.getByText("No resources in this collection yet.")).toBeVisible();
       await ready(page, `/c/${sourceId}`);
-      await page.getByRole("link", { name: "Open the reference", exact: true }).click();
-      await browserExpect(page.locator("body")).toHaveText("External reference opened");
+      const popupPromise = page.waitForEvent("popup");
+      await page
+        .getByRole("link", { name: "Open the reference (opens in a new tab)", exact: true })
+        .click();
+      const popup = await popupPromise;
+      await browserExpect(popup.locator("body")).toHaveText("External reference opened");
       expect(captureReferer).toBeNull();
+      expect(new URL(page.url()).pathname).toBe(`/c/${sourceId}`);
+      await popup.close();
     } finally {
       await close();
     }
@@ -1550,7 +1985,7 @@ describe("explore to resource: production browser journey", () => {
       ).toHaveAttribute("href", "/discover");
       expect(
         await page
-          .getByRole("link", { name: "Open the reference", exact: true })
+          .getByRole("link", { name: "Open the reference (opens in a new tab)", exact: true })
           .getAttribute("href"),
       ).not.toContain(linkToken);
       await browserExpect(
@@ -1606,7 +2041,7 @@ describe("explore to resource: production browser journey", () => {
         orderBy: { createdAt: "desc" },
       });
       const code = unseal(row.payload ?? "", process.env.BETTER_AUTH_SECRET ?? "").text.match(
-        /\b\d{8}\b/,
+        /^\d{6}$/m,
       )?.[0];
       expect(
         await page.evaluate(
@@ -1717,7 +2152,7 @@ async function capturedCode(email: string, expectedSubject?: string) {
     process.env.BETTER_AUTH_SECRET ?? "dev-better-auth-secret",
   );
   if (expectedSubject) expect(payload.subject).toBe(expectedSubject);
-  const code = payload.text.match(/^\d{8}$/m)?.[0];
+  const code = payload.text.match(/^\d{6}$/m)?.[0];
   if (!code) throw new Error("Missing captured browser code");
   return code;
 }
@@ -1750,7 +2185,7 @@ async function browserSignIn(page: Page, email: string, returnTo = "/manage") {
   expect(new URL(response.headers().location, origin).origin).toBe(origin);
   await browserExpect(page.locator("h1")).toHaveText("Check your email");
   expect(page.url()).not.toContain(email);
-  await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+  await page.getByLabel("Six-digit code").fill(await capturedCode(email));
   await page.getByRole("button", { name: "Verify and continue" }).click();
   if (creating) await page.getByRole("button", { name: "Create account", exact: true }).click();
 }
@@ -2016,7 +2451,7 @@ describe("management: production browser journey", () => {
             .getByRole("link", { name: "Sign in", exact: true }),
         ).toBeVisible();
         await ready(page, "/manage");
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to ntumie.");
       } finally {
         await close();
       }
@@ -2032,13 +2467,13 @@ describe("management: production browser journey", () => {
       await page.getByRole("button", { name: "Continue with email", exact: true }).click();
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
-      await page.getByLabel("Eight-digit code").fill("00000000");
+      await page.getByLabel("Six-digit code").fill("000000");
       await page.getByRole("button", { name: "Verify and continue" }).click();
       await browserExpect(page.locator(".form-notice")).toContainText("incorrect or expired");
       await waitForResend(page);
       await page.getByRole("button", { name: "Send a new code", exact: true }).click();
       await browserExpect(page.locator(".toast")).toContainText("sent a new code");
-      await page.getByLabel("Eight-digit code").fill(await capturedCode(op.email));
+      await page.getByLabel("Six-digit code").fill(await capturedCode(op.email));
       await page.getByRole("button", { name: "Verify and continue" }).click();
       await browserExpect(page.locator("h1")).toHaveText("Good links deservea place to belong.");
       expect(new URL(page.url()).origin).toBe(origin);
@@ -2091,11 +2526,11 @@ describe("management: production browser journey", () => {
       await browserExpect(page.locator(".resend-row")).toContainText("Didn't receive the code?");
       await page.screenshot({ path: "/tmp/verify-code.png" });
       await browserExpect(page.locator("h1")).toHaveText("Confirm it's you");
-      // A pasted code with a space ("3368 6575") is accepted.
-      const confirmCode = await capturedCode(op.email, "Confirm it's you · linkhub");
+      // A pasted code with a space ("336 865") is accepted.
+      const confirmCode = await capturedCode(op.email, "Confirm it's you · ntumie.");
       await page
-        .getByLabel("Eight-digit code")
-        .fill(`${confirmCode.slice(0, 4)} ${confirmCode.slice(4)}`);
+        .getByLabel("Six-digit code")
+        .fill(`${confirmCode.slice(0, 3)} ${confirmCode.slice(3)}`);
       await page.getByRole("button", { name: "Confirm and continue" }).click();
       await browserExpect(page.locator("h1")).toHaveText("Stale target");
       await browserExpect(page.getByText("The action is complete.", { exact: true })).toBeVisible();
@@ -2247,7 +2682,7 @@ describe("email invitation onboarding", () => {
   }
   async function verifyInvitationCode(page: Page, email: string) {
     await browserExpect(page.locator("h1")).toHaveText("Check your email");
-    await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+    await page.getByLabel("Six-digit code").fill(await capturedCode(email));
     await page.getByRole("button", { name: "Verify and activate" }).click();
     await browserExpect(page.locator("h1")).toHaveText("Accounts");
   }
@@ -2372,6 +2807,171 @@ describe("email invitation onboarding", () => {
 });
 
 describe("account shell and appearance", () => {
+  for (const js of [true, false]) {
+    it(`keeps same-tab resource navigation local to this browser, JavaScript=${js}`, async () => {
+      const signed = await signInHubOwner(app.getHttpServer(), {
+        email: `resource-tabs-${crypto.randomUUID()}@example.com`,
+      });
+      const sessionCookie =
+        (signed.headers["set-cookie"] as unknown as string[])
+          .map((value) => value.split(";")[0])
+          .find((value) => value.startsWith("better-auth.session_token=")) ?? "";
+      const [name, ...value] = sessionCookie.split("=");
+      const auth = { name, value: value.join("="), url: origin };
+      const hub = await prisma.hub.findUniqueOrThrow({
+        where: { ownerUserId: signed.body.user.id },
+      });
+      const target = await prisma.collection.create({
+        data: { hubId: hub.id, title: "Local target" },
+      });
+      const source = await prisma.collection.create({
+        data: { hubId: hub.id, title: "Tab preferences" },
+      });
+      const external = `http://127.0.0.1:${capture.port}/reference`;
+      const internal = `${origin}/c/${target.id}`;
+      await prisma.resource.createMany({
+        data: [
+          {
+            collectionId: source.id,
+            kind: "collection_link",
+            linkedCollectionId: target.id,
+            position: 0,
+          },
+          { collectionId: source.id, kind: "external_link", url: external, position: 1 },
+          // Absolute ntumie. URLs can also be stored as ordinary link resources.
+          { collectionId: source.id, kind: "external_link", url: internal, position: 2 },
+          ...Array.from({ length: 20 }, (_, index) => ({
+            collectionId: source.id,
+            kind: "external_link" as const,
+            url: `https://fixture-links.dev/device/${index}`,
+            position: index + 3,
+          })),
+        ],
+      });
+      const first = await freshPage(js);
+      const second = await freshPage(false);
+      const page = first.page;
+      const setting = () =>
+        page.getByRole("switch", { name: "Open external resources in the same tab" });
+      const save = () => page.getByRole("button", { name: "Save preference", exact: true }).click();
+      const saved = () =>
+        browserExpect(
+          page.locator('form[action="/forms/device-preferences"] [role="status"]'),
+        ).toHaveText("Saved");
+      const link = (href: string) => page.locator(`.resource-row h3 a[href="${href}"]`);
+      try {
+        await page.context().addCookies([auth]);
+        await second.page.context().addCookies([auth]);
+        await ready(page, `/c/${source.id}`);
+        await browserExpect(link(external)).toHaveAttribute("target", "_blank");
+        await ready(page, "/settings");
+        if (js)
+          await page.waitForFunction(
+            () => performance.getEntriesByName("app:document-ready").length > 0,
+          );
+        await page.getByRole("link", { name: "On this device", exact: true }).click();
+        await browserExpect(setting()).not.toBeChecked();
+        await setting().check();
+        if (js) {
+          await page.route("**/forms/device-preferences", (route) => route.abort());
+          await save();
+          await browserExpect(
+            page.getByRole("status").filter({ hasText: "Couldn't save" }),
+          ).toBeVisible();
+          await browserExpect(setting()).toBeChecked();
+          expect(
+            (await page.context().cookies()).some((cookie) => cookie.name === "resource_same_tab"),
+          ).toBe(false);
+          await page.unroute("**/forms/device-preferences");
+        }
+        await save();
+        await saved();
+        const preference = (await page.context().cookies()).find(
+          (cookie) => cookie.name === "resource_same_tab",
+        );
+        expect(preference).toMatchObject({
+          value: "on",
+          httpOnly: true,
+          sameSite: "Lax",
+          path: "/",
+        });
+        expect(preference?.expires).toBeGreaterThan(Date.now() / 1000 + 300 * 86400);
+        await page.reload();
+        await browserExpect(setting()).toBeChecked();
+        if (js) {
+          for (const width of [390, 1280]) {
+            await page.setViewportSize({ width, height: 900 });
+            expect(
+              await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+            ).toBe(true);
+            await page.screenshot({
+              path: join(
+                process.env.BROWSER_ARTIFACT_DIR ?? "/tmp",
+                `device-settings-${width}.png`,
+              ),
+              fullPage: true,
+            });
+          }
+        }
+        await ready(second.page, "/settings?section=device");
+        await browserExpect(
+          second.page.getByRole("switch", { name: "Open external resources in the same tab" }),
+        ).not.toBeChecked();
+        await ready(second.page, `/c/${source.id}`);
+        await browserExpect(second.page.locator(`a[href="${external}"]`)).toHaveAttribute(
+          "target",
+          "_blank",
+        );
+        await ready(page, `/c/${source.id}`);
+        await browserExpect(link(external)).not.toHaveAttribute("target", "_blank");
+        await link(external).click();
+        await browserExpect(page.locator("body")).toHaveText("External reference opened");
+        expect(captureReferer).toBeNull();
+        await ready(page, `/c/${source.id}`);
+        await page.getByRole("link", { name: "More resources", exact: true }).click();
+        await browserExpect(link("https://fixture-links.dev/device/19")).not.toHaveAttribute(
+          "target",
+          "_blank",
+        );
+        await ready(page, "/settings?section=device");
+        await setting().uncheck();
+        await save();
+        await saved();
+        expect(
+          (await page.context().cookies()).some((cookie) => cookie.name === "resource_same_tab"),
+        ).toBe(false);
+        await ready(page, `/c/${source.id}`);
+        await browserExpect(link(external)).toHaveAttribute("target", "_blank");
+        await browserExpect(link(external)).toHaveAccessibleName(
+          "Open the reference (opens in a new tab)",
+        );
+        await browserExpect(link(internal)).not.toHaveAttribute("target", "_blank");
+        await browserExpect(link(`/c/${target.id}`)).not.toHaveAttribute("target", "_blank");
+        const popupPromise = page.waitForEvent("popup");
+        await link(external).click();
+        const popup = await popupPromise;
+        await popup.waitForLoadState("domcontentloaded");
+        await browserExpect(popup.locator("body")).toHaveText("External reference opened");
+        expect(await popup.evaluate(() => window.opener === null)).toBe(true);
+        expect(captureReferer).toBeNull();
+        expect(page.url()).toBe(`${origin}/c/${source.id}`);
+        await popup.close();
+        await link(internal).click();
+        await browserExpect(page).toHaveURL(internal);
+        expect(page.context().pages()).toHaveLength(1);
+        await ready(page, `/c/${source.id}`);
+        await page.getByRole("link", { name: "More resources", exact: true }).click();
+        await browserExpect(link("https://fixture-links.dev/device/19")).toHaveAttribute(
+          "target",
+          "_blank",
+        );
+      } finally {
+        await first.close();
+        await second.close();
+        await prisma.collection.deleteMany({ where: { id: { in: [source.id, target.id] } } });
+      }
+    }, 60000);
+  }
   it("retains failed and newer profile edits and ignores stale handle checks", async () => {
     await prisma.requestBudget.deleteMany();
     const email = `profile-retry-${crypto.randomUUID()}@example.com`;
@@ -2694,7 +3294,7 @@ describe("account shell and appearance", () => {
       await browserExpect(page.locator(".page-heading .description")).toHaveText(
         "Resources for curious readers.",
       );
-      await browserExpect(page).toHaveTitle("The Reference Shelf · linkhub");
+      await browserExpect(page).toHaveTitle("The Reference Shelf · ntumie.");
       await ready(page, `/@${hub.handle}`);
       await browserExpect(page.locator("h1")).toHaveText("The Reference Shelf");
       await browserExpect(page.locator(".page-heading .description")).toHaveText(
@@ -2785,7 +3385,7 @@ describe("account shell and appearance", () => {
           "href",
           /^\/h\/[a-f0-9-]{36}$/,
         );
-        await browserExpect(page).toHaveTitle("Settings · linkhub");
+        await browserExpect(page).toHaveTitle("Settings · ntumie.");
         await browserExpect(page).toHaveURL(`${origin}/settings`);
         await browserExpect(
           page
@@ -2855,7 +3455,7 @@ describe("account shell and appearance", () => {
             await page.screenshot({ path: `/tmp/own-hub-${width}.png` });
           }
         }
-        await browserExpect(page).toHaveTitle(`${account.hub?.name} · linkhub`);
+        await browserExpect(page).toHaveTitle(`${account.hub?.name} · ntumie.`);
         await browserExpect(page).toHaveURL(`${origin}/h/${account.hub?.id}`);
         await page.getByLabel("Account menu", { exact: true }).click();
         await browserExpect(
@@ -2915,7 +3515,7 @@ describe("account shell and appearance", () => {
         ).toContainText("Manage");
         await page.getByRole("link", { name: "Settings", exact: true }).click();
         await browserExpect(page.locator("h1")).toHaveText("Settings");
-        await browserExpect(page).toHaveTitle("Settings · linkhub");
+        await browserExpect(page).toHaveTitle("Settings · ntumie.");
         await ready(page, "/settings?section=appearance");
         await browserExpect(
           page.getByRole("group", { name: "Profile", exact: true }),
@@ -2985,7 +3585,7 @@ describe("account shell and appearance", () => {
           .getByRole("link", { name: "Notifications", exact: true })
           .click();
         await browserExpect(page.locator("h1")).toHaveText("Notifications");
-        await browserExpect(page).toHaveTitle("Notifications · linkhub");
+        await browserExpect(page).toHaveTitle("Notifications · ntumie.");
         await browserExpect(page.locator("main")).toContainText("You're all caught up");
         const invitation = await prisma.serviceInvitation.create({
           data: {
@@ -3042,7 +3642,7 @@ describe("account shell and appearance", () => {
         ).toBeVisible();
         await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "system");
         await ready(page, "/settings");
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to ntumie.");
       } finally {
         await close();
       }
@@ -3260,17 +3860,22 @@ it("saves a first private link through email, preserves retries, then adds and r
       await page.getByLabel("Email address").fill(email);
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
-      await capturedCode(email, "Verify your email to save your first link · linkhub");
+      await capturedCode(email, "Verify your email to save your first link · ntumie.");
       expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
-      await page.getByLabel("Eight-digit code").fill("00000000");
+      await page.getByLabel("Six-digit code").fill("000000");
       await page.getByRole("button", { name: "Verify and save" }).click();
       await browserExpect(page.locator(".form-notice")).toContainText("incorrect or expired");
       await waitForResend(page);
       await page.getByRole("button", { name: "Send a new code", exact: true }).click();
       await browserExpect(page.locator(".toast")).toContainText("sent a new code");
+      const proof = await capturedCode(
+        email,
+        "Verify your email to save your first link · ntumie.",
+      );
+      expect(proof).toMatch(/^\d{6}$/);
       await page
-        .getByLabel("Eight-digit code")
-        .fill(await capturedCode(email, "Verify your email to save your first link · linkhub"));
+        .getByLabel("Six-digit code")
+        .fill(`${proof.slice(0, 3)}${js ? "-" : " "}${proof.slice(3)}`);
       failCapture = js;
       await page.getByRole("button", { name: "Verify and save" }).click();
       if (js) {
@@ -3290,7 +3895,7 @@ it("saves a first private link through email, preserves retries, then adds and r
       }
       await browserExpect(page.locator("h1")).toHaveText(/^Saved links, [A-Z][a-z]{2} \d{1,2}$/);
       await browserExpect(page.locator(".toast")).toContainText("Link saved");
-      await browserExpect(page.locator(".resource-row h2 a")).toHaveAttribute("href", url);
+      await browserExpect(page.locator(".resource-row h3 a")).toHaveAttribute("href", url);
       const account = await prisma.user.findUniqueOrThrow({
         where: { email },
         include: { hub: true },
@@ -3382,7 +3987,7 @@ it("saves a first private link through email, preserves retries, then adds and r
         await browserExpect(page.locator("h1")).toHaveText("Verify your email to save this link");
         await page.getByLabel("Email address").fill(email);
         await page.getByRole("button", { name: "Send code", exact: true }).click();
-        await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+        await page.getByLabel("Six-digit code").fill(await capturedCode(email));
         await page.getByRole("button", { name: "Verify and save" }).click();
       }
       await browserExpect(page.locator(".resource-row")).toHaveCount(2);
@@ -3436,7 +4041,7 @@ it("saves a first private link through email, preserves retries, then adds and r
         await page.getByRole("button", { name: "Save link", exact: true }).click();
         await page.getByLabel("Email address").fill(email);
         await page.getByRole("button", { name: "Send code", exact: true }).click();
-        await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+        await page.getByLabel("Six-digit code").fill(await capturedCode(email));
         await page.getByRole("button", { name: "Verify and save" }).click();
         await browserExpect(page.locator(".form-notice")).toContainText("Choose where to save");
         await browserExpect(page.getByLabel("Link URL", { exact: true })).toHaveValue(
@@ -3694,7 +4299,7 @@ describe("collection discussion", () => {
           await discussion.locator(".comment-compose > summary").click();
         await page.getByLabel("Add to the discussion").fill(`After a break (${js})`);
         await page.getByRole("button", { name: "Post", exact: true }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to ntumie.");
         await browserExpect(page.locator(".verify-reason")).toContainText("post your comment");
         await page.getByLabel("Email address").fill(discussant);
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
@@ -3705,7 +4310,7 @@ describe("collection discussion", () => {
         await browserExpect(page, `resume code issued (JavaScript ${js})`).toHaveURL(
           /\/sign-in\/code\?notice=(?:re)?sent/,
         );
-        await page.getByLabel("Eight-digit code").fill(await capturedCode(discussant));
+        await page.getByLabel("Six-digit code").fill(await capturedCode(discussant));
         await page.getByRole("button", { name: "Verify and continue" }).click();
         await browserExpect
           .poll(() => new URL(page.url()).pathname, {
@@ -3725,7 +4330,7 @@ describe("collection discussion", () => {
           await discussion.locator(".comment-compose > summary").click();
         await page.getByLabel("Add to the discussion").fill(`Not theirs (${js})`);
         await page.getByRole("button", { name: "Post", exact: true }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to ntumie.");
         const stranger = `stranger-${crypto.randomUUID()}@example.com`;
         await page.getByLabel("Email address").fill(stranger);
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
@@ -3733,7 +4338,7 @@ describe("collection discussion", () => {
         await browserExpect(page, `new account code issued (JavaScript ${js})`).toHaveURL(
           /\/sign-in\/code\?notice=(?:re)?sent/,
         );
-        await page.getByLabel("Eight-digit code").fill(await capturedCode(stranger));
+        await page.getByLabel("Six-digit code").fill(await capturedCode(stranger));
         await page.getByRole("button", { name: "Verify and continue" }).click();
         await page.getByRole("button", { name: "Create account", exact: true }).click();
         await browserExpect(page.locator("h1")).toHaveText("Discussion guide");
@@ -3855,7 +4460,7 @@ describe("support page", () => {
         await browserExpect(
           page.getByRole("link", { name: "support@example.com", exact: true }),
         ).toHaveAttribute("href", "mailto:support@example.com");
-        await browserExpect(page).toHaveTitle("Support · linkhub");
+        await browserExpect(page).toHaveTitle("Support · ntumie.");
       } finally {
         await close();
       }
@@ -3892,7 +4497,7 @@ it("preserves a throttled resend journey beyond the normal resend interval", asy
       await browserExpect(page.locator(".field-help")).toContainText(/another code in [5-6]\d?s/);
       await page.reload();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
-      await browserExpect(page.getByLabel("Eight-digit code")).toBeVisible();
+      await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
     } finally {
       await close();
     }
@@ -4033,7 +4638,7 @@ it("folds the collection introduction before scrolling links", async () => {
       );
       await browserExpect(heading.locator("h1")).toBeVisible();
       await browserExpect(heading.locator(".row-meta")).toBeVisible();
-      await browserExpect(heading.locator(":scope > .tags")).toBeVisible();
+      await browserExpect(heading.locator(":scope > .tag-overflow summary")).toBeVisible();
       await browserExpect(body).toBeFocused();
       expect(await body.evaluate((el) => el.clientHeight)).toBeGreaterThan(before);
       if (reducedMotion === "reduce") {
@@ -5301,13 +5906,13 @@ it("shares profiles, hubs, collections and the site through one contextual page"
           trigger: "Share",
         },
         {
-          from: "/",
+          from: "/about",
           kind: "site",
           path: "/",
           label: "Site link",
-          heading: "Share linkhub",
-          back: "Back to home",
-          trigger: "Share linkhub",
+          heading: "Share ntumie.",
+          back: "Back to About ntumie.",
+          trigger: "Share ntumie.",
         },
       ];
       if (js) await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
@@ -5734,12 +6339,12 @@ describe("item details routes", () => {
             await row.locator(".resource-disclosure").click({ position: { x: 2, y: 2 } });
             await browserExpect(details).not.toBeVisible();
             await row.locator(".resource-meta").click();
-            await row.locator("h2 a").evaluate((element) =>
+            await row.locator("h3 a").evaluate((element) =>
               element.addEventListener("click", (event) => event.preventDefault(), {
                 once: true,
               }),
             );
-            await row.locator("h2 a").click();
+            await row.locator("h3 a").click();
             await browserExpect(details).toBeVisible();
           }
           if (js)
@@ -5852,9 +6457,12 @@ describe("item details routes", () => {
             await browserExpect(row.locator("summary")).toBeInViewport();
             expect(new URL(page.url()).searchParams.get("item")).toBe(link.id);
           }
-          await browserExpect(
-            row.getByRole("link", { name: "A useful resource", exact: true }),
-          ).toHaveAttribute("referrerpolicy", "no-referrer");
+          const resourceLink = row.getByRole("link", {
+            name: "A useful resource (opens in a new tab)",
+            exact: true,
+          });
+          await browserExpect(resourceLink).toHaveAttribute("referrerpolicy", "no-referrer");
+          await browserExpect(resourceLink).toHaveAttribute("target", "_blank");
           // Expanded grouping remains visible without hover or keyboard focus.
           await page.mouse.move(0, 0);
           for (const width of [1280, 390, 768, 1440]) {
@@ -5956,7 +6564,7 @@ it("preserves private sharing destinations and resumes access, link and transfer
       await page.getByRole("button", { name: "Continue with email", exact: true }).click();
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
-      await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+      await page.getByLabel("Six-digit code").fill(await capturedCode(email));
       await page.getByRole("button", { name: "Verify and continue" }).click();
     };
     const expire = async () => {
@@ -6000,7 +6608,7 @@ it("preserves private sharing destinations and resumes access, link and transfer
       for (const label of ["Create share link", "Replace share link", "Turn off link access"]) {
         await expire();
         await page.getByRole("button", { name: label, exact: true }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to ntumie.");
         await verify();
         await browserExpect(page.locator("h1")).toHaveText("Share collection");
         const link = new URL(
@@ -6075,7 +6683,7 @@ it("binds resumed collection commands to their account and rechecks current auth
           data: { expiresAt: new Date(0) },
         });
         await page.getByRole("button", { name: "Yes, delete", exact: true }).click();
-        await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
+        await browserExpect(page.locator("h1")).toHaveText("Sign in to ntumie.");
         // Ownership changes while the command is waiting. The new owner could
         // delete it, but must never inherit the previous account's pending action.
         const nextHub = await prisma.hub.findUniqueOrThrow({
@@ -6093,7 +6701,7 @@ it("binds resumed collection commands to their account and rechecks current auth
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
         await browserExpect(page.locator("h1")).toHaveText("Check your email");
-        await page.getByLabel("Eight-digit code").fill(await capturedCode(verifyingEmail));
+        await page.getByLabel("Six-digit code").fill(await capturedCode(verifyingEmail));
         await page.getByRole("button", { name: "Verify and continue" }).click();
         await browserExpect(page).toHaveURL(/\/manage\/collections(?:\?|$)/);
         expect(await prisma.collection.count({ where: { id: collection.id } })).toBe(1);
@@ -6574,7 +7182,7 @@ describe("reorder", () => {
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
         await browserExpect(page.locator("h1")).toHaveText("Check your email");
-        await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+        await page.getByLabel("Six-digit code").fill(await capturedCode(email));
         await page.getByRole("button", { name: "Verify and continue" }).click();
         await browserExpect(page.locator("h1")).toHaveText("Reorder items");
         expect((await rows())[0].id).toBe(current[1].id);
@@ -6687,7 +7295,7 @@ it("shows handle cooldown and retirement rules and recovers accounts through nat
       await page.getByRole("button", { name: "Send confirmation code" }).click();
       await browserExpect(page.getByLabel("Verification code")).toBeVisible();
       expect(new URL(page.url()).searchParams.get("notice")).not.toBe("limited");
-      await page.getByLabel("Verification code").fill("00000000");
+      await page.getByLabel("Verification code").fill("000000");
       await page.getByRole("button", { name: "Confirm: deactivate account" }).click();
       await browserExpect(page.locator("main").getByRole("alert")).toContainText("incorrect");
       await page.getByLabel("Verification code").fill(await capturedCode(email));
@@ -7324,7 +7932,7 @@ for (const registration of [false, true]) {
           page.getByRole("button", { name: "Create account", exact: true }),
         ).toBeVisible();
         await browserExpect(
-          page.getByText("There isn’t a linkhub account for", {
+          page.getByText("There isn’t a ntumie. account for", {
             exact: false,
           }),
         ).toBeVisible();
@@ -7386,7 +7994,7 @@ for (const registration of [false, true]) {
         await browserExpect(
           page.getByRole("heading", { name: "Verify your email", exact: true }),
         ).toBeVisible();
-        await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+        await page.getByLabel("Six-digit code").fill(await capturedCode(email));
         await page.getByRole("button", { name: "Verify and continue", exact: true }).click();
       }
       await browserExpect(page).toHaveURL(`${origin}/notifications`);
@@ -7458,7 +8066,7 @@ it("offers only cancel deletion after email proof during first-link capture", as
       await page.getByLabel("Email address").fill(email);
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
-      await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+      await page.getByLabel("Six-digit code").fill(await capturedCode(email));
       await page.getByRole("button", { name: "Verify and save", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Cancel deletion");
       await browserExpect(page.locator("main")).toContainText("scheduled for deletion");
@@ -7517,7 +8125,7 @@ it("prioritizes verified recovery over a different signed-in account", async () 
         await page.getByLabel("Email address").fill(email);
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
-        await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+        await page.getByLabel("Six-digit code").fill(await capturedCode(email));
         await page.getByRole("button", { name: "Verify and continue", exact: true }).click();
         const label = deletion ? "Cancel deletion" : "Reactivate account";
         await browserExpect(page.locator("h1")).toHaveText(label);
@@ -7571,7 +8179,7 @@ it("preserves the sign-in destination when choosing a different email", async ()
       await page.getByLabel("Email address").fill(email);
       await page.getByRole("button", { name: "Continue with email", exact: true }).click();
       await page.getByRole("button", { name: "Send code", exact: true }).click();
-      await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+      await page.getByLabel("Six-digit code").fill(await capturedCode(email));
       await page.getByRole("button", { name: "Verify and continue" }).click();
       await browserExpect(page).toHaveURL(`${origin}${destination}`);
     } finally {
@@ -7594,14 +8202,14 @@ it("offers deliberate account creation and an optional named hub after email pro
         );
         await browserExpect(
           page.getByRole("heading", {
-            name: withHub ? "Create your account" : "Sign in to linkhub",
+            name: withHub ? "Create your account" : "Sign in to ntumie.",
             exact: true,
           }),
         ).toBeVisible();
         await page.getByLabel("Email address").fill(email);
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
-        await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+        await page.getByLabel("Six-digit code").fill(await capturedCode(email));
         await page.getByRole("button", { name: "Verify and continue", exact: true }).click();
         await browserExpect(page).toHaveURL(`${origin}/sign-up/confirm?method=email`);
         await browserExpect(page.locator(".verify-reason")).toContainText(email);
@@ -8406,7 +9014,7 @@ it("resumes submitted import corrections after sign-in with and without JavaScri
       await page.getByRole("button", { name: "Continue with email", exact: true }).click();
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
-      await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+      await page.getByLabel("Six-digit code").fill(await capturedCode(email));
       await page.getByRole("button", { name: "Verify and continue" }).click();
     };
     try {
@@ -8429,7 +9037,7 @@ it("resumes submitted import corrections after sign-in with and without JavaScri
         data: { expiresAt: new Date(0) },
       });
       await page.getByRole("button", { name: "Save", exact: true }).click();
-      await browserExpect(page.locator("h1")).toHaveText("Sign in to linkhub");
+      await browserExpect(page.locator("h1")).toHaveText("Sign in to ntumie.");
       const recovery = (await page.context().cookies()).find((c) => c.name === "pending_action");
       expect(recovery?.value).toMatch(/^ref\.[a-f0-9]{64}$/);
       await verify();
@@ -8556,7 +9164,7 @@ it("transfers same-title collections at stable IDs before and after sign-in", as
       await page.getByRole("button", { name: "Continue with email", exact: true }).click();
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
-      await page.getByLabel("Eight-digit code").fill(await capturedCode(email));
+      await page.getByLabel("Six-digit code").fill(await capturedCode(email));
       await page.getByRole("button", { name: "Verify and continue" }).click();
     };
     try {

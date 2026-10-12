@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { Injectable, OnModuleInit } from "@nestjs/common";
-import type { ServiceInvitationView } from "@linkhub/types";
+import type { ServiceInvitationView } from "@ntumie/types";
 import type { CursorQueryDto } from "../../common/dto/cursor-query.dto";
 import { appError } from "../../common/errors/app-exception";
 import { PrismaService } from "../../database/prisma.service";

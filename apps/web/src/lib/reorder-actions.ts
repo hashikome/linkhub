@@ -1,6 +1,6 @@
 "use server";
-import { webServerConfig } from "@linkhub/config/web-server";
-import type { MoveResourceRequest } from "@linkhub/types";
+import { webServerConfig } from "@ntumie/config/web-server";
+import type { MoveResourceRequest } from "@ntumie/types";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";

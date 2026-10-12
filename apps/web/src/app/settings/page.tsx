@@ -41,7 +41,9 @@ export default async function Page({
               ? "hub"
               : queryValue(query.section) === "notifications"
                 ? "notifications"
-                : "profile"
+                : queryValue(query.section) === "device"
+                  ? "device"
+                  : "profile"
           }
         />
       )}

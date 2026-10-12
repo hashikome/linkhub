@@ -1,10 +1,10 @@
 {
-  "name": "@linkhub/types",
+  "name": "@ntumie/types",
   "version": "0.0.1",
   "private": true,
   "license": "UNLICENSED",
   "type": "module",
-  "description": "Shared API request/response contract types for linkhub clients.",
+  "description": "Shared API request/response contract types for ntumie. clients.",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@linkhub/config": "workspace:*",
+    "@ntumie/config": "workspace:*",
     "typescript": "^6.0.3"
   }
 }

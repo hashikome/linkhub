@@ -1,7 +1,7 @@
 "use client";
-import type { Resource } from "@linkhub/types";
 import { useEffect, useId, useState } from "react";
 import { LocalTime } from "./local-time";
+import type { ResourcePresentation } from "./resource-presentation";
 
 // Inline context beneath the item's disclosure; the API authorizes every field.
 export function ItemDetails({
@@ -9,7 +9,7 @@ export function ItemDetails({
   permalink,
   preview = false,
 }: {
-  item: Resource;
+  item: ResourcePresentation;
   permalink?: string;
   preview?: boolean;
 }) {
@@ -20,22 +20,24 @@ export function ItemDetails({
       {item.kind === "collection_link" && !item.linkedCollection && (
         <p>This collection may be private or no longer available.</p>
       )}
-      <p className="meta">
-        Added{" "}
-        {item.addedBy && (
-          <>
-            by{" "}
-            {preview ? (
-              <span>{item.addedBy.username}</span>
-            ) : (
-              <a className="person" href={`/${encodeURIComponent(item.addedBy.username)}`}>
-                {item.addedBy.username}
-              </a>
-            )}{" "}
-          </>
-        )}
-        <LocalTime at={item.createdAt} />
-      </p>
+      {(item.createdAt || item.addedBy) && (
+        <p className="meta">
+          Added{" "}
+          {item.addedBy && (
+            <>
+              by{" "}
+              {preview ? (
+                <span>{item.addedBy.username}</span>
+              ) : (
+                <a className="person" href={`/${encodeURIComponent(item.addedBy.username)}`}>
+                  {item.addedBy.username}
+                </a>
+              )}{" "}
+            </>
+          )}
+          {item.createdAt && <LocalTime at={item.createdAt} />}
+        </p>
+      )}
       {permalink && <ItemPermalink permalink={permalink} />}
     </div>
   );
@@ -50,28 +52,30 @@ function ItemPermalink({ permalink }: { permalink: string }) {
   useEffect(() => setEnhanced(true), []);
   return (
     <div className="item-link-copy">
-      <button
-        type="button"
-        className="text-button"
-        disabled={!enhanced || busy}
-        onClick={async () => {
-          const link = new URL(permalink, window.location.origin).href;
-          setBusy(true);
-          setStatus("Copying…");
-          setManualLink("");
-          try {
-            await navigator.clipboard.writeText(link);
-            setStatus("Link copied.");
-          } catch {
-            setManualLink(link);
-            setStatus("Select the link below and copy it.");
-          } finally {
-            setBusy(false);
-          }
-        }}
-      >
-        Copy link to this item
-      </button>
+      {enhanced && (
+        <button
+          type="button"
+          className="text-button"
+          disabled={busy}
+          onClick={async () => {
+            const link = new URL(permalink, window.location.origin).href;
+            setBusy(true);
+            setStatus("Copying…");
+            setManualLink("");
+            try {
+              await navigator.clipboard.writeText(link);
+              setStatus("Link copied.");
+            } catch {
+              setManualLink(link);
+              setStatus("Select the link below and copy it.");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Copy link to this item
+        </button>
+      )}
       <noscript>
         <a href={permalink}>Open item link to copy its address</a>
       </noscript>

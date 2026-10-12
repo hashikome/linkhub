@@ -1,4 +1,4 @@
-import { type AuditLogEntry, auditActionLabels, auditStateLabels } from "@linkhub/types";
+import { type AuditLogEntry, auditActionLabels, auditStateLabels } from "@ntumie/types";
 
 export const auditActionLabel = (action: string) =>
   auditActionLabels[action as keyof typeof auditActionLabels] ?? action;

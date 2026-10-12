@@ -25,7 +25,7 @@ export default async function Page({
       {ready && (
         <>
           <p className="verify-reason">
-            {signup ? "Your account will use " : "There isn’t a linkhub account for "}
+            {signup ? "Your account will use " : "There isn’t a ntumie. account for "}
             <strong>{pending.data.email}</strong>
             {signup ? "." : " yet."}
           </p>

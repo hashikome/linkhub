@@ -1,11 +1,46 @@
-import type { Collection, PersonRef, Resource } from "@linkhub/types";
+import type { Collection, PersonRef } from "@ntumie/types";
 import { hubPath, permalink } from "../lib/http";
 import { ItemDetails } from "./item-details";
 import { ItemDisclosure } from "./item-disclosure";
 import { Updated } from "./local-time";
+import { ResourceLink } from "./resource-navigation";
+import type { ResourcePresentation } from "./resource-presentation";
 
-export function Tags({ tags, limit = tags.length }: { tags: string[]; limit?: number }) {
+export function Tags({
+  tags,
+  limit = tags.length,
+  expandable = false,
+}: {
+  tags: string[];
+  limit?: number;
+  expandable?: boolean;
+}) {
   const remaining = Math.max(0, tags.length - limit);
+  if (expandable && remaining > 0) {
+    return (
+      <details className="tag-overflow">
+        <summary>
+          <span className="tag-preview">
+            {tags.slice(0, limit).map((tag) => (
+              <span className="tag" key={tag}>
+                {tag}
+              </span>
+            ))}
+          </span>
+          <span className="tags-more">
+            +{remaining} {remaining === 1 ? "tag" : "tags"}
+          </span>
+          <span className="tags-less">Fewer tags</span>
+        </summary>
+        {/* biome-ignore lint/a11y/noNoninteractiveTabindex: Overflowing tags need keyboard scrolling. */}
+        <ul className="tags" aria-label="All collection tags" tabIndex={0}>
+          {tags.map((tag) => (
+            <li key={tag}>{tag}</li>
+          ))}
+        </ul>
+      </details>
+    );
+  }
   return tags.length ? (
     <ul className="tags" aria-label="Tags">
       {tags.slice(0, limit).map((tag) => (
@@ -19,6 +54,7 @@ export function Tags({ tags, limit = tags.length }: { tags: string[]; limit?: nu
     </ul>
   ) : null;
 }
+
 export function CollectionRow({ item, handle }: { item: Collection; handle?: string }) {
   return (
     <li className="collection-row">
@@ -96,15 +132,16 @@ export function ResourceRow({
   onExpandedChange,
   preview = false,
 }: {
-  item: Resource;
-  itemBase?: string;
+  item: ResourcePresentation;
+  itemBase?: string | null;
   expanded?: boolean;
   preview?: boolean;
   onExpandedChange?: (open: boolean) => void;
 }) {
+  const ResourceTitle = preview ? "h4" : "h3";
   // The demo links back to its own selectable example, never a fictional record.
   const detailsUrl = new URL(
-    preview ? "/" : (itemBase ?? permalink(item.collectionId)),
+    itemBase ?? (preview ? "/" : permalink(item.collectionId)),
     "http://local.invalid",
   );
   detailsUrl.searchParams.set("item", item.id);
@@ -121,10 +158,14 @@ export function ResourceRow({
     const value = new URL(item.url ?? "");
     if (["http:", "https:"].includes(value.protocol)) url = value;
   } catch {}
+  const internal =
+    item.kind === "site_link" && /^\/(?![/\\])/.test(item.url ?? "") && !item.url?.includes("\\");
   const reference = item.kind === "collection_link";
   const destination = reference
     ? item.linkedCollection && permalink(item.linkedCollection.id)
-    : url?.href;
+    : internal
+      ? item.url
+      : url?.href;
   const title = reference
     ? item.linkedCollection?.title || "Collection unavailable"
     : item.title || url?.href || "Link unavailable";
@@ -141,17 +182,17 @@ export function ResourceRow({
         onExpandedChange={onExpandedChange}
       >
         <summary aria-label={`Details: ${title}`}>
-          <h2>
+          <ResourceTitle>
             {destination && !(preview && reference) ? (
-              <a href={destination} rel="noreferrer" referrerPolicy="no-referrer">
-                {title}
-              </a>
+              <ResourceLink href={destination}>{title}</ResourceLink>
             ) : (
               title
             )}
-          </h2>
+          </ResourceTitle>
           <div className="meta resource-meta">
-            {reference ? (
+            {internal ? (
+              <span>ntumie.</span>
+            ) : reference ? (
               destination ? (
                 <>
                   <CollectionIcon />
@@ -175,7 +216,11 @@ export function ResourceRow({
         <ItemDetails
           preview={preview}
           item={item}
-          permalink={detailsUrl.pathname + detailsUrl.search + detailsUrl.hash}
+          permalink={
+            itemBase === null
+              ? undefined
+              : detailsUrl.pathname + detailsUrl.search + detailsUrl.hash
+          }
         />
       </ItemDisclosure>
     </li>

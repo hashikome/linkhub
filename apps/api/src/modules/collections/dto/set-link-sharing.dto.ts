@@ -1,4 +1,4 @@
-import type { SetLinkSharingRequest } from "@linkhub/types";
+import type { SetLinkSharingRequest } from "@ntumie/types";
 import { IsBoolean, IsOptional } from "class-validator";
 
 export class SetLinkSharingDto implements SetLinkSharingRequest {

@@ -1,5 +1,5 @@
 "use client";
-import type { SessionView } from "@linkhub/types";
+import type { SessionView } from "@ntumie/types";
 import { useEffect, useState } from "react";
 import { browserRead } from "../lib/browser-api";
 

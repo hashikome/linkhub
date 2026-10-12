@@ -1,4 +1,4 @@
-import type { ShareDescriptor, ShareKind } from "@linkhub/types";
+import type { ShareDescriptor, ShareKind } from "@ntumie/types";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CollectionFeedback } from "../../components/collection-feedback";
@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Share", robots: { index: false, foll
 export const dynamic = "force-dynamic";
 
 const presentation: Record<ShareKind, { heading: string; label: string }> = {
-  site: { heading: "Share linkhub", label: "Site link" },
+  site: { heading: "Share ntumie.", label: "Site link" },
   profile: { heading: "Share profile", label: "Profile link" },
   hub: { heading: "Share hub", label: "Hub link" },
   collection: { heading: "Share collection", label: "Collection link" },

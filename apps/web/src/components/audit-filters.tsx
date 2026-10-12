@@ -1,4 +1,4 @@
-import { auditActions, authenticationAuditActions, operatorAuditActions } from "@linkhub/types";
+import { auditActions, authenticationAuditActions, operatorAuditActions } from "@ntumie/types";
 import { auditActionLabel } from "../lib/audit-presentation";
 import { queryValue } from "../lib/http";
 import { AuditDates } from "./audit-dates";

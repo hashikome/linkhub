@@ -4,8 +4,8 @@ import {
   renderEmailChangeConfirmation,
   renderNewEmailVerification,
   renderVerificationCode,
-} from "@linkhub/email";
-import type { VerificationPurpose } from "@linkhub/types";
+} from "@ntumie/email";
+import type { VerificationPurpose } from "@ntumie/types";
 import type { Prisma } from "../generated/prisma/client";
 
 export type EmailKind = "sign-in" | "current-email" | "new-email";

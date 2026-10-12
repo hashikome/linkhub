@@ -1,5 +1,5 @@
-import type { AuditAction, CommentAuthor, CommentThreads, CommentView } from "@linkhub/types";
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import type { AuditAction, CommentAuthor, CommentThreads, CommentView } from "@ntumie/types";
 import { recordAudit } from "src/common/audit";
 import { appError } from "src/common/errors/app-exception";
 import type { AuthUser } from "src/common/interfaces/auth-user.interface";

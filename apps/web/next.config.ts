@@ -4,7 +4,7 @@ export default function config(): NextConfig {
   return {
     poweredByHeader: false,
     agentRules: false,
-    transpilePackages: ["@linkhub/types", "@linkhub/config"],
+    transpilePackages: ["@ntumie/types", "@ntumie/config"],
     webpack(config) {
       config.resolve.extensionAlias = {
         ...config.resolve.extensionAlias,

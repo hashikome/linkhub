@@ -1,5 +1,5 @@
-import { publicOrigins } from "@linkhub/config/public-origins";
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { publicOrigins } from "@ntumie/config/public-origins";
 import { zipSync } from "fflate";
 import { ResourceKind } from "src/common/enums/resource-kind.enum";
 import { AuthUser } from "src/common/interfaces/auth-user.interface";

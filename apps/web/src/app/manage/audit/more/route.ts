@@ -1,4 +1,4 @@
-import type { AuditLogEntry } from "@linkhub/types";
+import type { AuditLogEntry } from "@ntumie/types";
 import { auditQuery } from "../../../../lib/audit-query";
 import { serverRead } from "../../../../lib/server-api";
 

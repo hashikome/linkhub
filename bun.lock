@@ -3,20 +3,17 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "nslinkhub",
+      "name": "ntumie",
       "devDependencies": {
         "@biomejs/biome": "2.4.16",
         "@playwright/test": "1.63.0",
       },
     },
     "apps/api": {
-      "name": "@linkhub/api",
+      "name": "@ntumie/api",
       "version": "0.0.1",
       "dependencies": {
         "@better-auth/passkey": "1.6.23",
-        "@linkhub/config": "workspace:*",
-        "@linkhub/email": "workspace:*",
-        "@linkhub/types": "workspace:*",
         "@logtape/logtape": "2.3.0",
         "@logtape/sentry": "2.3.0",
         "@nestjs/common": "^11.0.1",
@@ -24,6 +21,9 @@
         "@nestjs/core": "^11.0.1",
         "@nestjs/platform-express": "^11.0.1",
         "@nestjs/swagger": "^11.2.0",
+        "@ntumie/config": "workspace:*",
+        "@ntumie/email": "workspace:*",
+        "@ntumie/types": "workspace:*",
         "@prisma/adapter-pg": "^7.8.0",
         "@prisma/client": "^7.8.0",
         "@sentry/bun": "10.69.0",
@@ -57,11 +57,11 @@
       },
     },
     "apps/web": {
-      "name": "@linkhub/web",
+      "name": "@ntumie/web",
       "version": "0.0.1",
       "dependencies": {
-        "@linkhub/config": "workspace:*",
-        "@linkhub/types": "workspace:*",
+        "@ntumie/config": "workspace:*",
+        "@ntumie/types": "workspace:*",
         "@simplewebauthn/browser": "13.2.2",
         "next": "16.3.8",
         "proxy-addr": "2.0.7",
@@ -83,29 +83,29 @@
       },
     },
     "packages/config": {
-      "name": "@linkhub/config",
+      "name": "@ntumie/config",
       "version": "0.0.1",
     },
     "packages/email": {
-      "name": "@linkhub/email",
+      "name": "@ntumie/email",
       "version": "0.0.1",
       "dependencies": {
-        "@linkhub/types": "workspace:*",
+        "@ntumie/types": "workspace:*",
         "@react-email/components": "^0.5.6",
         "react": "^19.0.0",
       },
       "devDependencies": {
-        "@linkhub/config": "workspace:*",
+        "@ntumie/config": "workspace:*",
         "@types/bun": "^1.3.14",
         "@types/react": "^19.0.0",
         "typescript": "^6.0.3",
       },
     },
     "packages/types": {
-      "name": "@linkhub/types",
+      "name": "@ntumie/types",
       "version": "0.0.1",
       "devDependencies": {
-        "@linkhub/config": "workspace:*",
+        "@ntumie/config": "workspace:*",
         "typescript": "^6.0.3",
       },
     },
@@ -291,16 +291,6 @@
 
     "@levischuck/tiny-cbor": ["@levischuck/tiny-cbor@0.2.11", "", {}, "sha512-llBRm4dT4Z89aRsm6u2oEZ8tfwL/2l6BwpZ7JcyieouniDECM5AqNgr/y08zalEIvW3RSK4upYyybDcmjXqAow=="],
 
-    "@linkhub/api": ["@linkhub/api@workspace:apps/api"],
-
-    "@linkhub/config": ["@linkhub/config@workspace:packages/config"],
-
-    "@linkhub/email": ["@linkhub/email@workspace:packages/email"],
-
-    "@linkhub/types": ["@linkhub/types@workspace:packages/types"],
-
-    "@linkhub/web": ["@linkhub/web@workspace:apps/web"],
-
     "@logtape/logtape": ["@logtape/logtape@2.3.0", "", {}, "sha512-s/pxCgf9Gg75ypTV/bRUq355Dy/JP/zUJWfgJQPO5pTkXC23X2AXBcmBBgFiWH+bSi4yiX/G06qGV8CdAWD3SA=="],
 
     "@logtape/sentry": ["@logtape/sentry@2.3.0", "", { "peerDependencies": { "@logtape/logtape": "^2.3.0", "@sentry/core": ">=8.0.0" } }, "sha512-THBEtR1Y/9d9JQPS2C7SYsqZUz3kmhMfXMCPO3E71b5QsAIqINskYNmnG+8lnBTUangH+NMO/37/96MuRFcR4g=="],
@@ -360,6 +350,16 @@
     "@noble/ciphers": ["@noble/ciphers@2.2.0", "", {}, "sha512-Z6pjIZ/8IJcCGzb2S/0Px5J81yij85xASuk1teLNeg75bfT07MV3a/O2Mtn1I2se43k3lkVEcFaR10N4cgQcZA=="],
 
     "@noble/hashes": ["@noble/hashes@2.2.0", "", {}, "sha512-IYqDGiTXab6FniAgnSdZwgWbomxpy9FtYvLKs7wCUs2a8RkITG+DFGO1DM9cr+E3/RgADRpFjrKVaJ1z6sjtEg=="],
+
+    "@ntumie/api": ["@ntumie/api@workspace:apps/api"],
+
+    "@ntumie/config": ["@ntumie/config@workspace:packages/config"],
+
+    "@ntumie/email": ["@ntumie/email@workspace:packages/email"],
+
+    "@ntumie/types": ["@ntumie/types@workspace:packages/types"],
+
+    "@ntumie/web": ["@ntumie/web@workspace:apps/web"],
 
     "@opentelemetry/api": ["@opentelemetry/api@1.9.1", "", {}, "sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q=="],
 

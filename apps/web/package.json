@@ -1,5 +1,5 @@
 {
-  "name": "@linkhub/web",
+  "name": "@ntumie/web",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -11,8 +11,8 @@
     "test": "bun test test"
   },
   "dependencies": {
-    "@linkhub/config": "workspace:*",
-    "@linkhub/types": "workspace:*",
+    "@ntumie/config": "workspace:*",
+    "@ntumie/types": "workspace:*",
     "@simplewebauthn/browser": "13.2.2",
     "next": "16.3.8",
     "proxy-addr": "2.0.7",

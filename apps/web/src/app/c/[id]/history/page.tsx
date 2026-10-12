@@ -1,4 +1,4 @@
-import type { ActivityEntry, Collection, PersonRef } from "@linkhub/types";
+import type { ActivityEntry, Collection, PersonRef } from "@ntumie/types";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { CollectionFeedback } from "../../../../components/collection-feedback";

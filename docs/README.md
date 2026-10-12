@@ -38,6 +38,13 @@ accounts in `CHANGELOG.md`, completed plans and ADR rationale when they
 explain a decision, migration or acceptance limit. Completed plans are historical
 evidence, not current implementation instructions.
 
+Current branding is **ntumie.** in display text and `ntumie` in repository and
+package identifiers ([ADR-0060](engineering-decisions/0060-ntumie-repository-and-branding.md)).
+Earlier names in historical ADRs, completed plans and changelog entries record
+their original context. Physical storage and seed identities retain legacy names
+as documented compatibility exceptions in the
+[local-development runbook](runbooks/local-development.md#existing-checkout-renamed-to-ntumie).
+
 ## Where things go
 
 ```text

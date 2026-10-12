@@ -1,6 +1,6 @@
-import type { VerificationPurpose } from "@linkhub/types";
+import type { VerificationPurpose } from "@ntumie/types";
 
-export { type VerificationPurpose, verificationPurposes } from "@linkhub/types";
+export { type VerificationPurpose, verificationPurposes } from "@ntumie/types";
 
 // Screens and emails share a purpose vocabulary; copy remains surface-specific.
 export interface VerificationCopy {
@@ -74,7 +74,7 @@ export function verificationCopy(
         return {
           title: "Sign in",
           reason: `Sign in to ${goal}.`,
-          after: "We'll email you an eight-digit code. No password needed.",
+          after: "We'll email you a six-digit code. No password needed.",
           codeTitle: "Check your email",
           codeButton: "Verify and continue",
         };
@@ -84,7 +84,7 @@ export function verificationCopy(
       return {
         title: "Sign in",
         reason: "Welcome back to your corner of the web.",
-        after: "We'll email you an eight-digit code. No password needed.",
+        after: "We'll email you a six-digit code. No password needed.",
         codeTitle: "Check your email",
         codeButton: "Verify and continue",
       };

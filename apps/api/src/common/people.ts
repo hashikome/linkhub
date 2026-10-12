@@ -1,4 +1,4 @@
-import type { PersonRef } from "@linkhub/types";
+import type { PersonRef } from "@ntumie/types";
 import type { Prisma } from "../generated/prisma/client";
 
 // Public people, independent of whether they own a hub.

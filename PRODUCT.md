@@ -1,6 +1,6 @@
 # Product Definition
 
-LinkHub's canonical product definition (the PRD), written to be understood
+This is the canonical product definition (PRD), written to be understood
 without the conversations behind it. Where this document and older material
 conflict, this document wins on what the product is and must do;
 `ARCHITECTURE.md` and `docs/design-docs/` say how it is built, `DESIGN.md` how
@@ -24,10 +24,10 @@ then continues on a laptop.
 
 ### Brand Personality
 
-Calm, legible and trustworthy — a dependable personal library. Lowercase
-`linkhub`, with the slogan **“Good links belong together.”** Company ownership
-belongs in repository documentation and legal policies, not in the product wordmark
-or its slogan. Hashikome owns the product.
+Calm, legible and trustworthy — a dependable personal library. The selected
+product name is **ntumie.**, lowercase with the trailing dot, and the slogan is
+**“Good links belong together.”** The chosen domain is `ntumie.link`. The repository
+uses `ntumie`; workspace packages use `@ntumie/*`.
 
 ### Anti-References
 
@@ -59,7 +59,7 @@ or its slogan. Hashikome owns the product.
 
 ## 1. Product Overview
 
-LinkHub turns the links people collect into **collections**: ordered,
+ntumie. turns the links people collect into **collections**: ordered,
 shareable guides with one stable address. A collection can be read by anyone it
 is shared with, published for anyone to discover, followed, discussed, and
 downloaded as a document.
@@ -75,7 +75,7 @@ again. Instead, a person keeps one living collection and shares its address;
 when the collection improves, everyone who has the address sees the
 improvement.
 
-LinkHub supports free public curation and paid convenience:
+ntumie. supports free public curation and paid convenience:
 
 - Everyone can create unlimited public collections, share their links, invite
   public contributors, and import bookmarks/CSV for free.
@@ -83,9 +83,8 @@ LinkHub supports free public curation and paid convenience:
   sharing and larger private allowances; AI curation and DOCX import are paid
   convenience features (§6.13). Recipients do not need a paid plan.
 
-LinkHub is a Hashikome product, built from its author's own need to organize
-and share useful resources. It moved from the personal account to the company
-on 11 October 2026. Nothing is deployed yet (§11).
+The product grew from its author's own need to organize and share useful
+resources. It was formerly called LinkHub. Nothing is deployed yet (§11).
 
 ## 2. Product Goals
 
@@ -111,6 +110,25 @@ putting them in order, giving them context and keeping them current for a reader
 Fast saving is an entry action. The unit of value is a collection someone can
 learn from, work with or share, whether its resources are articles, videos,
 tools, references or other collections.
+
+### Product Positioning And Name
+
+The defining value is the maintained collection and the context between its
+resources: why they were selected, how they relate and where a reader can begin.
+A reader can discover or receive a guide, explore its destinations and return to
+the same collection as its owner and contributors improve it. Private and
+selectively shared collections remain part of this direction.
+
+The selected name is **ntumie.**, drawn from the everyday Swahili request
+“ntumie link.” The trailing dot is part of the name in both plain text and the
+wordmark. Use `ntumie.link` as the chosen product domain; reserving the `.com` is
+not part of the decision. The repository and application now use the selected name.
+See [ADR-0060](docs/engineering-decisions/0060-ntumie-repository-and-branding.md). Keep
+**“Good links belong together.”** as the slogan. The existing GoodLinks product
+helped clarify this positioning, including the overlap in organizing and sharing
+links. The comparison, decision questions and limits are recorded in
+[product positioning](docs/design-docs/product-positioning.md) and
+[ADR-0058](docs/engineering-decisions/0058-curated-guides-positioning.md).
 
 ### Free Public Curation, Paid Convenience
 
@@ -294,7 +312,7 @@ Existing collections retain their publication and sharing settings.
 
 - **First link (signed out):** the home page's main action is **Save your
   first link**. The person pastes one or two links (tags optional), then
-  verifies their email with an eight-digit code — it is sign in plus add the
+  verifies their email with a six-digit code — it is sign in plus add the
   link. Sending a code creates nothing; verifying signs them in (creating the
   account if new) and saves the links: with no hub yet, the hub is created on
   the spot with a new collection (published by default) named with the date ("Saved links,
@@ -369,6 +387,11 @@ details, attribution, section authoring and reordering Built.
 
 - A collection page shows its title, description, tags, owner and last update,
   then its items in order. Missing titles are resolved when it is opened.
+- Resource titles turn blue on hover or keyboard focus, without underlines or
+  repeated chevrons. Desktop resource panels load more as the reader scrolls
+  near the end; mobile and short viewports use a centered **More resources**
+  control so discussion remains reachable. Manual and native pagination remain
+  available; loading retains position and focus, and failures require a retry.
 - The header shows **Share**, plus **Edit** for owners and contributors. The
   viewer’s main actions are Share and Add a comment; items and sections toggle
   directly, without a global expansion toolbar.
@@ -473,7 +496,7 @@ saves API only; subscriptions and home tabs Planned
   the last 90 days) and full-text search are planned; no date-range filter.
 - **Public hub page:** the hub's name, handle, description, the planned **Join community** action, and
   published collections. The contextual Share page is implemented for hubs,
-  profiles, collections and the site, with site sharing in the footer. Planned
+  profiles, collections and the site, with site sharing on the About ntumie. page. Planned
   hub counts prioritize subscribers and total collection saves: readers saving
   curated collections to return to. Individual resource copies are a separate
   action and do not contribute to collection-save counts.
@@ -487,7 +510,7 @@ saves API only; subscriptions and home tabs Planned
   Communities are planned for paid Curator owners; invited members need no paid
   plan. Membership in one community grants nothing in another. The reusable intake
   service is planned to handle applications, team review, and client follow-up,
-  with LinkHub as its first integration; LinkHub retains invitations and access.
+  with ntumie. as its first integration; ntumie. retains invitations and access.
   Direct invitations need no form. See
   [ADR-0050](docs/engineering-decisions/0050-community-entities-and-intake-integration.md)
   and the [integration backlog](docs/backlog/curation-and-paid-services.md#community-access-and-intake-integration-task).
@@ -573,7 +596,7 @@ self-service account lifecycle, public Gravatar avatars and passwordless securit
 
 - **Sign-in and signup:** Separate `/sign-in` and `/sign-up` pages share email-first
   authentication, with Continue with Google secondary (ADR-0044). Sign-in reads
-  **Sign in to linkhub**; signup reads **Create your account**. Account absence
+  **Sign in to ntumie.**; signup reads **Create your account**. Account absence
   is disclosed only after proof. A missing account requires explicit Create account;
   sign-in offers Use a different email, signup offers Already have an account? Sign in.
   Verified email proof is reused without another code. Creation offers optional
@@ -581,7 +604,7 @@ self-service account lifecycle, public Gravatar avatars and passwordless securit
   The backend creates account and hub atomically and assigns a common initial
   username/handle available in both namespaces; both remain editable under their policies. After entering an
   email, an existing user can use a registered passkey without email or TOTP
-  codes. Otherwise, verify an eight-digit emailed code. Google callback alone never
+  codes. Otherwise, verify a six-digit emailed code. Google callback alone never
   creates an account: if its email has none here, explicitly offer to create one,
   show the email and offer explicit creation or a return to sign-in.
   Confirmation then creates the account from Google's verified email and name,
@@ -607,10 +630,16 @@ self-service account lifecycle, public Gravatar avatars and passwordless securit
   the person it belongs to.
 - **Settings:** username, full name, email and member-since; optional hub name,
   handle, description and permanent id; whether to publicly connect the person profile and hub. Profiles show name, username and an optional personal bio (up to 500 characters),
-  independent of the hub description. A missing hub is explained with a first-save action. Changes
+  independent of the hub description. A missing hub is explained with a first-save action. Profile changes
   save as they are made. Timezone defaults to Automatic (the device); an explicit
   choice is stored on the account and follows it across devices, including initial
-  server-rendered dates and calendar filters (ADR-0045). Appearance (System, Light, Dark) is a header control.
+  server-rendered dates and calendar filters (ADR-0045). Appearance (System, Light, Dark)
+  is a header control. Settings → On this device
+  offers an off-by-default preference to open external resources in the same tab,
+  saved in this browser rather than synced to the account. External resources
+  otherwise open in new tabs to keep the collection available. ntumie. destinations
+  stay in the same tab regardless of ownership; native links preserve browser
+  shortcuts and no-referrer behavior.
 - **Account identity:** user UUID and the chosen email are fixed. Profile updates
   can change names and bios, never identity fields. Controlled email change is
   backlog (ADR-0041): any future process requires a dedicated POST action with
@@ -877,7 +906,7 @@ Delivery sequence and remaining work (completed foundations are marked):
    ([people-and-hubs](docs/design-docs/people-and-hubs.md)). Subscriptions remain
    in the home/subscriptions slice below.
 4. **Collaborators and routes** — done: collection roles are **viewer** and
-   **contributor**; items open by `?item=<id>` on either collection address,
+   **contributor**; items open by `?item=<id>` on `/c/<collectionId>`,
    including native links and authorized reads beyond the first page.
    [Implementation and verification](docs/exec-plans/completed/deliver-collaborators-and-routes.md).
    Preview cards, notes and item editing remain in their later milestones.
@@ -894,11 +923,13 @@ Delivery sequence and remaining work (completed foundations are marked):
 10. **Remaining web organization and downloads** (§6.3, §6.5, §6.10) —
     item/reference editing and export. Sections, reordering, contextual sharing,
     publishing and transfer are built. Social destinations remain deferred;
-    site sharing lives in the footer.
+    site sharing lives on `/about`, alongside Support and the maker’s portfolio.
 11. **Discover search** (§6.6).
-12. **Rest of the internals pass** — fewer queries, one write-lock opt-out per
-    controller, the forms route as an action table, Save a link drafts in
-    Redis, focus rings.
+12. **Rest of the internals pass** — one write-lock opt-out per controller,
+    the forms route as an action table, Save a link drafts in Redis, smaller
+    consolidations and focus rings. Batched reference access and discussion
+    queries are complete; remaining milestones are tracked in the
+    [internals plan](docs/exec-plans/active/final-pass-internals.md).
 13. **Account** (§6.11) — controlled email change is backlog; standard profile edits exclude email and user UUID. Passkeys, confirmed Google onboarding/sign-in, authenticator-app codes and protected recovery are built.
     Hub-handle changes with a 30-day cooldown and permanent retirement are built
     (ADR-0043). Self-service deactivation/recovery and deletion/cancellation are

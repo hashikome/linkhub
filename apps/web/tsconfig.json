@@ -1,5 +1,5 @@
 {
-  "extends": "@linkhub/config/tsconfig.base.json",
+  "extends": "@ntumie/config/tsconfig.base.json",
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,

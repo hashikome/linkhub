@@ -32,7 +32,7 @@ export async function signInWithCode(server: App, input: { email: string; name?:
     },
     orderBy: { createdAt: "desc" },
   });
-  const code = unseal(row.payload ?? "", secret).text.match(/\b\d{8}\b/)?.[0];
+  const code = unseal(row.payload ?? "", secret).text.match(/^\d{6}$/m)?.[0];
   if (!code) throw new Error("Expected captured code");
   return request(server)
     .post("/api/v1/auth/code/verify")

@@ -1,5 +1,5 @@
 import "server-only";
-import { webServerConfig } from "@linkhub/config/web-server";
+import { webServerConfig } from "@ntumie/config/web-server";
 
 // Every cookie the web sets: HTTP-only, same-site, whole-site, Secure on https.
 export function serverCookie(name: string, value: string, maxAge?: number) {

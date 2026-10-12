@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
 import { randomUUID } from "node:crypto";
-import type { OperationAction } from "@linkhub/types";
 import { INestApplication } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
+import type { OperationAction } from "@ntumie/types";
 import request from "supertest";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
@@ -592,7 +592,7 @@ describe("service operator authority (HTTP)", () => {
     for (const link of [
       `http://localhost:3004/c/${c.id}`,
       `/c/${c.id}`,
-      `https://nslinkhub.dev/c/${c.id}`,
+      `https://app.example.test/c/${c.id}`,
     ]) {
       const found = await as(
         "get",
@@ -673,7 +673,9 @@ describe("service operator authority (HTTP)", () => {
         title: "Operator own private collection",
       })
       .expect(201);
-    const at = new Date(Date.now() - 1000);
+    // Keep the one-millisecond fixture window away from events written by
+    // preceding tests; "one second ago" can overlap their live timestamps.
+    const at = new Date(Date.now() - 86400000);
     const events: { id: string }[] = [];
     for (const data of [
       {
@@ -721,14 +723,19 @@ describe("service operator authority (HTTP)", () => {
         .sort()
         .reverse(),
     );
+    const searchWindow = new URLSearchParams({
+      from: at.toISOString(),
+      to: new Date(at.getTime() + 1).toISOString(),
+      action: "security.sign_in.email",
+    });
     const searched = await as(
       "get",
-      `/api/v1/manage/audit?q=${operator.id}&action=security.sign_in.email`,
+      `/api/v1/manage/audit?q=${operator.id}&${searchWindow}`,
     ).expect(200);
     expect(searched.body.data.some((e: { id: string }) => e.id === events[2].id)).toBe(true);
     const byLabel = await as(
       "get",
-      "/api/v1/manage/audit?q=Sign%20in%20with%20email&action=security.sign_in.email",
+      `/api/v1/manage/audit?q=Sign%20in%20with%20email&${searchWindow}`,
     ).expect(200);
     expect(byLabel.body.data.some((e: { id: string }) => e.id === events[2].id)).toBe(true);
     const hidden = await as("get", `/api/v1/manage/audit?targetId=${c.id}`).expect(200);
@@ -904,7 +911,7 @@ describe("service operator authority (HTTP)", () => {
     const code = unseal(
       row.payload ?? "",
       readSecret("BETTER_AUTH_SECRET") ?? "dev-better-auth-secret",
-    ).text.match(/^\d{8}$/m)?.[0];
+    ).text.match(/^\d{6}$/m)?.[0];
     if (!code) throw new Error("Expected captured standalone code");
     return code;
   }
@@ -995,10 +1002,13 @@ describe("service operator authority (HTTP)", () => {
   });
   it("paginates active holds without duplicates or private content and rejects unrelated cursors", async () => {
     const collection = await create();
+    // Keep this pagination fixture ahead of prior suites' collections. Read
+    // exactly its three pages rather than walking the entire shared test DB.
+    const createdAt = new Date();
     const seeded = await prisma.collection.createManyAndReturn({
       data: Array.from({ length: 5 }, (_, i) => ({
         hubId: collection.hubId,
-
+        createdAt,
         title: `Private held title ${i}`,
       })),
     });
@@ -1007,7 +1017,7 @@ describe("service operator authority (HTTP)", () => {
     });
     const seen: string[] = [];
     let cursor: string | undefined;
-    do {
+    for (let pageIndex = 0; pageIndex < Math.ceil(seeded.length / 2); pageIndex++) {
       const page = await as(
         "get",
         `/api/v1/manage/collections?${new URLSearchParams({ limit: "2", ...(cursor ? { cursor } : {}) })}`,
@@ -1016,7 +1026,8 @@ describe("service operator authority (HTTP)", () => {
       expect(JSON.stringify(page.body.data)).not.toContain("Private held title");
       seen.push(...page.body.data.map((c: { id: string }) => c.id));
       cursor = page.body.meta.nextCursor;
-    } while (cursor);
+      if (!cursor) break;
+    }
     expect(new Set(seen).size).toBe(seen.length);
     for (const c of seeded) expect(seen).toContain(c.id);
     const accounts = await as("get", "/api/v1/operations/accounts?limit=1").expect(200);

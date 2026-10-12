@@ -1,5 +1,5 @@
 "use client";
-import type { CreatedShareEntry, ShareRequest, ShareTarget } from "@linkhub/types";
+import type { CreatedShareEntry, ShareRequest, ShareTarget } from "@ntumie/types";
 import { useEffect, useId, useRef, useState } from "react";
 import { submitForm } from "../lib/http";
 

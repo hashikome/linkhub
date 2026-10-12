@@ -1,4 +1,4 @@
-import { type AuditLogEntry, auditOutcomeLabels, auditReadActions } from "@linkhub/types";
+import { type AuditLogEntry, auditOutcomeLabels, auditReadActions } from "@ntumie/types";
 import { auditState } from "../lib/audit-presentation";
 import { AuditIdValue } from "./audit-identity";
 

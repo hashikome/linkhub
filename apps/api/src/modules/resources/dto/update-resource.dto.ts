@@ -1,4 +1,4 @@
-import type { UpdateResourceRequest } from "@linkhub/types";
+import type { UpdateResourceRequest } from "@ntumie/types";
 import {
   ArrayMaxSize,
   IsArray,

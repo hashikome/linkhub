@@ -1,8 +1,9 @@
 "use client";
-import type { HandleAvailability, Profile, UsernameAvailability } from "@linkhub/types";
+import type { HandleAvailability, Profile, UsernameAvailability } from "@ntumie/types";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { browserRead } from "../lib/browser-api";
 import { submitForm } from "../lib/http";
+import { DeviceSettings } from "./device-settings";
 import { FormNotice } from "./form-notice";
 import { LocalTime } from "./local-time";
 import { useTimeZone } from "./time-zone";
@@ -108,7 +109,7 @@ function useAvailability(
   return check.value === normalized ? check : { status: "checking" };
 }
 
-export type SettingsSection = "profile" | "hub" | "notifications";
+export type SettingsSection = "profile" | "hub" | "notifications" | "device";
 export function ProfileEditor({
   profile,
   notice,
@@ -125,7 +126,9 @@ export function ProfileEditor({
   useEffect(() => {
     const sync = () => {
       const value = new URL(window.location.href).searchParams.get("section");
-      setSection(value === "hub" || value === "notifications" ? value : "profile");
+      setSection(
+        value === "hub" || value === "notifications" || value === "device" ? value : "profile",
+      );
     };
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
@@ -346,6 +349,7 @@ export function ProfileEditor({
             ["profile", "Profile"],
             ["hub", "Hub"],
             ["notifications", "Notifications"],
+            ["device", "On this device"],
           ] as const
         ).map(([key, label]) => (
           <a
@@ -373,7 +377,9 @@ export function ProfileEditor({
         <a href="/settings/security">Security</a>
       </nav>
       <div className="settings-content">
-        {!feedback && !dirty && notice !== "profile-saved" && <FormNotice code={notice} />}
+        {!feedback && !dirty && !["profile-saved", "device-saved"].includes(notice ?? "") && (
+          <FormNotice code={notice} />
+        )}
         <form
           ref={form}
           action="/forms/profile-save"
@@ -652,7 +658,7 @@ export function ProfileEditor({
           </div>
           <div
             className="profile-save-actions"
-            hidden={section === "notifications" && !dirty && !saving}
+            hidden={(section === "notifications" || section === "device") && !dirty && !saving}
           >
             <noscript>
               <button className="button primary" type="submit">
@@ -714,6 +720,7 @@ export function ProfileEditor({
           <input type="hidden" name="savePart" value="handle" />
           <input type="hidden" name="section" value="hub" />
         </form>
+        <DeviceSettings hidden={section !== "device"} saved={notice === "device-saved"} />
         <p hidden={section !== "profile"}>
           <a href="/account">Account access and deletion</a>
         </p>

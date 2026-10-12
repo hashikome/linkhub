@@ -132,6 +132,10 @@ never carries the code):
   inbox preview and body for sign-in, saving a first link, continuing, resuming
   after session expiry, confirming a sensitive action, and invitation acceptance.
   Resends retain the same purpose. All variants share the code layout and warning.
+- **service invitation** (`renderServiceInvitation`) — an English invitation to
+  review an admin or operator role, with its expiry and a review URL. Opening
+  the link grants no role; acceptance requires a fresh invitation-bound email
+  code. It uses the shared email footer but carries no authentication proof.
 - **Retained, inactive: email-change confirmation** (`renderEmailChangeConfirmation`) — to the
   **current** address, naming the target address; step one of the
   retired double-verified account-email change
@@ -145,7 +149,7 @@ Collection-share notification remains separate sharing work. Password reset
 is not a product feature; sign-in uses mailbox codes.
 
 **Visual direction (decided):** Substack-style minimal transactional layout —
-the lowercase `linkhub` wordmark (text, no image logo), one large
+the lowercase `ntumie.` wordmark (text, no image logo), one large
 letter-spaced code, a short validity line, one bold "do not share" warning, then a muted footer with the
 support route. Use a neutral near-black palette; the web theme is not an email rendering contract.
 
@@ -153,19 +157,19 @@ Each render returns an application-owned subject, HTML body, and plain-text
 body. Keep subjects free of personal or sensitive data. Use conservative
 email-client-compatible layout and inline styles.
 
-Every approved template:
+Every code template:
 
 - accepts an explicit supported locale and renders matching language metadata,
   subject, preview, body copy, actions, and expiry units;
 - includes a configured HTTPS support route for unexpected-message recovery;
 - includes viewport metadata and conservative narrow-client adaptations;
-- validates HTTPS support URLs, expiry bounds, product-name bounds,
-  and purpose-specific values before rendering.
+- validates HTTPS support URLs, code shape, expiry bounds and purpose-specific
+  values before rendering. Product branding is fixed in the shared template.
 
 Import only the focused React Email components and renderer used at runtime. Do
 not depend on the preview/CLI package from production rendering code.
 
-Tests must prove that each approved template renders both formats, includes its
+Tests must prove that each code template renders both formats, includes its
 required code and support route, uses localized language
 metadata and copy, handles singular expiry units, retains meaningful-text WCAG
 AA contrast, and does not emit missing placeholder values. Delivery integration
@@ -176,11 +180,16 @@ ordinary logs, Redis payloads, and external telemetry
 ### Shared footer and warning
 
 Code emails carry one warning line, “Do not share this code with anyone.”, and
-every email (codes and invitations) ends with the same footer as the web: a
-support prompt (“Didn't request this? You can safely ignore this email. Need
-help? Contact <support>”), then “© <year> linkhub” over “Good links belong together.”. The prompt always links `EMAIL_SUPPORT_URL`, the web `/support` page,
+every email (codes and invitations) uses the shared email footer: a
+purpose-specific unexpected-message prompt, “Need help? Visit support”, then
+“© <year> ntumie.” over “Good links belong together.” Code emails say “Didn't
+request this? You can safely ignore this email.” Invitations say “Not expecting
+this invitation? You can ignore it; nothing changes.” The support link uses
+`EMAIL_SUPPORT_URL`, the web `/support` page,
 which shows the support address (`SUPPORT_EMAIL`, web server config). Emails
 never carry the address themselves, so changing it needs no email change.
+Web footers use the separate About/navigation contract in the
+[interface system](web-interface-system.md).
 
 ## Idempotency
 
@@ -218,7 +227,7 @@ Email signup and email proofs use codes only; other sign-in methods follow
 [passwordless security](passwordless-security.md). The transaction-scoped integration proves one-time consumption,
 resend invalidation, concurrent completion, cross-device sign-in and replay
 rejection on the pinned dependency. GET never consumes an email proof. The
-Google OAuth callback is the protocol-specific state/PKCE-validated exception. Eight-digit
+Google OAuth callback is the protocol-specific state/PKCE-validated exception. Six-digit
 verification codes are keyed-hashed through the supported auth integration;
 shared issue/verify budgets and non-enumerating issuance responses apply.
 See the [integration contract](auth-delivery-integration.md) for endpoints,

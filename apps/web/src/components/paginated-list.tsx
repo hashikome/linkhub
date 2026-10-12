@@ -1,6 +1,6 @@
 "use client";
-import type { Collection, HubPage, Resource } from "@linkhub/types";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { Collection, HubPage, Resource } from "@ntumie/types";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { browserRead } from "../lib/browser-api";
 import { type ApiPath, type Failure, withCursor } from "../lib/http";
 import { Retry } from "./feedback";
@@ -133,47 +133,79 @@ export function PaginatedList(props: Props) {
       window.removeEventListener("reader:suspend", stop);
     };
   }, []);
-  async function more(nextPage = false) {
-    if (!cursor || active.current) return;
-    restoreFocus.current = continuation.current?.contains(document.activeElement) ?? false;
-    const controller = new AbortController();
-    active.current = controller;
-    setPending(true);
-    setError(undefined);
-    const result = await browserRead<(Collection | Resource)[] | HubPage>(
-      withCursor(props.path, cursor),
-      controller.signal,
-      props.token,
-    );
-    if (controller.signal.aborted) return;
-    active.current = null;
-    setPending(false);
-    if (!result.ok) {
-      if ([401, 403, 404].includes(result.status)) {
-        document.documentElement.dataset.revalidating = "true";
-        window.location.reload();
+  const more = useCallback(
+    async (nextPage = false) => {
+      if (!cursor || active.current) return;
+      restoreFocus.current = continuation.current?.contains(document.activeElement) ?? false;
+      const controller = new AbortController();
+      active.current = controller;
+      setPending(true);
+      setError(undefined);
+      const result = await browserRead<(Collection | Resource)[] | HubPage>(
+        withCursor(props.path, cursor),
+        controller.signal,
+        props.token,
+      );
+      if (controller.signal.aborted) return;
+      active.current = null;
+      setPending(false);
+      if (!result.ok) {
+        if ([401, 403, 404].includes(result.status)) {
+          document.documentElement.dataset.revalidating = "true";
+          window.location.reload();
+          return;
+        }
+        setError(result);
         return;
       }
-      setError(result);
-      return;
-    }
-    const data = props.publicHub
-      ? (result.data as HubPage).collections
-      : (result.data as (Collection | Resource)[]);
-    const seen = new Set(items.map((item) => item.id));
-    const additions = data.filter((item) => {
-      if (seen.has(item.id)) return false;
-      seen.add(item.id);
-      return true;
-    });
-    setItems((current) => [...current, ...additions]);
-    setCursor(result.meta?.nextCursor);
-    setAnnouncement(`${additions.length} more ${props.kind} loaded.`);
-    if (nextPage && additions.length) {
-      setHistory((current) => [...current, pageStart]);
-      setPageStart(items.length);
-    }
-  }
+      const data = props.publicHub
+        ? (result.data as HubPage).collections
+        : (result.data as (Collection | Resource)[]);
+      const seen = new Set(items.map((item) => item.id));
+      const additions = data.filter((item) => {
+        if (seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      });
+      setItems((current) => [...current, ...additions]);
+      setCursor(result.meta?.nextCursor);
+      setAnnouncement(`${additions.length} more ${props.kind} loaded.`);
+      if (nextPage && additions.length) {
+        setHistory((current) => [...current, pageStart]);
+        setPageStart(items.length);
+      }
+    },
+    [cursor, items, pageStart, props.kind, props.path, props.publicHub, props.token],
+  );
+  const automaticCursor = useRef<string | null>(null);
+  useEffect(() => {
+    if (props.kind !== "resources" || !cursor || error) return;
+    const body = continuation.current?.closest<HTMLElement>(".sheet-body");
+    if (!body) return;
+    const media = matchMedia("(min-width: 1024px) and (min-height: 600px)");
+    let previousTop = body.scrollTop;
+    const onScroll = () => {
+      const top = body.scrollTop;
+      const movingDown = top > previousTop;
+      previousTop = top;
+      if (
+        !movingDown ||
+        !media.matches ||
+        document.hidden ||
+        document.documentElement.dataset.revalidating ||
+        active.current ||
+        automaticCursor.current === cursor ||
+        body.scrollHeight - top - body.clientHeight > 192
+      )
+        return;
+      // One automatic attempt per cursor. Failures keep the explicit retry,
+      // and a repeated cursor cannot turn a scroll gesture into a request loop.
+      automaticCursor.current = cursor;
+      void more();
+    };
+    body.addEventListener("scroll", onScroll, { passive: true });
+    return () => body.removeEventListener("scroll", onScroll);
+  }, [cursor, error, more, props.kind]);
   const viewParams = {
     ...(props.token ? { s: props.token } : {}),
     ...(props.publicHub?.preview ? { view: "public" } : {}),

@@ -4,7 +4,7 @@ import {
   recoveryPayloadLimit,
   recoveryTtl,
   validRecoveryProof,
-} from "@linkhub/config/action-recovery";
+} from "@ntumie/config/action-recovery";
 import { IsIn, IsOptional, IsString, Matches, MaxLength } from "class-validator";
 import { appError } from "../../common/errors/app-exception";
 import { apiOk } from "../../common/utils/response.util";

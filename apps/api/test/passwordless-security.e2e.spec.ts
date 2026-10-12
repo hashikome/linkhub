@@ -53,7 +53,7 @@ async function login(email: string, cookie = "", instance = auth, googleConnecti
     where: { recipientKey: emailKey(suppressionSecret, "recipient", email) },
     orderBy: { createdAt: "desc" },
   });
-  const code = unseal(mail.payload ?? "", secret).text.match(/^\d{8}$/m)?.[0];
+  const code = unseal(mail.payload ?? "", secret).text.match(/^\d{6}$/m)?.[0];
   return call(
     "/code/verify",
     { email, code, name: "Security test", createAccount: true },
@@ -337,7 +337,7 @@ it("grants an invitation role only after the enrolled factor, and rejects cancel
       where: { recipientKey: emailKey(suppressionSecret, "recipient", owner.email) },
       orderBy: { createdAt: "desc" },
     });
-    const code = unseal(mail.payload ?? "", secret).text.match(/^\d{8}$/m)?.[0];
+    const code = unseal(mail.payload ?? "", secret).text.match(/^\d{6}$/m)?.[0];
     const pending = await call("/invitations/verify", { token, code });
     expect(pending.status).toBe(200);
     expect((await pending.clone().json()).twoFactorRedirect).toBe(true);
@@ -422,14 +422,8 @@ it("Google requires explicit creation consent, links authoritative email, and ga
       await instance.api.getSession({ headers: new Headers({ cookie: registrationCookie }) }),
     ).toBeNull();
     expect(
-      (
-        await call(
-          "/code/verify",
-          { email: unknown, code: "00000000" },
-          registrationCookie,
-          instance,
-        )
-      ).ok,
+      (await call("/code/verify", { email: unknown, code: "000000" }, registrationCookie, instance))
+        .ok,
     ).toBe(false);
     expect(
       (
@@ -653,7 +647,7 @@ it("Google requires explicit creation consent, links authoritative email, and ga
       (
         await call(
           "/code/verify",
-          { email: external, code: "00000000" },
+          { email: external, code: "000000" },
           [connectionCookie, cookies(extSession)].join("; "),
           instance,
         )
@@ -683,7 +677,7 @@ it("Google requires explicit creation consent, links authoritative email, and ga
       where: { recipientKey: emailKey(suppressionSecret, "recipient", external) },
       orderBy: { createdAt: "desc" },
     });
-    const rollbackCode = unseal(rollbackMail.payload ?? "", secret).text.match(/^\d{8}$/m)?.[0];
+    const rollbackCode = unseal(rollbackMail.payload ?? "", secret).text.match(/^\d{6}$/m)?.[0];
     const rollback = await call(
       "/code/verify",
       { email: external, code: rollbackCode },
@@ -707,14 +701,8 @@ it("Google requires explicit creation consent, links authoritative email, and ga
       ).status,
     ).toBe(404);
     expect(
-      (
-        await call(
-          "/code/verify",
-          { email: external, code: "00000000" },
-          connectionCookie,
-          instance,
-        )
-      ).ok,
+      (await call("/code/verify", { email: external, code: "000000" }, connectionCookie, instance))
+        .ok,
     ).toBe(false);
     expect((await callback()).response.headers.get("location")).toBe(
       `${webOrigin}/sign-in/complete`,
@@ -910,8 +898,6 @@ it("discards abandoned Google connections for ordinary email and standalone pass
         where: { userId: { in: [userA.id, userB.id] }, providerId: "google" },
       }),
     ).toBe(0);
-    expect((await call("/code/verify", { email: emailA, code: "00000000" }, cookie)).ok).toBe(
-      false,
-    );
+    expect((await call("/code/verify", { email: emailA, code: "000000" }, cookie)).ok).toBe(false);
   }
 });

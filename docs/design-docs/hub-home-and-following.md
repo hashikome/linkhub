@@ -16,7 +16,7 @@ the relevant slice implements them. Define aggregation and visibility rules in
 that slice; public counts must not reveal private or unavailable collections.
 
 Profiles, hubs, collections and the site use the implemented contextual
-[Share page](sharing.md); site sharing lives in the footer. Social destinations
+[Share page](sharing.md); site sharing lives on About ntumie. (`/about`). Social destinations
 and hub subscriptions remain planned. The [backlog](../exec-plans/tech-debt-tracker.md#sharing-and-hub-engagement)
 records the scope.
 

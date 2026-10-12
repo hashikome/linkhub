@@ -1,4 +1,4 @@
-import type { ShareTarget as ApiShareTarget } from "@linkhub/types";
+import type { ShareTarget as ApiShareTarget } from "@ntumie/types";
 import { safeDocumentReturn } from "./http";
 
 export type ShareTarget = ApiShareTarget & { token?: string };
@@ -22,30 +22,32 @@ export function shareReturn(value: unknown, fallback: string) {
   const href = typeof value === "string" ? safeDocumentReturn(value) : fallback;
   const path = new URL(href, "http://local.invalid").pathname;
   const label =
-    path === "/"
-      ? "Back to home"
-      : path === "/manage/collections"
-        ? "Back to collections"
-        : path.startsWith("/c/")
-          ? "Back to collection"
-          : path === "/hub" || path.startsWith("/h/") || /^\/@[^/]+$/.test(path)
-            ? "Back to hub"
-            : path.startsWith("/people/") ||
-                (/^\/[a-z0-9-]+$/.test(path) &&
-                  ![
-                    "/discover",
-                    "/settings",
-                    "/manage",
-                    "/support",
-                    "/share",
-                    "/notifications",
-                    "/capture",
-                    "/confirm",
-                    "/sign-in",
-                  ].includes(path))
-              ? "Back to profile"
-              : path === "/discover"
-                ? "Back to Discover"
-                : "Back";
+    path === "/about"
+      ? "Back to About ntumie."
+      : path === "/"
+        ? "Back to home"
+        : path === "/manage/collections"
+          ? "Back to collections"
+          : path.startsWith("/c/")
+            ? "Back to collection"
+            : path === "/hub" || path.startsWith("/h/") || /^\/@[^/]+$/.test(path)
+              ? "Back to hub"
+              : path.startsWith("/people/") ||
+                  (/^\/[a-z0-9-]+$/.test(path) &&
+                    ![
+                      "/discover",
+                      "/settings",
+                      "/manage",
+                      "/support",
+                      "/share",
+                      "/notifications",
+                      "/capture",
+                      "/confirm",
+                      "/sign-in",
+                    ].includes(path))
+                ? "Back to profile"
+                : path === "/discover"
+                  ? "Back to Discover"
+                  : "Back";
   return { href, label };
 }

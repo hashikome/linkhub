@@ -1,4 +1,4 @@
-import { type AccountAction, accountActions } from "@linkhub/types";
+import { type AccountAction, accountActions } from "@ntumie/types";
 import { appError } from "../common/errors/app-exception";
 import { emailKey } from "../email/outbox";
 import type { Prisma } from "../generated/prisma/client";

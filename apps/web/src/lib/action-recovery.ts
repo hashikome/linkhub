@@ -1,6 +1,6 @@
 import "server-only";
-import { type RecoveryCommand, recoveryProof } from "@linkhub/config/action-recovery";
-import { webServerConfig } from "@linkhub/config/web-server";
+import { type RecoveryCommand, recoveryProof } from "@ntumie/config/action-recovery";
+import { webServerConfig } from "@ntumie/config/web-server";
 import { serverSend } from "./server-transport";
 
 export async function recoveryRequest(command: RecoveryCommand) {

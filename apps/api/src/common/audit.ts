@@ -1,4 +1,4 @@
-import type { AuditAction, AuditEffect } from "@linkhub/types";
+import type { AuditAction, AuditEffect } from "@ntumie/types";
 import { isUUID } from "class-validator";
 import type { Prisma } from "../generated/prisma/client";
 

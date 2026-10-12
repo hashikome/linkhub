@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { webServerConfig } from "@linkhub/config/web-server";
+import { webServerConfig } from "@ntumie/config/web-server";
 import next from "next";
 import { sourceAttribution } from "./server/source";
 

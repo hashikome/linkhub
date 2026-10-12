@@ -1,5 +1,5 @@
 import "server-only";
-import type { CursorMeta } from "@linkhub/types";
+import type { CursorMeta } from "@ntumie/types";
 import { queryValue } from "./http";
 
 export function auditQuery(query: Record<string, string | string[] | undefined>) {

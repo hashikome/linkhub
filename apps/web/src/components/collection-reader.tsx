@@ -1,4 +1,4 @@
-import type { Collection, CommentThreads, HubPage, HubSummary, Resource } from "@linkhub/types";
+import type { Collection, CommentThreads, HubPage, HubSummary, Resource } from "@ntumie/types";
 import { collectionPath, permalink, queryValue, withCursor } from "../lib/http";
 import { serverRead } from "../lib/server-api";
 import { readSession } from "../lib/session";
@@ -97,7 +97,7 @@ export async function CollectionReader({
               </div>
             </div>
           )}
-          <Tags tags={collection.tags} limit={3} />
+          <Tags tags={collection.tags} limit={3} expandable />
           <CollectionMeta item={shown} />
           {collection.restriction && (
             <p className="form-notice">

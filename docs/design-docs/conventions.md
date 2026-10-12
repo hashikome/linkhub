@@ -101,7 +101,7 @@ ordering.
 
 ## Wire-contract verification
 
-`@linkhub/types` owns shared wire shapes for both requests and responses.
+`@ntumie/types` owns shared wire shapes for both requests and responses.
 Web code constructing an API payload uses an imported request type (`satisfies`
 or a typed parameter), rather than a parallel local interface or an unchecked
 object. Local form state may have a different shape: strings, draft text and
@@ -122,7 +122,7 @@ API's forgiving parser so optional invalid metadata does not discard the event.
 Do not import Nest DTO classes or backend domain services into the web.
 
 Profile, collection, resource, share, shared/saved, hub-page, audit and status
-mappers compile against `@linkhub/types`. Dates become ISO strings explicitly
+mappers compile against `@ntumie/types`. Dates become ISO strings explicitly
 at the serialization boundary. Persisted role/source/kind strings are validated
 against their wire unions rather than hidden behind type assertions. Responses
 are selected field-by-field; adding a database column cannot silently expose it.

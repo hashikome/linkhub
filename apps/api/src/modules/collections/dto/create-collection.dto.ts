@@ -1,4 +1,4 @@
-import type { CreateCollectionRequest } from "@linkhub/types";
+import type { CreateCollectionRequest } from "@ntumie/types";
 import { IsBoolean, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 
 export class CreateCollectionDto implements CreateCollectionRequest {

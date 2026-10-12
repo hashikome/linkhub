@@ -1,7 +1,7 @@
 import { afterAll, describe, expect, it } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { signInCodePurposes } from "@linkhub/types";
+import { signInCodePurposes } from "@ntumie/types";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { CODE_RESEND_SECONDS, createDeliveryAuth } from "../src/auth/delivery-auth";
 import { emailKey, unseal } from "../src/email/outbox";
@@ -42,9 +42,9 @@ async function code(to: string) {
     take: 1,
   });
   const payload = unseal(rows[0].payload ?? "", secret);
-  // The target address can contain an eight-digit UUID segment before the
+  // The target address can contain numeric segments before the
   // actual code. The template puts the proof on its own line.
-  return payload.text.match(/^\d{8}$/m)?.[0] ?? "";
+  return payload.text.match(/^\d{6}$/m)?.[0] ?? "";
 }
 // Simulates the resend gap passing without waiting in real time.
 async function elapseResendGap(email: string) {
@@ -69,6 +69,50 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 describe("transactional codes-only auth", () => {
+  it("uses the default six-digit proof while preserving expiry and single-use verification", async () => {
+    const email = address();
+    const started = Date.now();
+    expect((await call("/code/send", { email })).status).toBe(200);
+    const proof = await code(email);
+    expect(proof).toMatch(/^\d{6}$/);
+    const stored = await prisma.verification.findFirstOrThrow({
+      where: { identifier: `sign-in-otp-${email}` },
+    });
+    expect(stored.expiresAt.getTime()).toBeGreaterThanOrEqual(started + 300_000);
+    expect(stored.expiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 300_000);
+    for (const malformed of [proof.slice(0, 5), `${proof}0`, `${proof}00`])
+      expect((await call("/code/verify", { email, code: malformed })).status).toBe(400);
+    const body = { email, code: proof, createAccount: true };
+    expect((await call("/code/verify", body)).status).toBe(200);
+    expect((await call("/code/verify", body)).ok).toBe(false);
+
+    const expiredEmail = address();
+    await call("/code/send", { email: expiredEmail });
+    const expired = await code(expiredEmail);
+    await prisma.verification.updateMany({
+      where: { identifier: `sign-in-otp-${expiredEmail}` },
+      data: { expiresAt: new Date(0) },
+    });
+    expect((await call("/code/verify", { email: expiredEmail, code: expired })).status).toBe(400);
+  });
+
+  it("retains the identity verification budget across replacement six-digit codes", async () => {
+    const email = address();
+    let latest = "";
+    for (let issue = 0; issue < 5; issue++) {
+      expect((await call("/code/send", { email })).status).toBe(200);
+      latest = await code(email);
+      expect(latest).toMatch(/^\d{6}$/);
+      const wrong = latest === "000000" ? "111111" : "000000";
+      for (let attempt = 0; attempt < 3; attempt++)
+        expect((await call("/code/verify", { email, code: wrong })).status).toBe(400);
+      await elapseResendGap(email);
+    }
+    expect((await call("/code/verify", { email, code: latest })).status).toBe(429);
+    expect((await call("/code/send", { email })).status).toBe(429);
+    expect(await prisma.user.findUnique({ where: { email } })).toBeNull();
+  });
+
   it("records only committed successful logins, independently of session reads and expiry", async () => {
     const started = Date.now();
     const owner = await signup();
@@ -83,7 +127,7 @@ describe("transactional codes-only auth", () => {
     await call("/code/send", { email: owner.email });
     expect(await read()).toEqual(previous);
     const validCode = await code(owner.email);
-    const wrongCode = validCode === "00000000" ? "11111111" : "00000000";
+    const wrongCode = validCode === "000000" ? "111111" : "000000";
     expect((await call("/code/verify", { email: owner.email, code: wrongCode })).ok).toBe(false);
     expect(await read()).toEqual(previous);
     const broken = createDeliveryAuth({
@@ -109,11 +153,11 @@ describe("transactional codes-only auth", () => {
 
   it("persists purpose-specific copy on issue and resend without changing proof verification", async () => {
     const subjects = {
-      "sign-in": "Your linkhub sign-in code",
-      "first-link": "Verify your email to save your first link · linkhub",
-      continue: "Your code to continue in linkhub",
-      resume: "Sign back in to linkhub",
-      confirm: "Confirm it's you · linkhub",
+      "sign-in": "Your ntumie. sign-in code",
+      "first-link": "Verify your email to save your first link · ntumie.",
+      continue: "Your code to continue in ntumie.",
+      resume: "Sign back in to ntumie.",
+      confirm: "Confirm it's you · ntumie.",
     };
     for (const purpose of signInCodePurposes) {
       const email = address();
@@ -190,7 +234,7 @@ describe("transactional codes-only auth", () => {
     const email = address();
     expect((await call("/code/send", { email })).status).toBe(200);
     const otp = await code(email);
-    expect(otp.length).toBe(8);
+    expect(otp.length).toBe(6);
     const stored = await prisma.verification.findFirstOrThrow({
       where: { identifier: `sign-in-otp-${email}` },
     });
@@ -281,7 +325,7 @@ describe("transactional codes-only auth", () => {
     }
     expect((await call("/code/send", { email: limited })).status).toBe(429);
     const latest = await code(limited);
-    const wrong = latest === "00000000" ? "11111111" : "00000000";
+    const wrong = latest === "000000" ? "111111" : "000000";
     for (let i = 0; i < 3; i++)
       expect((await call("/code/verify", { email: limited, code: wrong })).status).toBe(400);
     expect((await call("/code/verify", { email: limited, code: latest })).status).toBe(403);

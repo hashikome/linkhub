@@ -1,4 +1,4 @@
-import type { Collection, Resource } from "@linkhub/types";
+import type { Collection, Resource } from "@ntumie/types";
 import type { Metadata } from "next";
 import { CollectionEditForm } from "../../../../components/collection-editor";
 import { CollectionFeedback } from "../../../../components/collection-feedback";

@@ -1,7 +1,7 @@
 "use client";
-import type { Resource } from "@linkhub/types";
 import { useState } from "react";
 import { ResourceRow } from "./primitives";
+import type { ResourcePresentation as Resource } from "./resource-presentation";
 
 export function ResourceSections({
   items,
@@ -16,10 +16,11 @@ export function ResourceSections({
   preview?: boolean;
   section?: Resource;
   selectedItem?: Resource;
-  itemBase?: string;
+  itemBase?: string | null;
   collectionId?: string;
   canEdit?: boolean;
 }) {
+  const SectionTitle = preview ? "h3" : "h2";
   const [selectedId, setSelectedId] = useState(selectedItem?.id);
   const select = (id: string, open: boolean) =>
     setSelectedId((current) => (open ? id : current === id ? undefined : current));
@@ -76,7 +77,9 @@ export function ResourceSections({
                     }}
                   >
                     <summary aria-labelledby={`section-title-${group.section.id}`}>
-                      <h2 id={`section-title-${group.section.id}`}>{group.section.title}</h2>
+                      <SectionTitle id={`section-title-${group.section.id}`}>
+                        {group.section.title}
+                      </SectionTitle>
                       {group.section.description && (
                         <p className="section-description">{group.section.description}</p>
                       )}

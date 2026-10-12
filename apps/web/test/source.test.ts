@@ -1,6 +1,6 @@
 import { expect, it } from "bun:test";
 import type { IncomingMessage } from "node:http";
-import { webServerConfig } from "@linkhub/config/web-server";
+import { webServerConfig } from "@ntumie/config/web-server";
 import { sourceAttribution } from "../server/source";
 
 it("attributes untrusted sockets and stops forwarding at the first untrusted hop", () => {

@@ -11,7 +11,7 @@ describe("service invitations", () => {
         expiresAt: new Date("2026-10-13T12:00:00Z"),
         supportUrl: "https://links.example/support",
       });
-      expect(mail.subject).toContain(`linkhub service ${role}`);
+      expect(mail.subject).toContain(`ntumie. service ${role}`);
       expect(mail.html).toContain(url);
       expect(mail.text).toContain(url);
       expect(mail.text).toContain("explicitly accept");

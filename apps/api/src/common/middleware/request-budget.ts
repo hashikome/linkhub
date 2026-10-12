@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { isIP } from "node:net";
-import { type ApiError, apiErrors } from "@linkhub/types";
+import { type ApiError, apiErrors } from "@ntumie/types";
 import type { RequestHandler } from "express";
 import { readSecret } from "../../config/secret";
 import type { PrismaService } from "../../database/prisma.service";

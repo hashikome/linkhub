@@ -5,7 +5,7 @@ import type {
   OperatorAccount,
   ServiceInvitationView,
   SessionView,
-} from "@linkhub/types";
+} from "@ntumie/types";
 import {
   accountsRows,
   invitationsRows,

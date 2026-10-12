@@ -1,4 +1,4 @@
-import type { Collection } from "@linkhub/types";
+import type { Collection } from "@ntumie/types";
 import { Avatar } from "./avatar";
 
 export function CollectionContributors({

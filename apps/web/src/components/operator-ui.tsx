@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { AccountOperationAction, OperationAction, OperationReason } from "@linkhub/types";
+import type { AccountOperationAction, OperationAction, OperationReason } from "@ntumie/types";
 import { readSession } from "../lib/session";
 import { ManageNavigation, type OpsTab } from "./manage-navigation";
 import { NativeForm } from "./native-form";

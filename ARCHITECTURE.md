@@ -2,7 +2,7 @@
 
 ## Purpose
 
-LinkHub turns the links people collect into curated, shareable collections.
+ntumie. turns the links people collect into curated, shareable collections.
 Each user may own one hub (their publishing space, the tenant root); collections are
 shared per collection, Google-Drive style, or published to Discover.
 
@@ -62,8 +62,8 @@ apps/
   extension/       MV3 capture companion (planned, Track W4)
 packages/
   config/          TypeScript base plus separate web server/browser configuration
-  types/           @linkhub/types — shared API wire contracts for clients
-  email/           @linkhub/email — backend-owned React Email templates
+  types/           @ntumie/types — shared API wire contracts for clients
+  email/           @ntumie/email — backend-owned React Email templates
 tooling/           boundaries, docs, guide pin, isolated test runner, image rehearsal
 compose.yml        local dev services
 docker-stack.*.yml local Swarm rehearsal and production topology
@@ -151,12 +151,12 @@ Operator tables — OperatorGrant, AdminGrant, ServiceInvitation, CollectionHold
   consumes `AuthUser`.
 - Prisma schema, migrations, generated client, and `PrismaService` are
   backend-private. Clients consume the API over HTTP and the
-  `@linkhub/types` wire contract only; `tooling/check-client-boundaries.ts`
+  `@ntumie/types` wire contract only; `tooling/check-client-boundaries.ts`
   (run by `bun run verify`) fails if a client imports `apps/api` internals or
   Prisma.
 - The better-auth handler mounts before body parsers (`app.setup.ts`);
   global middleware must respect that ordering.
-- Packages use the `@linkhub/*` scope.
+- Packages use the `@ntumie/*` scope.
 
 ## Client Surfaces
 

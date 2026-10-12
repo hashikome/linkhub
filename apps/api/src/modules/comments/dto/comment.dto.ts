@@ -1,4 +1,4 @@
-import type { CreateCommentRequest, UpdateCommentRequest } from "@linkhub/types";
+import type { CreateCommentRequest, UpdateCommentRequest } from "@ntumie/types";
 import { IsInt, IsOptional, IsString, IsUUID, MaxLength, Min, MinLength } from "class-validator";
 
 import { CursorQueryDto } from "src/common/dto/cursor-query.dto";

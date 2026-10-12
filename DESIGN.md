@@ -1,5 +1,5 @@
 ---
-name: "linkhub"
+name: "ntumie."
 description: "A dependable personal library: legible titles, clear destinations, visible structure."
 colors:
   canvas: "oklch(1 0 0)"
@@ -39,7 +39,11 @@ spacing:
   reader-max: "48rem"
 ---
 
-# Design System: linkhub
+# Design System: ntumie.
+
+The product name is **ntumie.**, lowercase with a mandatory trailing dot in
+both text and the wordmark. The chosen domain is `ntumie.link`; machine names
+use `ntumie`. See [ADR-0060](docs/engineering-decisions/0060-ntumie-repository-and-branding.md).
 
 ## Overview
 
@@ -55,7 +59,7 @@ fill a page — no counts, decorative covers, recommendations or social proof.
 - Light, Dark and System appearances from one set of semantic OKLCH tokens.
 - One self-hosted sans (Schibsted Grotesk) with fixed rem product typography.
 - Grouping through separators and surface changes, not shadows or panels.
-- The lowercase wordmark `linkhub` alone is the logo — no icon.
+- The lowercase wordmark `ntumie.` alone is the logo — no icon.
 - UX over compactness; copy in short, scannable paragraphs (see the
   [interface system](docs/design-docs/web-interface-system.md) principles).
 
@@ -213,11 +217,14 @@ Body/muted/feedback pairs exceed 4.5:1; control boundaries exceed 3:1.
 | Small metadata | `0.875rem / 1.25rem`; regular |
 | Body and controls | `1rem / 1.5rem`; regular, controls medium |
 | Collection row title | `1.0625rem / 1.5rem`; semibold, ink (not accent) |
-| Resource item title | `1.125rem / 1.5rem`; weight 600, ink (not accent), shared by the reader and landing demo |
+| Resource item title (`h3`; `h4` in the nested landing example) | `1.125rem / 1.5rem`; weight 600, ink (not accent), shared by the reader and landing demo |
 | Expanded item description | `1rem`, line-height `1.6`, weight 400; subordinate to its title, above the smaller metadata |
+| Reader section heading | `1.5rem / 2rem`; weight 650, `-0.015em`; between the collection title and resource titles |
+| Reader section description | `1rem / 1.6`; regular body ink, maximum `60ch`; curator prose introducing the references beneath its heading |
+| Discussion body | `1rem / 1.6`; metadata stays at `0.875rem`; actions and timestamps share the button height, 44 px on coarse pointers |
 | Section heading | `1.25rem / 1.75rem`; weight 650, `-0.015em` |
 | Page heading | `2.125rem / 2.5rem` (`1.875rem` below 640 px); weight 650, `-0.025em` tracking |
-| Wordmark | The text `linkhub` alone is the logo (no icon), `1.125rem`; bold, `-0.025em` tracking |
+| Wordmark | The text `ntumie.` alone is the logo (no icon), `1.125rem`; bold, `-0.025em` tracking |
 | Spacing unit | `0.25rem`; use 1, 2, 3, 4, 5, 6, 8, 10, 12 units |
 | Page gutters | `1.25rem` below 640 px; `2rem` above |
 | Shell maximum | `70rem` |
@@ -225,7 +232,7 @@ Body/muted/feedback pairs exceed 4.5:1; control boundaries exceed 3:1.
 | Control height | Fields and header utility controls use `--control`: `2.375rem` (38 px). Primary, secondary and text buttons use `--button-control`: `2rem` (32 px), `0.875rem` text, weight 500, and `0.25rem 0.625rem` padding. Both tokens become `2.75rem` (44 px) under `pointer: coarse`. Filled/outlined contrast and focus states are retained |
 | Control radius | `0.5rem` |
 | Panel radius | `0.75rem`; list rows do not need enclosing panels |
-| Tags | `0.375rem` radius, 1px divider outline, muted `0.8125rem` text; not interactive. Resource tags sit inline after the hostname |
+| Tags | `0.375rem` radius, 1px divider outline, muted `0.8125rem` text (`0.875rem` in the reader). Tags are labels, not filters; collection tag overflow uses a native disclosure. Resource tags sit inline after the hostname |
 | Border | `1px`; no decorative accent side-stripes |
 | Focus | `2px` solid outline with `3px` offset (`1px` on text fields, whose border also turns focus-colored) |
 | Motion | `160ms`, `cubic-bezier(0.22, 1, 0.36, 1)`; immediate for reduced motion |
@@ -253,15 +260,24 @@ autosave/native Save changes flow.
 
 ## Components
 
-The header separates the left wordmark from Explore and the avatar-only account menu on the right. The menu groups Profile, Hub (when owned),
+The header separates the left wordmark from Discover and the avatar-only account menu on the right. The menu groups Profile, Hub (when owned),
 Notifications (with an unread count), Settings and role-gated Manage above
-Sign out. The footer stacks “© <current year> linkhub” above the smaller, muted
-"Good links belong together." line on the left, with muted, vertically centered Share
-linkhub and Support links on the right at the same font size as header
-navigation (wrapping below on phones). The footer sits at the viewport bottom on short pages and follows
-content at the end of long pages; it never stays pinned during document scrolling.
-Site sharing belongs in the footer. There
-is no footer Discover link, status link or appearance control. Generated geometric
+Sign out. Product footers show About ntumie. on the left and “Good links belong
+together.” on the right, using 16 px body text. The homepage shows only About
+ntumie. About shows only Join ntumie. to `/sign-up`, or Discover to `/discover`
+when signed in. No year, repeated wordmark, utility links or top divider. Links
+use shared control heights and blue hover/focus feedback; content wraps naturally
+on phones. The footer follows long content and sits at the bottom of short pages.
+Site sharing, Support and the maker's portfolio live on `/about`; legal links
+join the collection when those pages exist. See [ADR-0056](docs/engineering-decisions/0056-about-collection-and-footer-navigation.md).
+
+Homepage and About share the existing hero composition. The homepage retains
+Save your first link; About uses Share ntumie. and three follow-up questions.
+Their embedded collections use a 32 px title, 24 px section headings, 18 px resource
+titles and 16 px body-ink section descriptions. Semantic levels start at h2 under
+the hero h1. About's links are real destinations without fabricated metadata.
+
+Generated geometric
 SVGs come from the API, seeded by immutable user UUID. The approved avatar palette
 and grid geometry stay fixed in both themes; no external provider is involved.
 
@@ -287,7 +303,7 @@ controls with opacity; use the pale notice color as decoration.
 
 Sign-in and signup share a roughly 400px column, horizontally centered and slightly
 above the viewport midpoint. Keep the same anchor across proof/creation screens.
-Sign-in heading: Sign in to linkhub. Signup heading: Create your account.
+Sign-in heading: Sign in to ntumie. Signup heading: Create your account.
 Email label/input precedes the full-width primary Continue with email; quiet or
 and full-width secondary Continue with Google follow. Footer links switch intent.
 No image or extra marketing copy is needed. Optional hub creation is progressively
@@ -306,3 +322,8 @@ can use an 88rem shell to preserve room for tables beside the sidebar.
 Navigation sections with children use native expand/collapse controls; expanding
 Import never navigates. New import and Review are the navigation links. Sections
 without children remain direct links. The current section starts expanded.
+
+Home and About use the shared collection preview, built from the reader heading,
+sections, rows and inline details. At desktop sizes the hero and preview fit the
+space between navigation and the bottom-left footer link; lengthy resource content
+scrolls inside the panel. Smaller or short viewports retain document scrolling.

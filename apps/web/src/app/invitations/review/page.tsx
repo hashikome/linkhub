@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { InvitationPreview } from "@linkhub/types";
+import type { InvitationPreview } from "@ntumie/types";
 import type { Metadata } from "next";
 import { FormNotice } from "../../../components/form-notice";
 import { LocalTime } from "../../../components/local-time";

@@ -3,7 +3,7 @@ import {
   auditOutcomeLabels,
   auditReadActions,
   auditStateLabels,
-} from "@linkhub/types";
+} from "@ntumie/types";
 import { Prisma } from "../generated/prisma/client";
 import type { auditPage, resolveAuditFilters } from "./audit-query";
 

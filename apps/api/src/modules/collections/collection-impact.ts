@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { CollectionImpact } from "@linkhub/types";
+import type { CollectionImpact } from "@ntumie/types";
 import { recordAudit } from "../../common/audit";
 import { appError } from "../../common/errors/app-exception";
 import type { Collection, Prisma } from "../../generated/prisma/client";

@@ -103,13 +103,13 @@ export function VerifyCode({
       {/* The page already says the code was sent; only problems need a notice. */}
       <FormNotice code={notice === "sent" ? undefined : notice} wait={wait} />
       <NativeForm action="/forms/code-verify">
-        <label htmlFor="code">Eight-digit code</label>
+        <label htmlFor="code">Six-digit code</label>
         <input
           id="code"
           name="code"
           autoComplete="one-time-code"
           inputMode="numeric"
-          pattern="[0-9\s\-]{8,16}"
+          pattern="[0-9\s\-]{6,16}"
           maxLength={16}
           required
         />
