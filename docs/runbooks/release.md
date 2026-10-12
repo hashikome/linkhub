@@ -74,8 +74,9 @@ both gates pass does the publication job build and publish to GHCR with a full
 commit SHA tag and build provenance/SBOM. Its summary supplies
 `API_IMAGE=<registry>/<repository>/api:<sha>@sha256:<digest>` and the matching
 `WEB_IMAGE=<registry>/<repository>/web:<sha>@sha256:<digest>`, with `RELEASE_SHA`
-in a retained `release-inputs.txt` artifact. There is no
-deployment webhook yet. Publication and live rollout remain pending.
+in a retained `release-inputs.txt` artifact. Select `deploy=true` to run the
+coordinated migration/application promotion described below; no Git webhook
+deploys ahead of the release checks. First live rollout acceptance remains pending.
 
 
 The Dockerfile pins Bun 1.3.14 by digest, installs the frozen lockfile and
@@ -193,14 +194,15 @@ exposes) before exposure. The foundation's adoption history is in
 
 The owner confirmed `ntumie.link` registration and Cloudflare DNS on 12 October 2026;
 the zone is active and visible to the operator API token. Preserve iCloud MX/TXT
-records. No DNS routing change, Google callback edit or Resend sender/webhook
-integration is accepted yet. Configure Google redirect
+records. The owner confirmed the proxied root A record points to hs. Sender delivery
+to the support inbox is accepted; Google callback acceptance remains separate.
+Configure Google redirect
 `https://ntumie.link/api/v1/auth/callback/google`, verified sending domain/address,
 monitored support mailbox before live provider acceptance. Delivery/bounce webhook
 integration is a separate product capability; without its optional secret the
 existing endpoint refuses requests. It is not a GitHub or monitoring alert channel.
 The owner created `support@ntumie.link` for user help; `hello@ntumie.link` is
-available for general enquiries. Verify support delivery before activation.
+available for general enquiries. The support inbox received the authorized test.
 The selected sender is
 `no-reply@notify.ntumie.link`. The current Resend key only permits sending and
 cannot manage domains, by design. The owner will configure the sending domain
@@ -212,20 +214,28 @@ accepted one owner-authorized message from `no-reply@notify.ntumie.link` to
 the sender. The ignored local API environment was updated without restarting
 development services.
 
-`hs` remains the selected pre-production target (Contabo VPS S SSD, 4 cores,
+`hs` remains the selected production target (Contabo VPS S SSD, 4 cores,
 8 GiB RAM, 200 GB SSD). The owner selected proceeding with setup on that host;
 an upgrade assessment remains production-launch work. The
 [shared data setup](https://github.com/hashikome/infra/blob/main/deploy/data-services/README.md)
 owns the combined capacity budget, product database/role allocation and queue ACLs.
-Full platform recovery, off-host product restore and the isolated Swarm rehearsal
-remain required; do not start public replicas merely because the domain resolves.
+The owner authorized production activation through the verified GitHub release path.
+Full platform recovery, off-host product restore and capacity acceptance remain
+production-launch requirements; they do not block this production CI/CD setup.
 
 ## Prepared GitHub promotion
 
 The release workflow builds both immutable images after verification. Its optional
-`deploy` input defaults to false. When selected, the `staging` environment
-provides `DOKPLOY_API_KEY` plus variables `DOKPLOY_APPLICATION_ID`,
-`DOKPLOY_MIGRATION_ID` and `DOKPLOY_REGISTRY_ID`. Prepare distinct local raw-source
+`deploy` input defaults to false. When selected, the `production` environment
+selects `SECRETS_PROVIDER=1password` for the Hashikome installation and provides
+`OP_SERVICE_ACCOUNT_TOKEN` plus non-secret `OP_DOKPLOY_KEY_REF`. The pinned official
+1Password action reads the concealed Dokploy credential from Hashikome CI only in
+the deploy job. Alternatively, `SECRETS_PROVIDER=github` (the default when unset)
+uses the GitHub environment secret `DOKPLOY_API_KEY`. Unknown providers and failed
+selected providers stop the release; there is no automatic fallback. Both supply
+the same coordinator input. No desktop approval or application SDK is involved.
+Variables `DOKPLOY_APPLICATION_ID`, `DOKPLOY_MIGRATION_ID` and
+`DOKPLOY_REGISTRY_ID` select the prepared targets. Prepare distinct local raw-source
 Stacks named with `ntumie-app-` and `ntumie-migrate-` prefixes; leave Git auto-deploy
 disabled. Both require the same private data network and migration secret reference.
 Application inputs follow `deploy/production.env.example`; migration inputs need
@@ -239,3 +249,27 @@ Stack listing omits completed tasks in v0.30.8, so the migration check uses its
 local all-state container listing and verifies exact Swarm labels. Failures do not
 automatically revert schema or select older binaries. Local fake-API tests and
 compiled-image rehearsals do not replace real Swarm/GitHub/provider acceptance.
+
+## Portable application configuration
+
+`deploy/runtime.env.example` describes ordinary application variables, separate
+from the Stack names in `deploy/production.env.example`. The existing runtime
+accepts plain values or `_FILE` inputs; a supplied file takes precedence and an
+unreadable file fails startup. A downloaded installation can use its own env
+files and local services without installing 1Password. Never use the production
+private-network URLs as workstation development endpoints.
+
+For our optional 1Password supply path, `ntumie/production` holds app-owned values;
+`deploy/runtime.1password.env.example` shows how shared Google/Resend fields join
+that bundle using `op run --environment ID --env-file=private-integrations.env --
+COMMAND`. Use a real ID and private reference file, and never run `env`/`printenv`
+to inspect the result. The application's resulting variable names are identical
+to plain dotenv input. Do not duplicate the integration keys inside the native
+Environment. Keep migrator credentials out of this application bundle.
+
+Swarm services continue receiving only their selected secret files. Vault edits
+do not update those immutable versions or rotate upstream credentials. The
+[shared secret contract](https://github.com/hashikome/infra/blob/main/docs/secrets-contract.md)
+defines provider selection, ownership and coordinated rotation. Native Environment
+import/readback is a separate acceptance step from the existing unattended CI
+control-plane credential and from live application release.

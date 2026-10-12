@@ -2,26 +2,26 @@ version: '3.8'
 services:
   api:
     # Full SHA tag AND digest, supplied by the release workflow/operator.
-    image: ${API_IMAGE:?Set an immutable API image reference}
+    image: ${API_IMAGE:?API_IMAGE_required}
     environment:
       NODE_ENV: production
       PORT: '4000'
-      RELEASE_SHA: ${RELEASE_SHA:?Set the full release commit SHA}
-      RELEASE_ATTEMPT: ${RELEASE_ATTEMPT:?Set the unique GitHub run ID and attempt}
+      RELEASE_SHA: ${RELEASE_SHA:?RELEASE_SHA_required}
+      RELEASE_ATTEMPT: ${RELEASE_ATTEMPT:?RELEASE_ATTEMPT_required}
       DATABASE_URL_FILE: /run/secrets/database_url
       BETTER_AUTH_SECRET_FILE: /run/secrets/auth_secret
       EMAIL_SUPPRESSION_SECRET_FILE: /run/secrets/email_suppression
       REDIS_URL_FILE: /run/secrets/redis_url
-      BETTER_AUTH_URL: https://${PUBLIC_HOST:?Set the public host}
+      BETTER_AUTH_URL: https://${PUBLIC_HOST:?PUBLIC_HOST_required}
       WEB_ORIGIN: https://${PUBLIC_HOST}
       WEB_SOURCE_SECRET_FILE: /run/secrets/web_source
       GOOGLE_CLIENT_ID_FILE: /run/secrets/google_client_id
       GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google_client_secret
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       EMAIL_PROVIDER: resend
-      EMAIL_SUPPORT_URL: ${EMAIL_SUPPORT_URL:?Set the HTTPS support route}
-      QUEUE_NAMESPACE: ${QUEUE_NAMESPACE:?Set a deployment-unique queue namespace}
-      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:?Set only the trusted ingress proxy addresses}
+      EMAIL_SUPPORT_URL: ${EMAIL_SUPPORT_URL:?EMAIL_SUPPORT_URL_required}
+      QUEUE_NAMESPACE: ${QUEUE_NAMESPACE:?QUEUE_NAMESPACE_required}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:?TRUSTED_PROXY_CIDRS_required}
     secrets:
       - database_url
       - auth_secret
@@ -56,18 +56,18 @@ services:
         parallelism: 1
       labels:
         traefik.enable: 'true'
-        traefik.swarm.network: ${INGRESS_NETWORK:?Set the shared ingress network}
+        traefik.swarm.network: ${INGRESS_NETWORK:?INGRESS_NETWORK_required}
         traefik.http.routers.ntumie-api.rule: Host(`${PUBLIC_HOST}`) && PathPrefix(`/api/`)
         traefik.http.routers.ntumie-api.priority: '100'
         traefik.http.routers.ntumie-api.service: ntumie-api
-        traefik.http.routers.ntumie-api.entrypoints: ${HTTPS_ENTRYPOINT:?Set the platform HTTPS entrypoint}
+        traefik.http.routers.ntumie-api.entrypoints: ${HTTPS_ENTRYPOINT:?HTTPS_ENTRYPOINT_required}
         traefik.http.routers.ntumie-api.tls: 'true'
-        traefik.http.routers.ntumie-api.tls.certresolver: ${TLS_RESOLVER:?Set the platform certificate resolver}
+        traefik.http.routers.ntumie-api.tls.certresolver: ${TLS_RESOLVER:?TLS_RESOLVER_required}
         traefik.http.services.ntumie-api.loadbalancer.server.port: '4000'
         traefik.http.services.ntumie-api.loadbalancer.healthcheck.path: /api/v1/status
         traefik.http.services.ntumie-api.loadbalancer.healthcheck.interval: 15s
   web:
-    image: ${WEB_IMAGE:?Set an immutable web image reference}
+    image: ${WEB_IMAGE:?WEB_IMAGE_required}
     environment:
       NODE_ENV: production
       WEB_HOST: 0.0.0.0
@@ -78,7 +78,7 @@ services:
       API_INTERNAL_ORIGIN: http://api:4000
       WEB_SOURCE_SECRET_FILE: /run/secrets/web_source
       WEB_TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS}
-      SUPPORT_EMAIL: ${SUPPORT_EMAIL:?Set the monitored support mailbox}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:?SUPPORT_EMAIL_required}
     secrets: [web_source]
     networks: [ingress, frontend]
     read_only: true
@@ -108,7 +108,7 @@ services:
         traefik.http.services.ntumie-web.loadbalancer.healthcheck.path: /healthz
         traefik.http.services.ntumie-web.loadbalancer.healthcheck.interval: 15s
   email_worker:
-    image: ${API_IMAGE:?Set an immutable API image reference}
+    image: ${API_IMAGE:?API_IMAGE_required}
     command: [bun, --tsconfig-override, tsconfig.runtime.json, dist/src/email/worker.js]
     environment:
       NODE_ENV: production
@@ -119,9 +119,9 @@ services:
       REDIS_URL_FILE: /run/secrets/redis_url
       RESEND_API_KEY_FILE: /run/secrets/resend_key
       EMAIL_PROVIDER: resend
-      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:?Set the verified sender}
-      EMAIL_SUPPORT_URL: ${EMAIL_SUPPORT_URL:?Set the HTTPS support route}
-      QUEUE_NAMESPACE: ${QUEUE_NAMESPACE:?Set a deployment-unique queue namespace}
+      EMAIL_FROM_ADDRESS: ${EMAIL_FROM_ADDRESS:?EMAIL_FROM_ADDRESS_required}
+      EMAIL_SUPPORT_URL: ${EMAIL_SUPPORT_URL:?EMAIL_SUPPORT_URL_required}
+      QUEUE_NAMESPACE: ${QUEUE_NAMESPACE:?QUEUE_NAMESPACE_required}
     secrets: [database_url, auth_secret, email_suppression, redis_url, resend_key]
     # Data stays internal; the worker needs outbound HTTPS to send through Resend.
     networks: [backend, egress]
@@ -153,29 +153,29 @@ networks:
     name: ${INGRESS_NETWORK}
   backend:
     external: true
-    name: ${BACKEND_NETWORK:?Set the private data-services network}
+    name: ${BACKEND_NETWORK:?BACKEND_NETWORK_required}
 secrets:
   database_url:
     external: true
-    name: ${DATABASE_URL_SECRET:?Set the database URL secret name}
+    name: ${DATABASE_URL_SECRET:?DATABASE_URL_SECRET_required}
   auth_secret:
     external: true
-    name: ${AUTH_SECRET:?Set the auth secret name}
+    name: ${AUTH_SECRET:?AUTH_SECRET_required}
   redis_url:
     external: true
-    name: ${REDIS_URL_SECRET:?Set the Redis URL secret name}
+    name: ${REDIS_URL_SECRET:?REDIS_URL_SECRET_required}
   resend_key:
     external: true
-    name: ${RESEND_API_KEY_SECRET:?Set the Resend key secret name}
+    name: ${RESEND_API_KEY_SECRET:?RESEND_API_KEY_SECRET_required}
   email_suppression:
     external: true
-    name: ${EMAIL_SUPPRESSION_SECRET_NAME:?Set the stable suppression secret name}
+    name: ${EMAIL_SUPPRESSION_SECRET_NAME:?EMAIL_SUPPRESSION_SECRET_NAME_required}
   web_source:
     external: true
-    name: ${WEB_SOURCE_SECRET_NAME:?Set the shared API/web attribution secret name}
+    name: ${WEB_SOURCE_SECRET_NAME:?WEB_SOURCE_SECRET_NAME_required}
   google_client_id:
     external: true
-    name: ${GOOGLE_CLIENT_ID_SECRET:?Set the Google client ID secret name}
+    name: ${GOOGLE_CLIENT_ID_SECRET:?GOOGLE_CLIENT_ID_SECRET_required}
   google_client_secret:
     external: true
-    name: ${GOOGLE_CLIENT_SECRET_NAME:?Set the Google client secret name}
+    name: ${GOOGLE_CLIENT_SECRET_NAME:?GOOGLE_CLIENT_SECRET_NAME_required}

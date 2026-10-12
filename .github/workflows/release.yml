@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: Promote to the prepared pre-production Dokploy Stacks
+        description: Promote to the prepared production Dokploy Stacks
         type: boolean
         default: false
 permissions:
@@ -87,17 +87,45 @@ jobs:
     needs: image
     if: github.ref == 'refs/heads/main' && inputs.deploy
     runs-on: ubuntu-latest
-    environment: staging
+    environment: production
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
         with: { bun-version: 1.3.14 }
+      - name: Validate secret provider
+        env:
+          SECRETS_PROVIDER: ${{ vars.SECRETS_PROVIDER || 'github' }}
+        run: |
+          case "$SECRETS_PROVIDER" in
+            github|1password) ;;
+            *) echo 'Unsupported SECRETS_PROVIDER; use github or 1password' >&2; exit 1 ;;
+          esac
+      - name: Load deployment credential from GitHub
+        if: vars.SECRETS_PROVIDER != '1password'
+        env:
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+        run: |
+          python3 - <<'PYTHON'
+          import os
+          key = os.environ['DOKPLOY_API_KEY']
+          if not key or any(c in key for c in '\r\n\0'):
+              raise SystemExit('DOKPLOY_API_KEY must be a nonempty single-line credential')
+          with open(os.environ['GITHUB_ENV'], 'a') as output:
+              output.write('DOKPLOY_API_KEY=' + key + '\n')
+          PYTHON
+      - name: Load deployment credential from 1Password
+        if: vars.SECRETS_PROVIDER == '1password'
+        uses: 1password/load-secrets-action@eb2efd0703da22a93c467f2d1ffbb6826c11e19c # v4
+        with:
+          export-env: true
+        env:
+          OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          DOKPLOY_API_KEY: ${{ vars.OP_DOKPLOY_KEY_REF }}
       - name: Migrate, verify grants, then promote application images
         env:
           GH_TOKEN: ${{ github.token }}
           API_IMAGE: ${{ needs.image.outputs.api }}
           WEB_IMAGE: ${{ needs.image.outputs.web }}
-          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
           DOKPLOY_APPLICATION_ID: ${{ vars.DOKPLOY_APPLICATION_ID }}
           DOKPLOY_MIGRATION_ID: ${{ vars.DOKPLOY_MIGRATION_ID }}
           DOKPLOY_REGISTRY_ID: ${{ vars.DOKPLOY_REGISTRY_ID }}

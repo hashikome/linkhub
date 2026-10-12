@@ -3,13 +3,13 @@ version: '3.8'
 # with exit code zero before deploying APP_REPLICAS=1 in the application Stack.
 services:
   migrate:
-    image: ${API_IMAGE:?Set the verified immutable API image}
+    image: ${API_IMAGE:?API_IMAGE_required}
     entrypoint: [bun]
     command: [--tsconfig-override, tsconfig.runtime.json, dist/src/operations/migrate-release.js]
     environment:
       DATABASE_URL_FILE: /run/secrets/database_url
       # Change on every workflow attempt so an earlier completed task cannot count.
-      RELEASE_ATTEMPT: ${RELEASE_ATTEMPT:?Set the unique GitHub run ID and attempt}
+      RELEASE_ATTEMPT: ${RELEASE_ATTEMPT:?RELEASE_ATTEMPT_required}
     secrets: [database_url]
     networks: [backend]
     read_only: true
@@ -25,8 +25,8 @@ services:
 networks:
   backend:
     external: true
-    name: ${BACKEND_NETWORK:?Set the private data-services network}
+    name: ${BACKEND_NETWORK:?BACKEND_NETWORK_required}
 secrets:
   database_url:
     external: true
-    name: ${MIGRATION_DATABASE_URL_SECRET:?Set the scoped migration database URL secret}
+    name: ${MIGRATION_DATABASE_URL_SECRET:?MIGRATION_DATABASE_URL_SECRET_required}

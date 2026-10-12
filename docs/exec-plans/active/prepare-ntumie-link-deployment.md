@@ -2,10 +2,10 @@
 
 ## Purpose / Big Picture
 
-Complete repeatable staging CI/CD for the registered `ntumie.link` domain and
+Complete repeatable production CI/CD for the registered `ntumie.link` domain and
 the reviewed ntumie. application using
 GitHub-built immutable API/worker and web images on Hashikome Dokploy. The owner clarified the milestone on 12 October: extend the shared infrastructure
-and deployed handbook path to ntumie., prove its staging deployment, and leave
+and deployed handbook path to ntumie., prove its production deployment, and leave
 production-readiness follow-ups separately recorded. Product-email webhooks are
 backlogged; they do not block this CI/CD milestone.
 
@@ -20,28 +20,28 @@ backlogged; they do not block this CI/CD milestone.
 - [x] (2026-10-12) Built API/worker and custom web images; three consecutive combined
   rehearsals passed after updating the synthetic fixture for current signup/hub APIs.
 - [x] (2026-10-12) Prepared product/migration Stack inputs and CI API/web image
-  publication with digest artifacts; replicas default to zero. Source and images
-  have not been published for this milestone; coordinator implementation is now local.
+  publication with digest artifacts; replicas default to zero. Initial source was published; final configuration corrections and application
+  image promotion remain part of this milestone.
 - [x] (2026-10-12) Reconciled shared data and Kuma/Dokploy monitoring contracts;
   infra owns concrete allocation SQL, queue Stack and combined capacity budget.
 - [x] (2026-10-12) Owner selected keeping `hs` and assessing an upgrade; shared data
   services must be part of the setup immediately.
 - [ ] Assess capacity upgrade and independent recovery before production launch;
-  owner clarified this is pre-production setup on the existing Contabo host.
-- [ ] Finish pre-production target allocation, secret references and provider inputs.
+  owner clarified this is production setup on the existing Contabo host.
+- [ ] Finish production target allocation, secret references and provider inputs.
 - [x] (2026-10-12) Owner created `support@ntumie.link` for user support;
-  `hello@ntumie.link` also exists, for general enquiries. Receipt has not been
-  independently tested. The send-only credential is intentional.
+  `hello@ntumie.link` also exists, for general enquiries. Support inbox receipt
+  was owner-confirmed. The send-only credential is intentional.
 - [x] (2026-10-12) Owner added `notify.ntumie.link` in Resend. Public DKIM and
   return-path DNS are present; iCloud MX remains intact. Resend accepted the one
   authorized support-mailbox test (HTTP 200); owner confirmed inbox receipt.
 - [x] (2026-10-12) Compiled migration/grant task passed repeat execution and wrong-role
   refusal in the image rehearsal. Local coordinator tests refuse stale/failed/timed-out
-  migration completion before application mutation; opt-in pre-production CI job added.
+  migration completion before application mutation; opt-in production CI job added.
 - [x] (2026-10-12) Full isolated product gate passed; final focused coordinator and
   Stack tests passed after optional-webhook and worker-egress adjustments.
 - [ ] Complete real Dokploy/Swarm execution through GitHub.
-- [x] (2026-10-12) Prepared shared staging PostgreSQL/Redis and separate idle
+- [x] (2026-10-12) Prepared shared production PostgreSQL/Redis and separate idle
   application/migration targets. New credentials passed 1Password byte comparisons.
 - [ ] Configure GitHub environments, publish source and deploy through verified CI.
 - [ ] Review/publish source, prove isolated Swarm and off-host restore, then verify live launch.
@@ -75,7 +75,7 @@ backlogged; they do not block this CI/CD milestone.
   separate per-product instances.
 - 2026-10-12 / implementation: Prepare artifacts while host capacity is unresolved;
   no purchasing, destructive restore, server build or production migration inferred.
-- 2026-10-12 / owner: Continue pre-production setup on Contabo VPS S SSD (4 cores,
+- 2026-10-12 / owner: Continue production setup on Contabo VPS S SSD (4 cores,
   8 GiB RAM, 200 GB disk); an upgrade is not a prerequisite for preparation.
 - 2026-10-12 / owner: Display the product as **ntumie.**, including email sender
   presentation; retain `ntumie` for technical identifiers.
@@ -113,7 +113,7 @@ GitHub images and real coordinator acceptance. The sender is accepted through
 one authorized message received in the support inbox. Delivery/bounce webhook
 integration is separate from the sender change and operational monitoring.
 Capacity upgrade, independent recovery and off-host restore remain production
-launch checks; the owner explicitly selected proceeding with pre-production setup. Retain this
+launch checks; the owner explicitly selected proceeding with production setup. Retain this
 active plan until those gates are resolved; durable decisions live in ADR-0061,
 the release runbook and infra's data-service contract.
 
@@ -182,3 +182,60 @@ Dokploy servers are deliberately refused by this first adapter.
 Bun 1.3.14, Next custom server, Nest/Prisma7/PostgreSQL18, BullMQ/Redis7, Dokploy0.30.8,
 Traefik Swarm provider, Cloudflare DNS, Google OAuth and Resend. Shared data services
 require scoped product roles/queue ACLs, persistent queue policy and off-host recovery.
+
+
+### First live activation and unattended secret delivery
+
+The first shared-data GitHub release started pinned PostgreSQL successfully.
+Queue deployment failed before service creation: Docker Stack misinterpreted a
+hyphen in a required-value error message. Updated both product manifests and the
+infra queue manifest to use identifier-only required messages; regression checks
+assert resolved names/images rather than only the renderer exit status.
+The owner selected 1Password at the CI/CD credential boundary, with no application
+SDK. Deploy jobs use the pinned official action and separate read-only service
+accounts scoped to Hashikome CI. Runtime secrets remain versioned Swarm files;
+provider/database rotations are coordinated operations, not implicit on vault edits.
+Live deployment acceptance remains pending while the corrected pipeline runs.
+
+Two isolated full gates stopped at different default five-second limits (export
+setup, then the multi-step Google consent/factor journey); the export suite passed
+unchanged on rerun. Integration suites now have a 15-second default, preserving
+explicit timing contracts. No tests are skipped and development services are not
+reset. The full gate must pass before publication.
+
+### Provider portability and native custody — 12 October 2026
+
+The owner selected consumer-based configuration: application environment bundles,
+reusable typed API fields, separate CI credentials and native SSH items. Applications
+retain plain env/`_FILE` inputs. Added portable runtime examples and explicit
+`SECRETS_PROVIDER` selection (`1password` or `github`, default GitHub for independent
+installs); failed/unknown providers cannot silently fall back. Both live production
+environments explicitly select 1Password. Synthetic checks passed provider selection,
+missing-key and multiline-injection failure behavior in both workflows.
+
+The owner imported native Environment `ntumie/production`; a private readback plus
+Google/Resend field composition matched all 19 expected application variables. The
+plain dotenv path produced the same inputs, excluding the migrator identity.
+Existing CI accounts read only deployment credentials; they do not yet read this
+Environment. Runtime Swarm versions remain explicit, with no automatic vault-edit
+synchronization. SSH maintenance and broader custody are infra-owned.
+
+The earlier full isolated gate passed after the integration timeout adjustment.
+The full provider/template gate passed. Production naming and neutral runtime
+inputs then passed focused documentation, coordinator and Stack checks; normal
+pre-push verification and the GitHub release remain required.
+
+### Production naming and neutral runtime inputs
+
+The owner clarified that local development and production are the only permanent
+environments, on one server. Existing services were moved into the default Dokploy
+production groups; superseded GitHub and empty Dokploy staging environments were
+removed. Production CI holds the verified provider token and target variables.
+The native application Environment was renamed and updated by the owner.
+
+Neutral values are `hashikome-products-postgres`, `hashikome-products-queue`,
+`hashikome-data` and `ntumie-email`. Infra owns activation of the matching network
+and ACL before product rollout; existing storage/service identities are preserved.
+New neutral versioned Swarm secrets are prepared. Native Environment readback
+passed all 19 expected variables after this update. The preview follow-up lives
+in the technical-debt tracker and does not establish an accepted live preview.

@@ -52,12 +52,16 @@ product-owned release contracts below remain the intended approach:
     in other projects. It is how stack-dialect behavior
     (secrets, `deploy.*` policies, ordering without `depends_on`) is
     rehearsed before anything reaches the VPS.
-  - `docker-stack.stag.yml` only if a dedicated staging environment ever
-    materializes — see the environment strategy below.
-- **No dedicated staging environment.** Pre-release verification is
-  **Dokploy preview deployments** (per-branch/PR previews on the same VPS)
-  plus the `docker-stack.local.yml` simulation. A permanent staging
-  environment is added only if previews prove insufficient.
+- **Local development and production are the permanent environments.** The single
+  VPS is production; a host upgrade or replacement does not change that role.
+  Configuration bundles identify the environment while internal service names
+  and queue namespaces remain neutral (for example `ntumie-email`).
+- **Temporary previews are a planned same-host capability, not an accepted live
+  feature.** Dokploy's built-in GitHub Application previews do not directly cover
+  this raw multi-service Stack. Any preview coordinator must use GitHub-built
+  images, separate preview data/queue credentials, captured email, bounded
+  capacity and teardown on PR closure. The local Swarm simulation remains the
+  pre-release topology check; no permanent staging server is planned.
 - **Each product repository owns its own runtime definition**: Dockerfiles,
   both topology files above, health/readiness checks, environment and
   secret-file contracts, migration commands, and release ordering. Dokploy

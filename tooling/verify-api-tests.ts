@@ -49,7 +49,9 @@ const status = await withTestDatabase(
     if (result === 0)
       for (const file of tests("test")) {
         await sql`DELETE FROM request_budgets`;
-        result = await run(["bun", "test", file]);
+        // Integration journeys boot Nest and make many database-backed requests.
+        // Keep explicit per-test timing assertions/overrides; avoid the unit default.
+        result = await run(["bun", "test", "--timeout", "15000", file]);
         if (result !== 0) break;
       }
     return result;

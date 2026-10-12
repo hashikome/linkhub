@@ -41,7 +41,10 @@ silently skips when PostgreSQL is missing.
 `tooling/verify-api-tests.ts` then uses `tooling/test-database.ts` to create a
 fresh random PostgreSQL database, apply every migration, run suites serially,
 and drop only that database. It clears request budgets inside the disposable
-DB between suites. On interruption, setup must settle before cleanup decides
+DB between suites. Integration suites use a 15-second default timeout because
+application setup and multi-request journeys can exceed Bun’s five-second unit
+default on a busy workstation. Explicit test timeouts and performance assertions
+remain in force; unit tests retain their default. On interruption, setup must settle before cleanup decides
 ownership, and any running suite is terminated before dropping the DB. SIGKILL
 or host failure can still leave a `test_*` database; inspect ownership/running
 processes before manually removing an abandoned one.

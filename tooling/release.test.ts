@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { environment, migrationState, promote, type Release, validateRelease } from "./release";
 
@@ -140,4 +141,44 @@ test("successful migration precedes application mutation and exact-image converg
     "compose.deploy:migration",
     "compose.deploy:application",
   ]);
+});
+
+test("Docker resolves the exact external names, images and sender before Dokploy promotion", () => {
+  for (const migration of [false, true]) {
+    const values = Object.fromEntries(
+      environment(inputs, release, migration)
+        .trim()
+        .split("\n")
+        .map((line) => {
+          const split = line.indexOf("=");
+          return [line.slice(0, split), line.slice(split + 1)];
+        }),
+    );
+    const path = new URL(
+      migration ? "../docker-stack.migrate.yml" : "../docker-stack.prod.yml",
+      import.meta.url,
+    ).pathname;
+    const result = spawnSync("docker", ["stack", "config", "-c", path], {
+      encoding: "utf8",
+      env: { ...process.env, ...values },
+    });
+    expect(result.status).toBe(0);
+    const rendered = Bun.YAML.parse(result.stdout) as {
+      services: Record<string, { image: string; environment: Record<string, string> }>;
+      networks: Record<string, { name: string }>;
+      secrets: Record<string, { name: string }>;
+    };
+    expect(rendered.networks.backend.name).toBe(values.BACKEND_NETWORK);
+    expect(rendered.services[migration ? "migrate" : "api"].image).toBe(release.apiImage);
+    expect(rendered.secrets.database_url.name).toBe(
+      values[migration ? "MIGRATION_DATABASE_URL_SECRET" : "DATABASE_URL_SECRET"],
+    );
+    if (!migration) {
+      expect(rendered.networks.ingress.name).toBe(values.INGRESS_NETWORK);
+      expect(rendered.services.web.image).toBe(release.webImage);
+      expect(rendered.services.email_worker.environment.EMAIL_FROM_ADDRESS).toBe(
+        values.EMAIL_FROM_ADDRESS,
+      );
+    }
+  }
 });

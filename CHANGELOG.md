@@ -9,6 +9,18 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Use local development and one production server as the permanent environment model; keep runtime names neutral and record same-host PR previews as a planned capability.
+
+- Keep secret providers optional: production deployment selects 1Password or GitHub secrets, while portable runtime env examples keep application setup independent of either provider.
+
+- Give real-service integration journeys a 15-second default timeout while
+  preserving explicit test limits and performance assertions.
+
+- Production deployments load their Dokploy credential from 1Password with a scoped
+  service account in GitHub; image builds and application code stay independent.
+- Fix Docker Stack required-input interpolation and verify resolved network,
+  secret and image names before release.
+
 - Use `ntumie. <no-reply@notify.ntumie.link>` for the selected deployment's
   transactional sender and `support@ntumie.link` for user help. Keep operational
   alerts separate. Add a migration/grant task and an opt-in GitHub-to-Dokploy
