@@ -12,7 +12,7 @@ answer in your own words before continuing. Reading the whole file in one go
 is the failure mode this structure exists to prevent. Every file is a
 clickable link.
 
-**Pin:** verified against commit `9849871435b2f334d3ee285bb66fd06388658ac8`. This is enforced, not honor
+**Pin:** verified against commit `96f3d0045c830963e3a936ba38a7bdda90181124`. This is enforced, not honor
 system: `check:guide-pin` (part of `bun run verify`) fails when any file this
 guide links changes after the pinned commit. To clear it, reread the affected
 sessions, fix any drift, and move the pin to the latest commit — in a
@@ -342,7 +342,10 @@ Read:
 Install the browser for local acceptance with `bunx playwright install chromium`.
 Local and CI browser checks use the Chromium pinned by Playwright;
 `BROWSER_CHROME_PATH` is an explicit diagnostic override. The pre-push hook runs
-`verify`; the separate browser gate below is required for web milestones and CI.
+`verify`. GitHub adds `test:browser:critical` for public reading, email/session
+isolation, invitation acceptance and first-link capture. Full browser coverage is
+a deliberate local run or the manually dispatched **Full browser verification**
+workflow, selected for broader changes.
 
 With `bun run dev` running, open the web on port 3004. Browse Discover, a public
 hub and a collection. Follow an independent reference. With a configured local
@@ -404,7 +407,8 @@ orchestrator (see `package.json` for the full set):
 | `bun run email:test` | email template tests |
 | `bun run verify` | API/web builds, types, boundaries and source/integration tests |
 | `bun run verify:isolated` | The same gate in a temporary checkout, preserving active dev output |
-| `bun run test:browser` | production browser journey with isolated API/data fixtures |
+| `bun run test:browser:critical` | four release-critical browser journeys with isolated API/data fixtures |
+| `bun run test:browser` | complete browser suite, run deliberately with isolated API/data fixtures |
 
 Cleanup after the walkthrough:
 
