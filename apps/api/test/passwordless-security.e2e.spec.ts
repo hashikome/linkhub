@@ -3,6 +3,7 @@ import { createHmac, randomBytes, randomUUID } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { createDeliveryAuth } from "../src/auth/delivery-auth";
 import { googleConnectionCookie, stageGoogleConnection } from "../src/auth/google-connection";
+import { googleCredentials } from "../src/auth/security-config";
 import { emailKey, unseal } from "../src/email/outbox";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { invitationDigest } from "../src/operations/invitations";
@@ -900,4 +901,25 @@ it("discards abandoned Google connections for ordinary email and standalone pass
     ).toBe(0);
     expect((await call("/code/verify", { email: emailA, code: "000000" }, cookie)).ok).toBe(false);
   }
+});
+
+it("disabled Google ignores retained credentials, disappears from discovery and refuses social sign-in", async () => {
+  const disabled = createDeliveryAuth({
+    ...config,
+    google: googleCredentials({
+      GOOGLE_AUTH_ENABLED: "false",
+      GOOGLE_CLIENT_ID: "retained-client",
+      GOOGLE_CLIENT_SECRET: "retained-secret",
+    }),
+  });
+  const methods = await disabled.handler(new Request(`${baseURL}/api/v1/auth/methods`));
+  expect((await methods.json()).data.google).toBe(false);
+  const result = await call(
+    "/sign-in/social",
+    { provider: "google", callbackURL: webOrigin },
+    "",
+    disabled,
+  );
+  expect(result.status).toBeGreaterThanOrEqual(400);
+  expect(result.headers.get("location")).toBeNull();
 });

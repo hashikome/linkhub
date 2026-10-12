@@ -108,13 +108,13 @@ This escalation path is the decided design; only its trigger is pending.
   committed.
 - E2E does not require resetting development data. On failure inspect the
   failing suite and service connectivity; the next run gets a fresh database.
-- `.github/workflows/verify.yml` runs this full gate on pushes and pull
-  requests with required PostgreSQL and Redis services. Missing infrastructure
+- `.github/workflows/verify.yml` runs this full gate on branch pushes, pull
+  requests and reusable calls from the main release with required PostgreSQL and Redis services. Missing infrastructure
   is a failure, never a skipped green suite. It also installs Chromium and runs
   `bun run test:browser` for the complete reading journey. Application compilation remains
   part of verification; Docker image builds and rehearsals are separate.
-- `.github/workflows/release.yml` is manually dispatched for deployment
-  preparation. It requires the full gate, then builds and rehearses an image
+- `.github/workflows/release.yml` runs on pushes to main for automatic deployment
+  and also supports manual artifact rehearsal or promotion. It requires the full gate, then builds and rehearses an image
   before the publication job can run. Image acceptance is separate from local application
   development. See [release preparation](release.md) for evidence and live gates.
 - `bun run verify:release-image -- <image>` runs that additional Docker release

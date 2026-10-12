@@ -15,6 +15,7 @@ services:
       BETTER_AUTH_URL: https://${PUBLIC_HOST:?PUBLIC_HOST_required}
       WEB_ORIGIN: https://${PUBLIC_HOST}
       WEB_SOURCE_SECRET_FILE: /run/secrets/web_source
+      GOOGLE_AUTH_ENABLED: ${GOOGLE_AUTH_ENABLED:-false}
       GOOGLE_CLIENT_ID_FILE: /run/secrets/google_client_id
       GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google_client_secret
       BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
@@ -107,7 +108,7 @@ services:
         traefik.http.services.ntumie-web.loadbalancer.server.port: '3000'
         traefik.http.services.ntumie-web.loadbalancer.healthcheck.path: /healthz
         traefik.http.services.ntumie-web.loadbalancer.healthcheck.interval: 15s
-  email_worker:
+  worker:
     image: ${API_IMAGE:?API_IMAGE_required}
     command: [bun, --tsconfig-override, tsconfig.runtime.json, dist/src/email/worker.js]
     environment:

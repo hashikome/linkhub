@@ -36,6 +36,19 @@ images; live promotion needs successful migration completion plus platform/provi
 acceptance. Failed application updates pause for review: do not automatically
 select an old binary after an unreviewed schema change.
 
+## Delivery trigger and neutral identities (12 October 2026)
+
+Main pushes run verification, image rehearsal, GHCR publication and promotion;
+manual dispatch remains available. Dokploy webhooks never bypass the coordinator.
+Use the product name as the application Stack base and role-only service names
+(`api`, `web`, `worker`). The separately gated `ntumie-release` Stack contains
+`migration`. Hyphens separate words we choose; Docker inserts `_` between stack
+and service. Dokploy 0.30.8 adds a generated suffix and cannot rename appName via
+its update API. Replacement targets therefore require an observed stop of legacy
+writers/routers before activation, while shared volume and secret identities stay
+stable. This extends the accepted release contract; it does not combine lifecycle
+or privileged migration credentials with application services.
+
 ## Consequences
 
 Assess aggregate host capacity now, including shared services, application overlap,

@@ -72,19 +72,22 @@ prove Swarm scheduling, ingress, secrets distribution, or rolling updates.
 ## Image and release workflow
 
 `.github/workflows/verify.yml` runs the complete application verification gate
-on pushes and pull requests, including compilation and real-service tests.
+on branch pushes and pull requests, and as the first job of a main-branch release,
+including compilation and real-service tests.
 No required integration suite skips because services are absent. It does not
 build or rehearse Docker images.
 
-`.github/workflows/release.yml` is manually dispatched on `main` when preparing
-deployment artifacts. It runs the reusable verification workflow, then a
+`.github/workflows/release.yml` runs on every push to `main`, including documentation
+changes. A push automatically selects deployment after verification; pull requests
+never deploy. Manual dispatch remains available for retries or artifact-only rehearsal. It runs the reusable verification workflow, then a
 separate `image-check` job builds and rehearses both API/worker and web images. Only after
 both gates pass does the publication job build and publish to GHCR with a full
 commit SHA tag and build provenance/SBOM. Its summary supplies
 `API_IMAGE=<registry>/<repository>/api:<sha>@sha256:<digest>` and the matching
 `WEB_IMAGE=<registry>/<repository>/web:<sha>@sha256:<digest>`, with `RELEASE_SHA`
-in a retained `release-inputs.txt` artifact. Select `deploy=true` to run the
-coordinated migration/application promotion described below; no Git webhook
+in a retained `release-inputs.txt` artifact. On a manual dispatch, select `deploy=true`
+to run coordinated migration/application promotion (the default only rehearses and
+publishes artifacts); no Git webhook
 deploys ahead of the release checks. The first coordinated production rollout passed; see the acceptance record above.
 
 
@@ -243,10 +246,12 @@ the deploy job. Alternatively, `SECRETS_PROVIDER=github` (the default when unset
 uses the GitHub environment secret `DOKPLOY_API_KEY`. Unknown providers and failed
 selected providers stop the release; there is no automatic fallback. Both supply
 the same coordinator input. No desktop approval or application SDK is involved.
-Variables `DOKPLOY_APPLICATION_ID`, `DOKPLOY_MIGRATION_ID` and
-`DOKPLOY_REGISTRY_ID` select the prepared targets. Prepare distinct local raw-source
-Stacks named with `ntumie-app-` and `ntumie-migrate-` prefixes; leave Git auto-deploy
-disabled. Both require the same private data network and migration secret reference.
+`deploy/production.json` selects the reviewed application/migration resources;
+`DOKPLOY_REGISTRY_ID` remains a GitHub environment variable. Prepare distinct local
+raw-source Stacks with base names `ntumie` and `ntumie-release`; Dokploy appends a
+six-character suffix. Service keys are `api`, `web`, `worker` and `migration`:
+Docker joins stack and service with `_`, while names we choose use `-` internally.
+Leave Dokploy Git auto-deploy disabled. Both require the same private data network and migration secret reference.
 Application inputs follow `deploy/production.env.example`; migration inputs need
 only its backend network and migration secret name (image/attempt are supplied by CI).
 
@@ -258,6 +263,28 @@ Stack listing omits completed tasks in v0.30.8, so the migration check uses its
 local all-state container listing and verifies exact Swarm labels. Failures do not
 automatically revert schema or select older binaries. Local fake-API tests and
 compiled-image rehearsals do not replace real Swarm/GitHub/provider acceptance.
+
+## Prepared identity cutover and Google availability
+
+The neutral resources are prepared but undeployed until the owner pushes this
+change. The first release migrates successfully before stopping the old application;
+it observes old containers stopped before starting the replacement, avoiding duplicate
+routes and workers. An unsuccessful migration keeps the old application serving.
+If replacement startup fails, inspect and select a compatible release explicitly;
+there is no automatic schema rollback. Legacy stopped Stack definitions remain
+product-owned recovery evidence until independent live acceptance, then remove them
+with `deleteVolumes=false` and retire previous-target references in the profile.
+Infra's separate release controls shared data identities and preserves external
+volumes and runtime DNS aliases. The product release works against either identity.
+
+Production defaults `GOOGLE_AUTH_ENABLED=false` while the OAuth redirect configuration
+is incomplete. This disables the backend provider and removes its discovery/UI option
+even when credential files remain mounted. Email codes and passkeys are unchanged.
+For re-enablement, register `https://ntumie.link/api/v1/auth/callback/google` on the
+correct Google client, set the flag to `true` in the deployment environment and
+release through GitHub; accept the real callback journey separately. `true` requires
+both credentials, `false` skips them, and unset/empty preserves credential-based
+selection for existing local installations. Any other flag value fails startup.
 
 ## Portable application configuration
 

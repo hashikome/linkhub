@@ -18,7 +18,7 @@ const inputs = readFileSync(
 ).replace(/SET_[A-Z_]+/g, "fixture");
 const target = (migration: boolean) => ({
   composeId: migration ? release.migration : release.application,
-  appName: migration ? "ntumie-migrate-fixture" : "ntumie-app-fixture",
+  appName: migration ? "ntumie-release-fixtur" : "ntumie-fixtur",
   composeType: "stack",
   sourceType: "raw",
   autoDeploy: false,
@@ -31,7 +31,7 @@ const migration = () => ({
     Env: [`RELEASE_ATTEMPT=${release.attempt}`],
     Cmd: ["--tsconfig-override", "tsconfig.runtime.json", "dist/src/operations/migrate-release.js"],
     Labels: {
-      "com.docker.swarm.service.name": "ntumie-migrate-fixture_migrate",
+      "com.docker.swarm.service.name": "ntumie-release-fixtur_migration",
       "com.docker.swarm.task.id": "task",
     },
   },
@@ -76,7 +76,12 @@ test("only the exact attempt and entrypoint at exit zero proves migration accept
   expect(() => migrationState(bypass, target(true).appName, release)).toThrow();
 });
 
-function harness(outcome: "complete" | "failed" | "stale" | "pending") {
+function harness(
+  outcome: "complete" | "failed" | "stale" | "pending",
+  previous = false,
+  stopWorks = true,
+) {
+  let oldRunning = previous;
   const calls: string[] = [];
   const titles = new Map<string, string>();
   const api = async (
@@ -85,7 +90,15 @@ function harness(outcome: "complete" | "failed" | "stale" | "pending") {
     query?: Record<string, string>,
   ): Promise<unknown> => {
     calls.push(`${operation}:${payload?.composeId ?? query?.composeId ?? ""}`);
-    if (operation === "compose.one") return target(query?.composeId === release.migration);
+    if (operation === "compose.one") {
+      if (query?.composeId === "previous")
+        return { ...target(false), composeId: "previous", appName: "ntumie-app-old" };
+      return target(query?.composeId === release.migration);
+    }
+    if (operation === "compose.stop") {
+      if (stopWorks) oldRunning = false;
+      return {};
+    }
     if (operation === "compose.deploy") {
       titles.set(payload?.composeId as string, payload?.title as string);
       return {};
@@ -93,6 +106,7 @@ function harness(outcome: "complete" | "failed" | "stale" | "pending") {
     if (operation === "deployment.allByCompose")
       return [{ title: titles.get(query?.composeId ?? ""), status: "done" }];
     if (operation === "docker.getContainersByAppNameMatch") {
+      if (query?.appName === "ntumie-app-old") return oldRunning ? [{ state: "running" }] : [];
       if (query?.appName === target(true).appName) {
         expect(query.appType).toBeUndefined(); // Include completed containers.
         return [{ containerId: "a".repeat(12), state: "exited" }];
@@ -107,7 +121,7 @@ function harness(outcome: "complete" | "failed" | "stale" | "pending") {
         if (outcome === "pending") container.State.Status = "running";
         return container;
       }
-      const service = { b: "api", c: "web", d: "email_worker" }[query?.containerId[0] ?? ""];
+      const service = { b: "api", c: "web", d: "worker" }[query?.containerId[0] ?? ""];
       return {
         Config: {
           Image: service === "web" ? release.webImage : release.apiImage,
@@ -169,16 +183,61 @@ test("Docker resolves the exact external names, images and sender before Dokploy
       secrets: Record<string, { name: string }>;
     };
     expect(rendered.networks.backend.name).toBe(values.BACKEND_NETWORK);
-    expect(rendered.services[migration ? "migrate" : "api"].image).toBe(release.apiImage);
+    expect(rendered.services[migration ? "migration" : "api"].image).toBe(release.apiImage);
     expect(rendered.secrets.database_url.name).toBe(
       values[migration ? "MIGRATION_DATABASE_URL_SECRET" : "DATABASE_URL_SECRET"],
     );
     if (!migration) {
       expect(rendered.networks.ingress.name).toBe(values.INGRESS_NETWORK);
       expect(rendered.services.web.image).toBe(release.webImage);
-      expect(rendered.services.email_worker.environment.EMAIL_FROM_ADDRESS).toBe(
+      expect(rendered.services.worker.environment.EMAIL_FROM_ADDRESS).toBe(
         values.EMAIL_FROM_ADDRESS,
       );
     }
   }
+});
+
+test("identity cutover waits for migration and old application shutdown before replacement", async () => {
+  const cutover = {
+    ...release,
+    previousApplication: "previous",
+    previousApplicationName: "ntumie-app-old",
+  };
+  const successful = harness("complete", true);
+  await promote(successful.api, cutover, async () => {}, 1);
+  expect(successful.calls.indexOf("compose.stop:previous")).toBeGreaterThan(
+    successful.calls.indexOf("compose.deploy:migration"),
+  );
+  expect(successful.calls.indexOf("compose.stop:previous")).toBeLessThan(
+    successful.calls.indexOf("compose.deploy:application"),
+  );
+  const failed = harness("failed", true);
+  await expect(promote(failed.api, cutover, async () => {}, 1)).rejects.toThrow();
+  expect(failed.calls).not.toContain("compose.stop:previous");
+  const lingering = harness("complete", true, false);
+  await expect(promote(lingering.api, cutover, async () => {}, 1)).rejects.toThrow(
+    "has not stopped",
+  );
+  expect(lingering.calls).not.toContain("compose.deploy:application");
+});
+
+test("main pushes deploy only through the verified release while manual rehearsal can opt out", () => {
+  const workflow = Bun.YAML.parse(
+    readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8"),
+  ) as {
+    on: {
+      push: { branches: string[] };
+      workflow_dispatch: { inputs: { deploy: { default: boolean } } };
+    };
+    jobs: Record<string, { needs?: string; if?: string; uses?: string }>;
+  };
+  expect(workflow.on.push.branches).toEqual(["main"]);
+  expect(workflow.on.workflow_dispatch.inputs.deploy.default).toBe(false);
+  expect(workflow.jobs.verify.uses).toBe("./.github/workflows/verify.yml");
+  expect(workflow.jobs["image-check"].needs).toBe("verify");
+  expect(workflow.jobs.image.needs).toBe("image-check");
+  expect(workflow.jobs.deploy.needs).toBe("image");
+  expect(workflow.jobs.deploy.if).toBe(
+    "github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.deploy)",
+  );
 });

@@ -26,6 +26,8 @@ export interface Release {
   application: string;
   migration: string;
   registry: string;
+  previousApplication?: string;
+  previousApplicationName?: string;
 }
 
 export function validateRelease(release: Release) {
@@ -66,6 +68,7 @@ export function environment(previous: string, release: Release, migration = fals
     "EMAIL_FROM_ADDRESS",
     "SUPPORT_EMAIL",
     "BOOTSTRAP_ADMIN_EMAIL",
+    "GOOGLE_AUTH_ENABLED",
     "DATABASE_URL_SECRET",
     "MIGRATION_DATABASE_URL_SECRET",
     "AUTH_SECRET",
@@ -126,7 +129,7 @@ function inspect(value: unknown): Container {
 
 export function migrationState(container: Container, appName: string, release: Release) {
   if (
-    container.Config?.Labels?.["com.docker.swarm.service.name"] !== `${appName}_migrate` ||
+    container.Config?.Labels?.["com.docker.swarm.service.name"] !== `${appName}_migration` ||
     !container.Config.Labels["com.docker.swarm.task.id"] ||
     container.Config.Image !== release.apiImage ||
     !container.Config.Env?.includes(`RELEASE_ATTEMPT=${release.attempt}`)
@@ -191,12 +194,12 @@ async function waitFor(
             : "";
           const expected = service === "web" ? release.webImage : release.apiImage;
           if (
-            !["api", "web", "email_worker"].includes(service ?? "") ||
+            !["api", "web", "worker"].includes(service ?? "") ||
             container.Config?.Image !== expected
           )
             continue;
           if (!container.Config.Env?.includes(`RELEASE_ATTEMPT=${release.attempt}`)) continue;
-          if (service !== "email_worker" && container.State.Health?.Status !== "healthy") continue;
+          if (service !== "worker" && container.State.Health?.Status !== "healthy") continue;
           running.set(service as string, (running.get(service as string) ?? 0) + 1);
         }
       }
@@ -206,7 +209,7 @@ async function waitFor(
       if (
         !migration &&
         list.filter((item) => item.state === "running").length === 3 &&
-        ["api", "web", "email_worker"].every((service) => running.get(service) === 1)
+        ["api", "web", "worker"].every((service) => running.get(service) === 1)
       )
         return;
     }
@@ -229,15 +232,15 @@ export async function promote(
     composeId: release.migration,
   })) as Compose;
   for (const [target, prefix] of [
-    [application, "ntumie-app-"],
-    [migration, "ntumie-migrate-"],
+    [application, /^ntumie-[a-z0-9]{6}$/],
+    [migration, /^ntumie-release-[a-z0-9]{6}$/],
   ] as const) {
     if (
       target.composeType !== "stack" ||
       target.sourceType !== "raw" ||
       target.autoDeploy !== false ||
       target.serverId ||
-      !target.appName?.startsWith(prefix) ||
+      !prefix.test(target.appName) ||
       !/^[a-z0-9-]+$/.test(target.appName)
     )
       throw new Error(
@@ -255,6 +258,24 @@ export async function promote(
     shared(migrationEnv, "MIGRATION_DATABASE_URL_SECRET")
   )
     throw new Error("Application allocation and migration credential references differ.");
+  let previous: Compose | undefined;
+  if (release.previousApplication) {
+    if (release.previousApplication === release.application || !release.previousApplicationName)
+      throw new Error("Previous application identity must be distinct and explicit.");
+    previous = (await api("compose.one", undefined, {
+      composeId: release.previousApplication,
+    })) as Compose;
+    if (
+      previous.appName !== release.previousApplicationName ||
+      previous.composeType !== "stack" ||
+      previous.sourceType !== "raw" ||
+      previous.autoDeploy !== false ||
+      previous.serverId ||
+      shared(environment(previous.env, release), "BACKEND_NETWORK") !==
+        shared(appEnv, "BACKEND_NETWORK")
+    )
+      throw new Error("Unexpected previous application target.");
+  }
   await api("registry.testRegistryById", { registryId: release.registry });
   for (const [target, env, isMigration] of [
     [migration, migrationEnv, true],
@@ -275,6 +296,25 @@ export async function promote(
       command: "",
       autoDeploy: false,
     });
+    if (!isMigration && previous) {
+      // The migration is already accepted; prevent duplicate routes and workers.
+      const active = async () =>
+        (
+          (await api("docker.getContainersByAppNameMatch", undefined, {
+            appName: previous.appName,
+          })) as { state: string }[]
+        ).some((container) => !["exited", "dead"].includes(container.state));
+      if (await active()) await api("compose.stop", { composeId: previous.composeId });
+      let stopped = false;
+      for (let i = 0; i < attempts; i++) {
+        if (!(await active())) {
+          stopped = true;
+          break;
+        }
+        await sleep();
+      }
+      if (!stopped) throw new Error("Previous application has not stopped; replacement refused.");
+    }
     await api("compose.deploy", { composeId: target.composeId, title });
     await waitFor(api, target, title, release, isMigration, sleep, attempts);
   }
@@ -329,13 +369,15 @@ async function main() {
       throw new Error(`Dokploy ${operation} failed; response withheld.`);
     return JSON.parse(output.slice(0, -4) || "null");
   };
+  const profile = JSON.parse(
+    readFileSync(new URL("../deploy/production.json", import.meta.url), "utf8"),
+  );
   await promote(api, {
+    ...profile,
     revision,
     attempt: `${process.env.GITHUB_RUN_ID}-${process.env.GITHUB_RUN_ATTEMPT}`,
     apiImage: process.env.API_IMAGE ?? "",
     webImage: process.env.WEB_IMAGE ?? "",
-    application: process.env.DOKPLOY_APPLICATION_ID ?? "",
-    migration: process.env.DOKPLOY_MIGRATION_ID ?? "",
     registry: process.env.DOKPLOY_REGISTRY_ID ?? "",
   });
   console.log(

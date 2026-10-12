@@ -267,7 +267,7 @@ together.” on the right, using 16 px body text. The homepage shows only About
 ntumie. About shows only Join ntumie. to `/sign-up`, or Discover to `/discover`
 when signed in. No year, repeated wordmark, utility links or top divider. Links
 use shared control heights and blue hover/focus feedback; content wraps naturally
-on phones. The footer follows long content and sits at the bottom of short pages.
+on phones while the tagline remains right-aligned on its own line. The footer follows long content and sits at the bottom of short pages.
 Site sharing, Support and the maker's portfolio live on `/about`; legal links
 join the collection when those pages exist. See [ADR-0056](docs/engineering-decisions/0056-about-collection-and-footer-navigation.md).
 

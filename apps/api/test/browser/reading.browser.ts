@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it as test } from "bun:test";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { INestApplication } from "@nestjs/common";
@@ -76,6 +76,7 @@ let targetId: string;
 let linkToken: string;
 const longTitle = `A reader's reference library ${"LongTitle".repeat(15)}`;
 let failCapture = false;
+let googleMethodsDisabled = false;
 let discoverMode: "normal" | "empty" | "failure" = "normal";
 let captureReferer: string | null = null;
 let capture: ReturnType<typeof Bun.serve>;
@@ -260,6 +261,10 @@ beforeAll(async () => {
             status: res.statusCode,
           }),
         );
+      }
+      if (req.url === "/api/v1/auth/methods" && googleMethodsDisabled) {
+        res.status(200).json({ data: { google: false, passkey: true } });
+        return;
       }
       if (req.url === "/api/v1/capture" && failCapture) {
         res.status(503).json({ error: { code: "service_unavailable" } });
@@ -850,6 +855,81 @@ describe("explore to resource: production browser journey", () => {
       } finally {
         await close();
       }
+    }
+  }, 60000);
+
+  it("keeps footer roles aligned at every width and hides an unavailable Google provider", async () => {
+    googleMethodsDisabled = true;
+    try {
+      for (const js of [true, false]) {
+        const { page, close } = await freshPage(js);
+        try {
+          for (const width of [320, 390, 768, 1280, 1440]) {
+            await page.emulateMedia({ reducedMotion: "reduce" });
+            await page.setViewportSize({ width, height: 900 });
+            for (const path of ["/", "/about", "/sign-in"]) {
+              await ready(page, path);
+              const footer = page.getByRole("contentinfo");
+              await footer.scrollIntoViewIfNeeded();
+              const link = footer.getByRole("link");
+              await browserExpect(link).toHaveText(
+                path === "/about" ? "Join ntumie." : "About ntumie.",
+              );
+              await browserExpect(footer.locator(".footer-tagline")).toHaveCount(
+                path === "/sign-in" ? 1 : 0,
+              );
+              await browserExpect(
+                page.getByRole("button", { name: "Continue with Google" }),
+              ).toHaveCount(0);
+              const geometry = await footer.evaluate((element) => {
+                const content = element.querySelector(".footer-content")?.getBoundingClientRect();
+                const nav = element.querySelector(".footer-nav")?.getBoundingClientRect();
+                const tagline = element.querySelector(".footer-tagline")?.getBoundingClientRect();
+                if (!content || !nav) throw new Error("Missing footer layout");
+                return {
+                  left: nav.left - content.left,
+                  right: tagline ? content.right - tagline.right : 0,
+                  overflow: document.documentElement.scrollWidth > innerWidth,
+                };
+              });
+              expect(Math.abs(geometry.left)).toBeLessThan(2);
+              expect(Math.abs(geometry.right)).toBeLessThan(2);
+              expect(geometry.overflow).toBe(false);
+              const output = process.env.FOOTER_REVIEW_DIR;
+              if (output && js) {
+                await mkdir(output, { recursive: true });
+                const name = path === "/" ? "home" : path.slice(1);
+                await page.evaluate(() => {
+                  (document.activeElement as HTMLElement | null)?.blur();
+                  window.scrollTo(0, 0);
+                });
+                await page.screenshot({
+                  path: join(output, `${name}-${width}.png`),
+                  fullPage: true,
+                });
+                if (path === "/sign-in" && width === 390) {
+                  await link.hover();
+                  await footer.screenshot({ path: join(output, "footer-hover.png") });
+                  await link.focus();
+                  await page.keyboard.press("Tab");
+                  await page.keyboard.press("Shift+Tab");
+                  await browserExpect(link).toBeFocused();
+                  await footer.screenshot({ path: join(output, "footer-focus.png") });
+                  await link.hover();
+                  await page.mouse.down();
+                  await footer.screenshot({ path: join(output, "footer-pressed.png") });
+                  await page.mouse.move(0, 0);
+                  await page.mouse.up();
+                }
+              }
+            }
+          }
+        } finally {
+          await close();
+        }
+      }
+    } finally {
+      googleMethodsDisabled = false;
     }
   }, 60000);
 

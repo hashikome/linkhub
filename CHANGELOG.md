@@ -9,6 +9,14 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Deploy main pushes through GitHub verification, image rehearsal, GHCR and Dokploy;
+  preserve manual artifact-only rehearsal. Prepare neutral Stack identities with
+  role-only services and guarded retirement of the previous serving application.
+- Default production Google sign-in off until its callback is configured; an
+  explicit backend availability switch hides the option without deleting credentials.
+- Keep footer navigation left and its tagline right even when a phone layout wraps;
+  preserve the homepage and About page's distinct labels and native navigation.
+
 - Accept production CI/CD at `https://ntumie.link`: GitHub verification, image
   rehearsal and immutable GHCR publication now precede successful migration and
   Dokploy API/web/worker promotion. Read-only live health, shared-data readiness

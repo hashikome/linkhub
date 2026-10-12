@@ -21,7 +21,7 @@ const stack = Bun.YAML.parse(source("docker-stack.prod.yml")) as {
 };
 
 test("first deployment serves nothing until migrations have been accepted", () => {
-  expect(Object.keys(stack.services).sort()).toEqual(["api", "email_worker", "web"]);
+  expect(Object.keys(stack.services).sort()).toEqual(["api", "web", "worker"]);
   for (const service of Object.values(stack.services)) {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal Swarm interpolation contract.
     expect(service.deploy.replicas).toBe("${APP_REPLICAS:-0}");
@@ -64,8 +64,8 @@ test("migration is a one-shot isolated service with its own database credential"
     services: Record<string, Service>;
     secrets: { database_url: { name: string } };
   };
-  expect(Object.keys(migration.services)).toEqual(["migrate"]);
-  const job = migration.services.migrate;
+  expect(Object.keys(migration.services)).toEqual(["migration"]);
+  const job = migration.services.migration;
   expect(job.networks).toEqual(["backend"]);
   expect(job.deploy.restart_policy?.condition).toBe("none");
   expect(job.deploy.labels?.["traefik.enable"]).toBe("false");

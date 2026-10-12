@@ -9,6 +9,7 @@ export function maskVerificationOverrides<T extends Record<string, string | unde
   for (const key of [
     "WEB_ORIGIN",
     "BOOTSTRAP_ADMIN_EMAIL",
+    "GOOGLE_AUTH_ENABLED",
     "GOOGLE_CLIENT_ID",
     "GOOGLE_CLIENT_ID_FILE",
     "GOOGLE_CLIENT_SECRET",

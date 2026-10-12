@@ -1,5 +1,7 @@
 name: Release ntumie.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       deploy:
@@ -85,7 +87,7 @@ jobs:
           retention-days: 90
   deploy:
     needs: image
-    if: github.ref == 'refs/heads/main' && inputs.deploy
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || inputs.deploy)
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -126,7 +128,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           API_IMAGE: ${{ needs.image.outputs.api }}
           WEB_IMAGE: ${{ needs.image.outputs.web }}
-          DOKPLOY_APPLICATION_ID: ${{ vars.DOKPLOY_APPLICATION_ID }}
-          DOKPLOY_MIGRATION_ID: ${{ vars.DOKPLOY_MIGRATION_ID }}
           DOKPLOY_REGISTRY_ID: ${{ vars.DOKPLOY_REGISTRY_ID }}
         run: bun tooling/release.ts
