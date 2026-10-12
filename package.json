@@ -34,7 +34,7 @@
     "check:telemetry": "bun tooling/check-telemetry.ts",
     "verify:release-image": "bun tooling/verify-release-image.ts",
     "check:docs": "bun tooling/check-docs.ts",
-    "tooling:test": "bun test ./tooling/check-docs.test.ts ./tooling/dev-config.test.ts ./tooling/verification-env.test.ts ./tooling/verification-snapshot.test.ts",
+    "tooling:test": "bun test ./tooling/check-docs.test.ts ./tooling/dev-config.test.ts ./tooling/verification-env.test.ts ./tooling/verification-snapshot.test.ts ./tooling/deployment-contract.test.ts ./tooling/release.test.ts",
     "web:dev": "bun run infra:up && bun run --filter @ntumie/web dev",
     "web:build": "bun run --filter @ntumie/web build",
     "web:typecheck": "bun run --filter @ntumie/web typecheck",

@@ -9,6 +9,18 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Use `ntumie. <no-reply@notify.ntumie.link>` for the selected deployment's
+  transactional sender and `support@ntumie.link` for user help. Keep operational
+  alerts separate. Add a migration/grant task and an opt-in GitHub-to-Dokploy
+  coordinator that refuses failed, stale or incomplete migrations before promotion.
+
+- Prepare same-origin deployment at `ntumie.link` with a non-root custom web
+  image, immutable API/web release artifacts and a separate migration task.
+  Default application replicas to zero until migration coordination is accepted.
+  Rehearse shared PostgreSQL role/database boundaries and Redis queue ACLs,
+  compiled email delivery, restore and dependency-outage shutdown. Shared data
+  capacity, recovery, provider setup and live deployment remain pending.
+
 - Rename the product to **ntumie.** (formerly LinkHub), with `ntumie` repository
   and package names. Update web, email, auth display names, API metadata and
   current references. Preserve database storage, account origins and durable IDs.

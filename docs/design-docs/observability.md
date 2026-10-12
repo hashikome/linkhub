@@ -1,5 +1,9 @@
 # Observability
 
+Current rollout: Kuma and Dokploy resource views are the accepted first-deployment
+baseline. Grafana/Loki/Alloy below is deferred direction, not a launch gate; see
+[ADR-0061](../engineering-decisions/0061-shared-platform-deployment-baseline.md).
+
 ## Delivery status
 
 The API telemetry foundation below is implemented. A comprehensive wide event

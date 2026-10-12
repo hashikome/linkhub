@@ -7,32 +7,38 @@ services:
       NODE_ENV: production
       PORT: '4000'
       RELEASE_SHA: ${RELEASE_SHA:?Set the full release commit SHA}
+      RELEASE_ATTEMPT: ${RELEASE_ATTEMPT:?Set the unique GitHub run ID and attempt}
       DATABASE_URL_FILE: /run/secrets/database_url
       BETTER_AUTH_SECRET_FILE: /run/secrets/auth_secret
       EMAIL_SUPPRESSION_SECRET_FILE: /run/secrets/email_suppression
       REDIS_URL_FILE: /run/secrets/redis_url
-      SENTRY_DSN_FILE: /run/secrets/sentry_dsn
       BETTER_AUTH_URL: https://${PUBLIC_HOST:?Set the public host}
+      WEB_ORIGIN: https://${PUBLIC_HOST}
+      WEB_SOURCE_SECRET_FILE: /run/secrets/web_source
+      GOOGLE_CLIENT_ID_FILE: /run/secrets/google_client_id
+      GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google_client_secret
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
       EMAIL_PROVIDER: resend
       EMAIL_SUPPORT_URL: ${EMAIL_SUPPORT_URL:?Set the HTTPS support route}
       QUEUE_NAMESPACE: ${QUEUE_NAMESPACE:?Set a deployment-unique queue namespace}
-      RESEND_WEBHOOK_SECRET_FILE: /run/secrets/resend_webhook
       TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:?Set only the trusted ingress proxy addresses}
     secrets:
       - database_url
       - auth_secret
       - email_suppression
       - redis_url
-      - sentry_dsn
-      - resend_webhook
+      - web_source
+      - google_client_id
+      - google_client_secret
     networks:
       - ingress
       - backend
+      - frontend
     read_only: true
     tmpfs:
       - /tmp
     deploy:
-      replicas: 1
+      replicas: ${APP_REPLICAS:-0}
       resources:
         limits:
           cpus: '1.0'
@@ -45,24 +51,68 @@ services:
       update_config:
         parallelism: 1
         order: start-first
-        failure_action: rollback
+        failure_action: pause
       rollback_config:
         parallelism: 1
       labels:
         traefik.enable: 'true'
         traefik.swarm.network: ${INGRESS_NETWORK:?Set the shared ingress network}
-        traefik.http.routers.link-api.rule: Host(`${PUBLIC_HOST}`) && PathPrefix(`/api/`)
-        traefik.http.routers.link-api.entrypoints: ${HTTPS_ENTRYPOINT:?Set the platform HTTPS entrypoint}
-        traefik.http.routers.link-api.tls: 'true'
-        traefik.http.routers.link-api.tls.certresolver: ${TLS_RESOLVER:?Set the platform certificate resolver}
-        traefik.http.services.link-api.loadbalancer.server.port: '4000'
-        traefik.http.services.link-api.loadbalancer.healthcheck.path: /api/v1/status
-        traefik.http.services.link-api.loadbalancer.healthcheck.interval: 15s
+        traefik.http.routers.ntumie-api.rule: Host(`${PUBLIC_HOST}`) && PathPrefix(`/api/`)
+        traefik.http.routers.ntumie-api.priority: '100'
+        traefik.http.routers.ntumie-api.service: ntumie-api
+        traefik.http.routers.ntumie-api.entrypoints: ${HTTPS_ENTRYPOINT:?Set the platform HTTPS entrypoint}
+        traefik.http.routers.ntumie-api.tls: 'true'
+        traefik.http.routers.ntumie-api.tls.certresolver: ${TLS_RESOLVER:?Set the platform certificate resolver}
+        traefik.http.services.ntumie-api.loadbalancer.server.port: '4000'
+        traefik.http.services.ntumie-api.loadbalancer.healthcheck.path: /api/v1/status
+        traefik.http.services.ntumie-api.loadbalancer.healthcheck.interval: 15s
+  web:
+    image: ${WEB_IMAGE:?Set an immutable web image reference}
+    environment:
+      NODE_ENV: production
+      WEB_HOST: 0.0.0.0
+      WEB_PORT: '3000'
+      RELEASE_ATTEMPT: ${RELEASE_ATTEMPT}
+      BETTER_AUTH_URL: https://${PUBLIC_HOST}
+      WEB_ORIGIN: https://${PUBLIC_HOST}
+      API_INTERNAL_ORIGIN: http://api:4000
+      WEB_SOURCE_SECRET_FILE: /run/secrets/web_source
+      WEB_TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:?Set the monitored support mailbox}
+    secrets: [web_source]
+    networks: [ingress, frontend]
+    read_only: true
+    tmpfs: [/tmp]
+    stop_grace_period: 10s
+    deploy:
+      replicas: ${APP_REPLICAS:-0}
+      resources:
+        limits: { cpus: '1.0', memory: 512M }
+        reservations: { memory: 128M }
+      restart_policy: { condition: on-failure, delay: 5s }
+      update_config:
+        parallelism: 1
+        order: start-first
+        failure_action: pause
+      rollback_config: { parallelism: 1, order: stop-first }
+      labels:
+        traefik.enable: 'true'
+        traefik.swarm.network: ${INGRESS_NETWORK}
+        traefik.http.routers.ntumie-web.rule: Host(`${PUBLIC_HOST}`)
+        traefik.http.routers.ntumie-web.priority: '10'
+        traefik.http.routers.ntumie-web.service: ntumie-web
+        traefik.http.routers.ntumie-web.entrypoints: ${HTTPS_ENTRYPOINT}
+        traefik.http.routers.ntumie-web.tls: 'true'
+        traefik.http.routers.ntumie-web.tls.certresolver: ${TLS_RESOLVER}
+        traefik.http.services.ntumie-web.loadbalancer.server.port: '3000'
+        traefik.http.services.ntumie-web.loadbalancer.healthcheck.path: /healthz
+        traefik.http.services.ntumie-web.loadbalancer.healthcheck.interval: 15s
   email_worker:
     image: ${API_IMAGE:?Set an immutable API image reference}
     command: [bun, --tsconfig-override, tsconfig.runtime.json, dist/src/email/worker.js]
     environment:
       NODE_ENV: production
+      RELEASE_ATTEMPT: ${RELEASE_ATTEMPT}
       DATABASE_URL_FILE: /run/secrets/database_url
       BETTER_AUTH_SECRET_FILE: /run/secrets/auth_secret
       EMAIL_SUPPRESSION_SECRET_FILE: /run/secrets/email_suppression
@@ -73,14 +123,15 @@ services:
       EMAIL_SUPPORT_URL: ${EMAIL_SUPPORT_URL:?Set the HTTPS support route}
       QUEUE_NAMESPACE: ${QUEUE_NAMESPACE:?Set a deployment-unique queue namespace}
     secrets: [database_url, auth_secret, email_suppression, redis_url, resend_key]
-    networks: [backend]
+    # Data stays internal; the worker needs outbound HTTPS to send through Resend.
+    networks: [backend, egress]
     read_only: true
     tmpfs: [/tmp]
     healthcheck:
       disable: true
     stop_grace_period: 15s
     deploy:
-      replicas: 1
+      replicas: ${APP_REPLICAS:-0}
       resources:
         limits:
           cpus: '0.5'
@@ -90,6 +141,13 @@ services:
         delay: 5s
 
 networks:
+  egress:
+    driver: overlay
+    attachable: false
+  frontend:
+    driver: overlay
+    internal: true
+    attachable: false
   ingress:
     external: true
     name: ${INGRESS_NETWORK}
@@ -106,15 +164,18 @@ secrets:
   redis_url:
     external: true
     name: ${REDIS_URL_SECRET:?Set the Redis URL secret name}
-  sentry_dsn:
-    external: true
-    name: ${SENTRY_DSN_SECRET:?Set the Sentry DSN secret name}
   resend_key:
     external: true
     name: ${RESEND_API_KEY_SECRET:?Set the Resend key secret name}
-  resend_webhook:
-    external: true
-    name: ${RESEND_WEBHOOK_SECRET_NAME:?Set the webhook secret name}
   email_suppression:
     external: true
     name: ${EMAIL_SUPPRESSION_SECRET_NAME:?Set the stable suppression secret name}
+  web_source:
+    external: true
+    name: ${WEB_SOURCE_SECRET_NAME:?Set the shared API/web attribution secret name}
+  google_client_id:
+    external: true
+    name: ${GOOGLE_CLIENT_ID_SECRET:?Set the Google client ID secret name}
+  google_client_secret:
+    external: true
+    name: ${GOOGLE_CLIENT_SECRET_NAME:?Set the Google client secret name}

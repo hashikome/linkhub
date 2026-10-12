@@ -1,10 +1,15 @@
-name: Build release image
+name: Release ntumie.
 on:
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: Promote to the prepared pre-production Dokploy Stacks
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
-  group: release-image
+  group: ntumie-release
   cancel-in-progress: false
 jobs:
   verify:
@@ -19,11 +24,15 @@ jobs:
         with: { bun-version: 1.3.14 }
       - run: bun install --frozen-lockfile
       - run: docker build -f apps/api/Dockerfile -t release-check .
-      - run: bun run verify:release-image -- release-check
+      - run: docker build -f apps/web/Dockerfile -t web-release-check .
+      - run: bun run verify:release-image -- release-check web-release-check
   image:
     needs: image-check
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.inputs.outputs.api }}
+      web: ${{ steps.inputs.outputs.web }}
     permissions:
       contents: read
       packages: write
@@ -35,23 +44,61 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Resolve image name
+      - name: Resolve image names
         id: name
         env:
           REPOSITORY: ${{ github.repository }}
-        run: echo "image=ghcr.io/${REPOSITORY,,}/api" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "api=ghcr.io/${REPOSITORY,,}/api" >> "$GITHUB_OUTPUT"
+          echo "web=ghcr.io/${REPOSITORY,,}/web" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
         id: build
         with:
           context: .
           file: apps/api/Dockerfile
           push: true
-          tags: ${{ steps.name.outputs.image }}:${{ github.sha }}
+          tags: ${{ steps.name.outputs.api }}:${{ github.sha }}
           provenance: true
           sbom: true
-      - name: Record immutable release input
+      - uses: docker/build-push-action@v6
+        id: web
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          tags: ${{ steps.name.outputs.web }}:${{ github.sha }}
+          provenance: true
+          sbom: true
+      - name: Record immutable release inputs
+        id: inputs
         env:
-          IMAGE: ${{ steps.name.outputs.image }}:${{ github.sha }}@${{ steps.build.outputs.digest }}
-        run: echo "API_IMAGE=$IMAGE" >> "$GITHUB_STEP_SUMMARY"
-      # Deliberately no deployment webhook: the reviewed migration/restore and
-      # platform rollout must be configured before any live promotion.
+          API_IMAGE: ${{ steps.name.outputs.api }}:${{ github.sha }}@${{ steps.build.outputs.digest }}
+          WEB_IMAGE: ${{ steps.name.outputs.web }}:${{ github.sha }}@${{ steps.web.outputs.digest }}
+        run: |
+          printf 'API_IMAGE=%s\nWEB_IMAGE=%s\nRELEASE_SHA=%s\n' "$API_IMAGE" "$WEB_IMAGE" "$GITHUB_SHA" > release-inputs.txt
+          cat release-inputs.txt >> "$GITHUB_STEP_SUMMARY"
+          printf 'api=%s\nweb=%s\n' "$API_IMAGE" "$WEB_IMAGE" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ntumie-release-inputs
+          path: release-inputs.txt
+          retention-days: 90
+  deploy:
+    needs: image
+    if: github.ref == 'refs/heads/main' && inputs.deploy
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: 1.3.14 }
+      - name: Migrate, verify grants, then promote application images
+        env:
+          GH_TOKEN: ${{ github.token }}
+          API_IMAGE: ${{ needs.image.outputs.api }}
+          WEB_IMAGE: ${{ needs.image.outputs.web }}
+          DOKPLOY_API_KEY: ${{ secrets.DOKPLOY_API_KEY }}
+          DOKPLOY_APPLICATION_ID: ${{ vars.DOKPLOY_APPLICATION_ID }}
+          DOKPLOY_MIGRATION_ID: ${{ vars.DOKPLOY_MIGRATION_ID }}
+          DOKPLOY_REGISTRY_ID: ${{ vars.DOKPLOY_REGISTRY_ID }}
+        run: bun tooling/release.ts

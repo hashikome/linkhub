@@ -1,7 +1,8 @@
 # Infrastructure & Deployment Direction (Hashikome)
 
-Status: API/worker release artifacts and local rehearsals exist; the web image
-and live deployment acceptance are pending. Nothing is deployed.
+Status: API/worker and web release artifacts are being prepared for the registered
+`ntumie.link` domain. Image verification and live acceptance are separate; nothing
+is deployed. See the active deployment plan for current evidence.
 The [release runbook](../runbooks/release.md) owns commands, required operator
 inputs, local evidence limits, migration ordering and outstanding live proof.
 
@@ -83,22 +84,24 @@ Hashikome infrastructure
        -> shared identity (when implemented)
   -> product workers (the ntumie. email and link-metadata worker)
   -> PostgreSQL 18 (one instance, one database per product)
-  -> dedicated queue Redis per product that needs one
+  -> shared product queue Redis with product ACLs and queue namespaces
   -> shared services (uptime/observability) as company infrastructure adds them
 ```
 
-Candidate initial topology, to review with company infrastructure planning: one PostgreSQL
-instance with per-product databases; a dedicated queue Redis per product that
-runs queues (AOF persistence, `noeviction`, never reused as a cache). The VPS
+Accepted initial topology: one shared product PostgreSQL instance with per-product
+databases and runtime/migration roles; one shared queue Redis with product ACLs,
+key/channel namespaces, AOF persistence and `noeviction`. Queue Redis is never a
+cache or Dokploy’s internal Redis. New products must pass isolation and aggregate
+capacity checks before admission. A dedicated exception needs a concrete reason. The VPS
 is one failure domain: apply explicit resource limits, monitor disk and
 memory pressure, keep builds off-host, and keep required backups **off-host**
 with tested restores.
 
 ### Origins: direct backend routing
 
-Production uses one public origin: Traefik routes `/api/*` straight to the API,
+Production uses `https://ntumie.link` as one public origin: Traefik routes `/api/*` straight to the API,
 all other paths to the web. Development follows Pigfarm's direct API pattern:
-API 4000, web 3000, with no Next rewrite. Exact-origin credentialed CORS admits
+API 4004, web 3004, with no Next rewrite. Exact-origin credentialed CORS admits
 only WEB_ORIGIN; cookie mutation checks remain independent (ADR-0036).
 
 `BETTER_AUTH_URL` identifies the public API and Google callback destination.
@@ -135,8 +138,11 @@ credentials and authorization remain backend-owned. See
 
 The workspace has separate `apps/api` and `apps/web` boundaries. The API
 Dockerfile also supplies the worker process; local/production Swarm topologies
-and verification/release workflows are repository-owned. Web image preparation
-and automatic Dokploy promotion remain pending.
+and verification/release workflows are repository-owned. The web image uses the
+existing custom server and `/healthz` liveness endpoint. Automatic Dokploy promotion
+remains gated on capacity/recovery and a verified migration coordinator. The
+application Stack defaults every replica count to zero; `docker-stack.migrate.yml`
+uses a separate migration credential and must complete successfully before serving.
 
 `readSecret` in `apps/api/src/config/secret.ts` resolves `<NAME>_FILE` before
 `<NAME>`, trims file content and fails on unreadable paths. Database, auth,
@@ -153,5 +159,17 @@ Push/PR CI runs application builds and real-service tests. The manual release
 workflow gates image publication on verification and image rehearsal. Local
 application development needs PostgreSQL/Redis containers and host app
 processes, not image acceptance. Before exposure, complete the release runbook's
-Swarm/Dokploy/Traefik, TLS, off-host restore, live email and shared telemetry
-checks. Local image evidence is not proof of a working production platform.
+Swarm/Dokploy/Traefik, TLS, off-host restore, live email, Kuma availability and Dokploy resource
+checks. Grafana/Loki/Alloy is deferred by the platform owner; it is not a launch gate. Local image evidence is not proof of a working production platform.
+
+
+## Shared-platform allocation
+
+The owner selected keeping `hs` and assessing its RAM upgrade before launch. Infra
+owns the [shared data setup](https://github.com/hashikome/infra/blob/main/deploy/data-services/README.md):
+PostgreSQL 18 with product database/roles and connection budgets, and persistent
+queue Redis with tested ACL/key/channel boundaries. Product Stack releases never
+create or replace these services. Web has no data-network attachment or database
+credential; API/worker have only ntumie's runtime credentials. Migration uses the
+separate scoped owner role. Admission of Pigfarm or another product needs its own
+isolation, capacity and restore acceptance.

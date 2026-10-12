@@ -4,7 +4,8 @@
 shareable guides. **Good links belong together.**
 
 Source: [hashikome/ntumie](https://github.com/hashikome/ntumie). The selected
-product domain is `ntumie.link`; choosing the domain does not announce a launch.
+product domain is `ntumie.link`, registered with Cloudflare DNS. Deployment setup is
+active; registration does not announce a launch.
 
 The application is in development and is not deployed yet. The NestJS API owns
 the product rules; the Next.js web app uses its HTTP contracts.

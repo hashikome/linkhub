@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 const image = process.argv.slice(2).find((arg) => arg !== "--");
 if (!image) throw new Error("Pass the locally built API image name");
+const webImage = process.argv.slice(2).filter((arg) => arg !== "--")[1];
 const prefix = `release-check-${randomBytes(6).toString("hex")}`;
 const secrets = await mkdtemp(join(tmpdir(), `${prefix}-`));
 const containers: string[] = [];
@@ -16,6 +17,7 @@ const postgres = `${prefix}-postgres`;
 const redis = `${prefix}-redis`;
 const api = `${prefix}-api`;
 const worker = `${prefix}-worker`;
+const web = `${prefix}-web`;
 let active: ReturnType<typeof Bun.spawn> | undefined;
 
 async function docker(args: string[], input?: Uint8Array, allowFailure = false): Promise<string> {
@@ -67,12 +69,24 @@ for (const signal of ["SIGINT", "SIGTERM"] as const)
 
 try {
   const password = randomBytes(24).toString("hex");
+  const runtimePassword = randomBytes(24).toString("hex");
+  const migrationPassword = randomBytes(24).toString("hex");
+  const queuePassword = randomBytes(24).toString("hex");
+  const otherQueuePassword = randomBytes(24).toString("hex");
   await writeFile(join(secrets, "postgres_password"), password, { mode: 0o644 });
   await writeFile(
     join(secrets, "database_url"),
-    `postgresql://postgres:${password}@postgres:5432/rehearsal`,
+    `postgresql://ntumie_runtime:${runtimePassword}@postgres:5432/rehearsal`,
     { mode: 0o644 },
   );
+  await writeFile(
+    join(secrets, "migration_database_url"),
+    `postgresql://ntumie_migrator:${migrationPassword}@postgres:5432/rehearsal`,
+    { mode: 0o644 },
+  );
+  await writeFile(join(secrets, "redis_url"), `redis://ntumie:${queuePassword}@redis:6379/0`, {
+    mode: 0o644,
+  });
   await writeFile(join(secrets, "auth_secret"), randomBytes(32).toString("hex"), { mode: 0o644 });
   await docker(["network", "create", network]);
   networkCreated = true;
@@ -84,11 +98,13 @@ try {
   await writeFile(join(secrets, "email_suppression"), randomBytes(32).toString("hex"), {
     mode: 0o644,
   });
+  await writeFile(join(secrets, "web_source"), randomBytes(32).toString("hex"), { mode: 0o644 });
   const secretMount = [
-    "postgres_password",
     "database_url",
+    "redis_url",
     "auth_secret",
     "email_suppression",
+    "web_source",
   ].flatMap((name) => [
     "--mount",
     `type=bind,source=${join(secrets, name)},target=/run/secrets/${name},readonly`,
@@ -108,20 +124,38 @@ try {
   await start(postgres, [
     "--network-alias",
     "postgres",
-    ...secretMount,
+    "--mount",
+    `type=bind,source=${join(secrets, "postgres_password")},target=/run/secrets/postgres_password,readonly`,
     "-e",
     "POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password",
     "-e",
-    "POSTGRES_DB=rehearsal",
+    "POSTGRES_DB=postgres",
     "--mount",
     `type=volume,source=${volume},target=/var/lib/postgresql`,
     "postgres:18",
   ]);
+  // BullMQ needs scripts, transactions, streams and blocking list commands, but
+  // has no authority to administer Redis or access another product's keys/channels.
+  await writeFile(
+    join(secrets, "redis_acl"),
+    [
+      "user default off",
+      "user health on nopass -@all +ping",
+      `user ntumie on >${queuePassword} ~release-rehearsal:* &release-rehearsal:* -@all +@read +@write +@connection +@transaction +@scripting +@pubsub -@dangerous +info +client|setname +client|setinfo +client|id +client|unblock`,
+      `user other on >${otherQueuePassword} ~other:* &other:* -@all +get +set +publish +ping`,
+      "",
+    ].join("\n"),
+    { mode: 0o644 },
+  );
   await start(redis, [
+    "--mount",
+    `type=bind,source=${join(secrets, "redis_acl")},target=/run/secrets/redis_acl,readonly`,
     "--network-alias",
     "redis",
     "redis:7",
     "redis-server",
+    "--aclfile",
+    "/run/secrets/redis_acl",
     "--appendonly",
     "yes",
     "--maxmemory-policy",
@@ -130,7 +164,7 @@ try {
   let databaseReady = false;
   for (let i = 0; i < 30; i++) {
     try {
-      await docker(["exec", postgres, "pg_isready", "-U", "postgres", "-d", "rehearsal"]);
+      await docker(["exec", postgres, "pg_isready", "-U", "postgres", "-d", "postgres"]);
       databaseReady = true;
       break;
     } catch {
@@ -138,21 +172,61 @@ try {
     }
   }
   if (!databaseReady) throw new Error("Disposable PostgreSQL did not become ready");
-  await docker([
+  await docker(
+    ["exec", "-i", postgres, "psql", "-v", "ON_ERROR_STOP=1", "-U", "postgres"],
+    new TextEncoder().encode(`
+    CREATE ROLE ntumie_migrator LOGIN PASSWORD '${migrationPassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE CONNECTION LIMIT 2;
+    CREATE ROLE ntumie_runtime LOGIN PASSWORD '${runtimePassword}' NOSUPERUSER NOCREATEDB NOCREATEROLE CONNECTION LIMIT 40;
+    CREATE ROLE other_owner NOLOGIN;
+    CREATE DATABASE rehearsal OWNER ntumie_migrator;
+    CREATE DATABASE other_product OWNER other_owner;
+    REVOKE ALL ON DATABASE rehearsal, other_product FROM PUBLIC;
+    GRANT CONNECT ON DATABASE rehearsal TO ntumie_runtime;
+    \\connect rehearsal
+    REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+    GRANT USAGE ON SCHEMA public TO ntumie_runtime;
+    ALTER DEFAULT PRIVILEGES FOR ROLE ntumie_migrator IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ntumie_runtime;
+    ALTER DEFAULT PRIVILEGES FOR ROLE ntumie_migrator IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO ntumie_runtime;
+  `),
+  );
+
+  const migrationArgs = [
     "run",
     "--rm",
     "--network",
     network,
-    ...secretMount,
+    "--read-only",
+    "--tmpfs",
+    "/tmp",
+    "--mount",
+    `type=bind,source=${join(secrets, "migration_database_url")},target=/run/secrets/database_url,readonly`,
     "-e",
     "DATABASE_URL_FILE=/run/secrets/database_url",
     "--entrypoint",
     "bun",
     image,
-    "node_modules/prisma/build/index.js",
-    "migrate",
-    "deploy",
-  ]);
+    "--tsconfig-override",
+    "tsconfig.runtime.json",
+    "dist/src/operations/migrate-release.js",
+  ];
+  // Apply and retry through the exact production job, not an administrator fixup.
+  await docker(migrationArgs);
+  await docker(migrationArgs);
+  const wrongRole = migrationArgs.map((value) =>
+    value.replace(
+      `source=${join(secrets, "migration_database_url")}`,
+      `source=${join(secrets, "database_url")}`,
+    ),
+  );
+  let wrongRoleRefused = false;
+  try {
+    await docker(wrongRole);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("allocation identity")) throw error;
+    wrongRoleRefused = true;
+  }
+  if (!wrongRoleRefused) throw new Error("Runtime credential was accepted as migration owner");
+  console.log("Compiled migration, idempotent grant verification and wrong-role refusal passed.");
   await start(api, [
     "--network-alias",
     "api",
@@ -167,9 +241,11 @@ try {
     "-e",
     "EMAIL_SUPPRESSION_SECRET_FILE=/run/secrets/email_suppression",
     "-e",
-    "REDIS_URL=redis://redis:6379",
+    "REDIS_URL_FILE=/run/secrets/redis_url",
     "-e",
-    "BETTER_AUTH_URL=http://api:4000",
+    "BETTER_AUTH_URL=https://ntumie.link",
+    "-e",
+    "WEB_SOURCE_SECRET_FILE=/run/secrets/web_source",
     "-e",
     "EMAIL_PROVIDER=capture",
     "-e",
@@ -194,6 +270,89 @@ try {
   }
   await probe("/api/v1/health", 200, '"status":"ok"');
   console.log("Image boot, compiled imports, secret files and readiness passed.");
+  await docker([
+    "exec",
+    api,
+    "bun",
+    "-e",
+    `
+    const {Client}=await import('pg');
+    const url=(await Bun.file('/run/secrets/database_url').text()).trim();
+    const db=new Client({connectionString:url});await db.connect();
+    try {await db.query('CREATE TABLE forbidden_ddl (id int)');process.exit(1)} catch(e) {if(e.code!=='42501')throw e}
+    try {await db.query('DELETE FROM _prisma_migrations');process.exit(1)} catch(e) {if(e.code!=='42501')throw e}
+    await db.end();
+    const other=new Client({connectionString:url.replace('/rehearsal','/other_product')});
+    try {await other.connect();process.exit(1)} catch(e) {if(e.code!=='42501')throw e}
+    await other.end();
+    const {default:Redis}=await import('ioredis');
+    const redis=new Redis((await Bun.file('/run/secrets/redis_url').text()).trim(),{maxRetriesPerRequest:1});
+    await redis.set('release-rehearsal:fixture','ok');
+    for(const action of [()=>redis.get('other:fixture'),()=>redis.eval("return redis.call('GET',KEYS[1])",1,'other:fixture'),()=>redis.set('other:fixture','bad'),()=>redis.publish('other:events','bad'),()=>redis.flushall(),()=>redis.config('GET','*')]) {
+      try {await action();process.exit(1)} catch(e) {if(!String(e).includes('NOPERM'))throw e}
+    }
+    await redis.quit();
+  `,
+  ]);
+  console.log(
+    "Shared PostgreSQL runtime/DDL/database isolation and queue key/channel/admin ACL refusal passed.",
+  );
+
+  if (webImage) {
+    await start(web, [
+      "--network-alias",
+      "web",
+      "--read-only",
+      "--tmpfs",
+      "/tmp",
+      "--mount",
+      `type=bind,source=${join(secrets, "web_source")},target=/run/secrets/web_source,readonly`,
+      "-e",
+      "WEB_SOURCE_SECRET_FILE=/run/secrets/web_source",
+      "-e",
+      "API_INTERNAL_ORIGIN=http://api:4000",
+      "-e",
+      "BETTER_AUTH_URL=https://ntumie.link",
+      "-e",
+      "WEB_ORIGIN=https://ntumie.link",
+      webImage,
+    ]);
+    let webReady = false;
+    for (let i = 0; i < 60; i++) {
+      try {
+        await docker([
+          "exec",
+          web,
+          "bun",
+          "-e",
+          "const r=await fetch('http://127.0.0.1:3000/healthz');if(r.status!==200||await r.text()!=='ok\\n')process.exit(1)",
+        ]);
+        webReady = true;
+        break;
+      } catch {
+        await Bun.sleep(500);
+      }
+    }
+    if (!webReady)
+      throw new Error(`Web image failed to become ready: ${await docker(["logs", web])}`);
+    await docker([
+      "exec",
+      web,
+      "bun",
+      "-e",
+      `
+      for(const path of ['/sign-in','/about']) {
+        const r=await fetch('http://127.0.0.1:3000'+path);
+        const body=await r.text();
+        if(r.status!==200||!body.includes('ntumie')||!r.headers.get('cache-control')?.includes('no-store'))process.exit(1);
+        if(body.includes('http://api:4000'))process.exit(1);
+      }
+    `,
+    ]);
+    console.log(
+      "Web image custom server, secret-file startup, runtime origin and private pages passed.",
+    );
+  }
 
   // Exercise real issuance/consumption before starting capture delivery. Read
   // only this synthetic fixture's encrypted intent inside the disposable API
@@ -205,13 +364,14 @@ try {
     const {emailKey,unseal}=await import('./dist/src/email/outbox.js');
     const db=new PrismaClient({adapter:new PrismaPg({connectionString:readSecret('DATABASE_URL')})});
     const root='http://api:4000/api/v1';const email='restore@example.com';
-    const sent=await fetch(root+'/auth/code/send',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email})});if(!sent.ok)process.exit(1);
+    const sent=await fetch(root+'/auth/code/send',{method:'POST',headers:{'content-type':'application/json',origin:'https://ntumie.link'},body:JSON.stringify({email})});if(!sent.ok)throw new Error('Synthetic code send: HTTP '+sent.status);
     const secret=readSecret('BETTER_AUTH_SECRET');
     const intent=await db.emailOutbox.findFirstOrThrow({where:{recipientKey:emailKey(readSecret('EMAIL_SUPPRESSION_SECRET'),'recipient',email),state:'pending'}});
     const code=unseal(intent.payload,secret).text.match(/^\\d{6}$/m)[0];
-    const r=await fetch(root+'/auth/code/verify',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email,code,name:'Restore'})});if(!r.ok)process.exit(1);
-    const t=r.headers.get('set-auth-token');
-    const c=await fetch(root+'/collections',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+t},body:JSON.stringify({title:'Restore check',published:true})});if(!c.ok)process.exit(1);
+    const r=await fetch(root+'/auth/code/verify',{method:'POST',headers:{'content-type':'application/json',origin:'https://ntumie.link'},body:JSON.stringify({email,code,name:'Restore',createAccount:true})});if(!r.ok)throw new Error('Synthetic code verify: HTTP '+r.status);
+    const t=r.headers.get('set-auth-token');if(!t)throw new Error('Synthetic session missing');
+    const hub=await fetch(root+'/hubs',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+t},body:'{}'});if(!hub.ok)throw new Error('Synthetic hub: HTTP '+hub.status);
+    const c=await fetch(root+'/collections',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+t},body:JSON.stringify({title:'Restore check',published:true})});if(!c.ok)throw new Error('Synthetic collection: HTTP '+c.status);
     await db.$disconnect();`;
   await docker(["exec", api, "bun", "-e", fixture]);
   await start(worker, [
@@ -227,7 +387,7 @@ try {
     "-e",
     "EMAIL_SUPPRESSION_SECRET_FILE=/run/secrets/email_suppression",
     "-e",
-    "REDIS_URL=redis://redis:6379",
+    "REDIS_URL_FILE=/run/secrets/redis_url",
     "-e",
     "EMAIL_PROVIDER=capture",
     "-e",
@@ -309,12 +469,22 @@ try {
   if (restored.trim() !== "1") throw new Error("Restored audit fixture missing");
   console.log("Disposable backup and restore preserved the publication audit.");
 
+  console.log(
+    "Worker before Redis outage: " +
+      (await docker(["inspect", "--format", "{{.State.Status}}", worker])).trim(),
+  );
   await docker(["stop", redis]);
   await probe("/api/v1/status", 200, '"status":"degraded"');
   await probe("/api/v1/health", 200, '"status":"ok"');
   await docker(["stop", "--time", "12", worker]);
-  if ((await docker(["inspect", "--format", "{{.State.ExitCode}}", worker])).trim() !== "0")
-    throw new Error("Worker did not shut down gracefully during Redis outage");
+  const workerExit = (await docker(["inspect", "--format", "{{.State.ExitCode}}", worker])).trim();
+  if (workerExit !== "0") {
+    const events =
+      (await docker(["logs", worker])).match(/(?:email|link_metadata|imports)\.[a-z_]+/g) ?? [];
+    throw new Error(
+      `Worker Redis-outage shutdown exit ${workerExit}; events: ${events.join(", ")}`,
+    );
+  }
   await docker(["stop", postgres]);
   await probe("/api/v1/status", 503, "dependencies_unavailable");
   await probe("/api/v1/health", 200, '"status":"ok"');
@@ -334,6 +504,12 @@ try {
     throw new Error("Startup did not reject unreadable telemetry configuration");
   if ((await docker(["logs", invalidTelemetry])).includes("never-export"))
     throw new Error("Startup leaked the secret file path");
+  if (webImage) {
+    const invalidWeb = `${prefix}-invalid-web`;
+    await start(invalidWeb, [webImage]);
+    if ((await docker(["wait", invalidWeb])).trim() !== "1")
+      throw new Error("Web startup did not reject missing production configuration");
+  }
   console.log("Production configuration refusal passed. No live service was contacted.");
 } finally {
   await cleanup();

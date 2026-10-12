@@ -8,7 +8,8 @@ not validate the current source. The
 retains milestone evidence.
 
 GHCR publication, Swarm/Dokploy promotion, off-host restore, live email/webhooks
-and Sentry/Alloy rollout remain unverified. Browser Origin enforcement is
+and production monitoring remain unverified. Grafana/Loki/Alloy rollout is deferred
+by the platform owner; initial monitoring is Kuma and Dokploy resource views. Browser Origin enforcement is
 implemented and tested locally; each new browser workflow needs its own
 acceptance. Self-service account lifecycle and editable hub handles are
 implemented ([ADR-0033](../engineering-decisions/0033-permanent-hub-handles-and-self-service-accounts.md),
@@ -28,7 +29,8 @@ available:
 bun run infra:up
 bun run verify
 docker build -f apps/api/Dockerfile -t release-check .
-bun run verify:release-image -- release-check
+docker build -f apps/web/Dockerfile -t web-release-check .
+bun run verify:release-image -- release-check web-release-check
 ```
 
 The image rehearsal creates uniquely named containers, a private bridge
@@ -38,7 +40,10 @@ PostgreSQL 18 database using the same image that serves traffic; boots the
 compiled API as the `bun` user on a read-only filesystem; checks `_FILE`
 inputs, health/readiness, Redis and PostgreSQL outages, bounded shutdown and
 production config refusal; then dumps/restores a synthetic publication and
-its audit record. It never resets the development database, initializes
+its audit record. It also checks separate migration/runtime PostgreSQL roles,
+cross-product database refusal, Redis ACL key/channel/admin refusal and the compiled
+BullMQ worker. With the web image supplied it verifies the custom server, `/healthz`,
+server rendering and private responses. It never resets the development database, initializes
 Swarm, sends mail, or sends remote telemetry. Local Sentry-envelope capture
 is covered by API unit tests. This restore is local, not off-host proof.
 
@@ -64,10 +69,12 @@ build or rehearse Docker images.
 
 `.github/workflows/release.yml` is manually dispatched on `main` when preparing
 deployment artifacts. It runs the reusable verification workflow, then a
-separate `image-check` job builds and rehearses the API/worker image. Only after
+separate `image-check` job builds and rehearses both API/worker and web images. Only after
 both gates pass does the publication job build and publish to GHCR with a full
 commit SHA tag and build provenance/SBOM. Its summary supplies
-`API_IMAGE=<registry>/<repository>/api:<sha>@sha256:<digest>`. There is no
+`API_IMAGE=<registry>/<repository>/api:<sha>@sha256:<digest>` and the matching
+`WEB_IMAGE=<registry>/<repository>/web:<sha>@sha256:<digest>`, with `RELEASE_SHA`
+in a retained `release-inputs.txt` artifact. There is no
 deployment webhook yet. Publication and live rollout remain pending.
 
 
@@ -81,6 +88,8 @@ are excluded from the build input.
 
 ## Platform inputs before a live rehearsal
 
+`deploy/production.env.example` records the non-secret input contract. Replace
+every `SET_` marker only with a verified value; do not deploy the template.
 The operator supplies non-secret references for:
 
 - The Hashikome Dokploy project in **Stack** mode and its actual Traefik
@@ -88,21 +97,24 @@ The operator supplies non-secret references for:
   The prepared labels use the Traefik Swarm provider. Validate them against
   the installed platform before promotion.
 - `PUBLIC_HOST`, `INGRESS_NETWORK`, `BACKEND_NETWORK`, `HTTPS_ENTRYPOINT`,
-  `TLS_RESOLVER`, `TRUSTED_PROXY_CIDRS`, `API_IMAGE`, and full `RELEASE_SHA`.
+  `TLS_RESOLVER`, `TRUSTED_PROXY_CIDRS`, `API_IMAGE`, `WEB_IMAGE`, and full `RELEASE_SHA`.
+  `PUBLIC_HOST=ntumie.link`; browser API and web origins share that hostname.
   Allow only the actual proxy addresses; never trust all forwarded headers.
 - External Swarm secret names `DATABASE_URL_SECRET`, `AUTH_SECRET`,
-  `REDIS_URL_SECRET`, `SENTRY_DSN_SECRET`, `RESEND_API_KEY_SECRET`,
-  `RESEND_WEBHOOK_SECRET_NAME`, and `EMAIL_SUPPRESSION_SECRET_NAME`.
+  `REDIS_URL_SECRET`, `WEB_SOURCE_SECRET_NAME`, `GOOGLE_CLIENT_ID_SECRET`,
+  `GOOGLE_CLIENT_SECRET_NAME`, `RESEND_API_KEY_SECRET`,
+  and `EMAIL_SUPPRESSION_SECRET_NAME`.
   Keep the suppression secret stable across auth-secret rotation and restore;
   replacement needs reviewed suppression rekey/import. Contents stay out of Git/chat.
   The stack exposes them only through `/run/secrets/*` and `_FILE` inputs.
-- A PostgreSQL 18 product database and dedicated Redis with AOF and
-  `noeviction`, reachable only over the private backend network. The product
-  stack contains the API; the platform owns these shared-service lifecycles.
-- A Sentry API project with reviewed access/retention, and shared Alloy
-  stdout/dependency-metric collection. The API defaults to a 10% trace sample;
-  `SENTRY_TRACES_SAMPLE_RATE` can override it. Request and error logs remain
-  allowlisted even without a DSN.
+- An allocation on shared product PostgreSQL 18 and shared queue Redis with AOF,
+  `noeviction`, separate runtime/migration roles and product key/channel ACLs.
+  These are private data services, separate from Dokploy’s own database/Redis.
+  The product Stack contains only API/web/worker; infra owns shared lifecycles.
+  Web joins an internal API-facing network and ingress, never the data network.
+- Kuma checks and Dokploy resource views, with documented worker/queue procedures.
+  Sentry is optional; no DSN is required by this Stack. Grafana/Loki/Alloy remains
+  deferred. Existing application log redaction remains enabled.
 - An encrypted off-host backup destination, restore destination, retention
   policy, and a named operator responsible for running the restore drill.
 
@@ -116,18 +128,27 @@ public routing. Restrict development API documentation at the edge as needed.
 ## Migration-before-serve and rollback
 
 Take and verify a recoverable backup before a release migration. For the
-initial deploy keep API replicas at zero until migrations succeed; for an
+initial deploy keep `APP_REPLICAS=0` (API, web and worker) until migrations succeed; for an
 upgrade keep the previous compatible image serving. Set `MIGRATION_SERVICE`
-to a unique operator-owned name. On the selected Swarm manager:
+to a unique operator-owned name. `docker-stack.migrate.yml` describes the separate
+one-shot Stack using `MIGRATION_DATABASE_URL_SECRET`; a Dokploy/GitHub coordinator
+must observe the current attempt completed/exit-zero before promoting
+`APP_REPLICAS=1`. The compiled `operations/migrate-release` task checks the scoped
+owner/runtime roles, runs Prisma, reapplies product DML/default grants and refuses
+runtime access to migration history before exiting successfully. Set a unique
+`RELEASE_ATTEMPT` for every workflow run/attempt; an old completed task is not
+evidence for the new attempt. The manual
+command below is a rehearsal/reference, not an alternate normal deployment path.
+On the selected disposable Swarm manager:
 
 ```bash
 docker service create --name "$MIGRATION_SERVICE" \
   --network "$BACKEND_NETWORK" \
-  --secret "source=$DATABASE_URL_SECRET,target=database_url" \
+  --secret "source=$MIGRATION_DATABASE_URL_SECRET,target=database_url" \
   --env DATABASE_URL_FILE=/run/secrets/database_url \
   --restart-condition none --with-registry-auth \
   --entrypoint bun "$API_IMAGE" \
-  node_modules/prisma/build/index.js migrate deploy
+  --tsconfig-override tsconfig.runtime.json dist/src/operations/migrate-release.js
 docker service ps --no-trunc "$MIGRATION_SERVICE"
 ```
 
@@ -155,9 +176,10 @@ collection content/sharing, audit trail and SQL-only invariants. Record image
 digest, migration set, dates, outcome and operator in repository-local evidence
 without secret values. Validate resource limits against measured load.
 
-Follow one deliberate synthetic sanitized API failure by request ID through
-Sentry issue/trace/log and Alloy/Loki; confirm dependency metrics and alert
-delivery, telemetry-outage behavior, and operator access/retention. Content audit data has no automatic purge. Review retained audit/receipt
+Verify Kuma alert/recovery delivery, Dokploy resource views and the worker/queue
+operator procedure. If optional Sentry is configured, trace one sanitized synthetic
+failure and verify telemetry-outage behavior and access/retention. Broader telemetry
+is deferred. Content audit data has no automatic purge. Review retained audit/receipt
 identifiers and validate the implemented account-deletion cascades and contribution
 anonymization before public exposure. Auth events and
 shared address/source challenge budgets are implemented. Worker/browser spans
@@ -165,3 +187,55 @@ and live sender proof remain separate acceptance work. Review endpoint abuse
 limits against real traffic and the public status shape (what readiness
 exposes) before exposure. The foundation's adoption history is in
 [foundation-adoption-decisions.md](../exec-plans/completed/foundation-adoption-decisions.md).
+
+
+## Registered domain and current deployment gate
+
+The owner confirmed `ntumie.link` registration and Cloudflare DNS on 12 October 2026;
+the zone is active and visible to the operator API token. Preserve iCloud MX/TXT
+records. No DNS routing change, Google callback edit or Resend sender/webhook
+integration is accepted yet. Configure Google redirect
+`https://ntumie.link/api/v1/auth/callback/google`, verified sending domain/address,
+monitored support mailbox before live provider acceptance. Delivery/bounce webhook
+integration is a separate product capability; without its optional secret the
+existing endpoint refuses requests. It is not a GitHub or monitoring alert channel.
+The owner created `support@ntumie.link` for user help; `hello@ntumie.link` is
+available for general enquiries. Verify support delivery before activation.
+The selected sender is
+`no-reply@notify.ntumie.link`. The current Resend key only permits sending and
+cannot manage domains, by design. The owner will configure the sending domain
+in Resend and confirmed adding `notify.ntumie.link`. DKIM and return-path DNS
+records were observed, with iCloud MX unchanged. The existing send-only key
+accepted one owner-authorized message from `no-reply@notify.ntumie.link` to
+`support@ntumie.link` on 12 October 2026. The owner confirmed inbox receipt. Transactional sender presentation is
+`ntumie. <no-reply@notify.ntumie.link>`. No new webhook is required to replace
+the sender. The ignored local API environment was updated without restarting
+development services.
+
+`hs` remains the selected pre-production target (Contabo VPS S SSD, 4 cores,
+8 GiB RAM, 200 GB SSD). The owner selected proceeding with setup on that host;
+an upgrade assessment remains production-launch work. The
+[shared data setup](https://github.com/hashikome/infra/blob/main/deploy/data-services/README.md)
+owns the combined capacity budget, product database/role allocation and queue ACLs.
+Full platform recovery, off-host product restore and the isolated Swarm rehearsal
+remain required; do not start public replicas merely because the domain resolves.
+
+## Prepared GitHub promotion
+
+The release workflow builds both immutable images after verification. Its optional
+`deploy` input defaults to false. When selected, the `staging` environment
+provides `DOKPLOY_API_KEY` plus variables `DOKPLOY_APPLICATION_ID`,
+`DOKPLOY_MIGRATION_ID` and `DOKPLOY_REGISTRY_ID`. Prepare distinct local raw-source
+Stacks named with `ntumie-app-` and `ntumie-migrate-` prefixes; leave Git auto-deploy
+disabled. Both require the same private data network and migration secret reference.
+Application inputs follow `deploy/production.env.example`; migration inputs need
+only its backend network and migration secret name (image/attempt are supplied by CI).
+
+`tooling/release.ts` refuses a superseded main revision, foreign/mutable images,
+unresolved inputs, remote targets and failed or stale migration tasks. It verifies
+one exact migration container at exit zero before mutating the application Stack,
+then requires the selected attempt/images and healthy API/web tasks. Dokploy's
+Stack listing omits completed tasks in v0.30.8, so the migration check uses its
+local all-state container listing and verifies exact Swarm labels. Failures do not
+automatically revert schema or select older binaries. Local fake-API tests and
+compiled-image rehearsals do not replace real Swarm/GitHub/provider acceptance.

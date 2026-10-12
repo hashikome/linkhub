@@ -138,3 +138,5 @@ Current implementation guidance lives in the linked design documents.
 - [0059-ntumie-product-name.md](0059-ntumie-product-name.md) — Select ntumie. and ntumie.link; its retained-codebase and deferred-branding decisions are superseded by ADR-0060.
 
 - [0060-ntumie-repository-and-branding.md](0060-ntumie-repository-and-branding.md) — Apply ntumie. branding and ntumie repository/package names; migrate portfolio and handbook addresses while preserving data and legacy links.
+
+- [0061-shared-platform-deployment-baseline.md](0061-shared-platform-deployment-baseline.md) — Registered ntumie.link, shared product database/queue isolation, capacity and migration-before-serve deployment gates.

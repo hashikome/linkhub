@@ -1,0 +1,32 @@
+version: '3.8'
+# A separate Dokploy Stack for one-shot migrations. Require its task to complete
+# with exit code zero before deploying APP_REPLICAS=1 in the application Stack.
+services:
+  migrate:
+    image: ${API_IMAGE:?Set the verified immutable API image}
+    entrypoint: [bun]
+    command: [--tsconfig-override, tsconfig.runtime.json, dist/src/operations/migrate-release.js]
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      # Change on every workflow attempt so an earlier completed task cannot count.
+      RELEASE_ATTEMPT: ${RELEASE_ATTEMPT:?Set the unique GitHub run ID and attempt}
+    secrets: [database_url]
+    networks: [backend]
+    read_only: true
+    tmpfs: [/tmp]
+    healthcheck: { disable: true }
+    deploy:
+      replicas: 1
+      restart_policy: { condition: none }
+      resources:
+        limits: { cpus: '0.5', memory: 512M }
+      labels:
+        traefik.enable: 'false'
+networks:
+  backend:
+    external: true
+    name: ${BACKEND_NETWORK:?Set the private data-services network}
+secrets:
+  database_url:
+    external: true
+    name: ${MIGRATION_DATABASE_URL_SECRET:?Set the scoped migration database URL secret}

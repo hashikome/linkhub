@@ -26,7 +26,7 @@ then continues on a laptop.
 
 Calm, legible and trustworthy — a dependable personal library. The selected
 product name is **ntumie.**, lowercase with the trailing dot, and the slogan is
-**“Good links belong together.”** The chosen domain is `ntumie.link`. The repository
+**“Good links belong together.”** The registered domain is `ntumie.link` (owner-confirmed 12 October 2026). The repository
 uses `ntumie`; workspace packages use `@ntumie/*`.
 
 ### Anti-References
