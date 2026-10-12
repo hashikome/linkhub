@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { Queue, UnrecoverableError, Worker } from "bullmq";
+import { UnrecoverableError, Worker } from "bullmq";
 
 import { emitEvent } from "../common/observability/telemetry";
+import { ProducerQueue } from "../common/producer-queue";
 import type { PrismaClient } from "../generated/prisma/client";
 import { type DeliveryPayload, deliveryKey, unseal } from "./outbox";
 import { DeliveryError, type EmailProvider } from "./provider";
@@ -122,7 +123,7 @@ export function redisConnection(redisUrl: string) {
 
 export function startEmailQueue(delivery: EmailDelivery, redisUrl: string, prefix: string) {
   const connection = redisConnection(redisUrl);
-  const queue = new Queue("email", {
+  const queue = new ProducerQueue("email", {
     connection: { ...connection, maxRetriesPerRequest: 1, enableOfflineQueue: false },
     prefix,
   });

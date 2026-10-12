@@ -164,7 +164,19 @@ try {
   let databaseReady = false;
   for (let i = 0; i < 30; i++) {
     try {
-      await docker(["exec", postgres, "pg_isready", "-U", "postgres", "-d", "postgres"]);
+      // The image's temporary initialization server accepts Unix sockets before
+      // restarting. TCP readiness identifies the final server used by the app.
+      await docker([
+        "exec",
+        postgres,
+        "pg_isready",
+        "-h",
+        "127.0.0.1",
+        "-U",
+        "postgres",
+        "-d",
+        "postgres",
+      ]);
       databaseReady = true;
       break;
     } catch {

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { Queue, UnrecoverableError, Worker } from "bullmq";
+import { UnrecoverableError, Worker } from "bullmq";
 
 import { emitEvent } from "../../common/observability/telemetry";
+import { ProducerQueue } from "../../common/producer-queue";
 import { redisConnection } from "../../email/delivery";
 import type { PrismaClient } from "../../generated/prisma/client";
 import { FAILED_RETRY_MS } from "./link-metadata";
@@ -105,7 +106,7 @@ export function startLinkMetadataQueue(
   prefix: string,
 ) {
   const connection = redisConnection(redisUrl);
-  const queue = new Queue("link-metadata", {
+  const queue = new ProducerQueue("link-metadata", {
     connection: { ...connection, maxRetriesPerRequest: 1, enableOfflineQueue: false },
     prefix,
   });

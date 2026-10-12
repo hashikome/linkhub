@@ -48,6 +48,13 @@ backlogged; they do not block this CI/CD milestone.
 
 ## Surprises & Discoveries
 
+- GitHub release `38270497833` passed verification/browser and most image checks,
+  but repeated the worker Redis-outage shutdown failure. A controlled TCP fixture
+  reproduced BullMQ's producer disconnect waiting indefinitely for an `end` event
+  between ioredis reconnect attempts. Both queue producers now force-close their
+  owned connections directly; regression checks cover reconnecting and never-ready
+  startup states. The ten-second worker deadline and image acceptance remain intact.
+
 - Existing production Stack has only API/worker; no web Dockerfile exists.
 - Production shares one origin, despite the initial proposed API subdomain. The
   config validator rejects different hostnames because cookies are host-only.

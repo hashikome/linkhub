@@ -9,6 +9,11 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Keep worker shutdown bounded when Redis is reconnecting or never became ready;
+  email and metadata producers now force-close their owned connections directly.
+  Image rehearsals wait for PostgreSQL's final TCP listener, avoiding the temporary
+  initialization server's socket-readiness race.
+
 - Use local development and one production server as the permanent environment model; keep runtime names neutral and record same-host PR previews as a planned capability.
 
 - Keep secret providers optional: production deployment selects 1Password or GitHub secrets, while portable runtime env examples keep application setup independent of either provider.
