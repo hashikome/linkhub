@@ -42,7 +42,8 @@
     "check:web": "bun tooling/check-web-boundaries.ts",
     "test:browser": "bun tooling/verify-browser.ts",
     "test:dev": "bun tooling/verify-dev-loop.ts",
-    "db:seed": "bun run --filter @ntumie/api db:seed"
+    "db:seed": "bun run --filter @ntumie/api db:seed",
+    "test:browser:critical": "bun tooling/verify-browser.ts --test-name-pattern '\\[critical\\]'"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.16",

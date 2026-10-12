@@ -140,3 +140,5 @@ Current implementation guidance lives in the linked design documents.
 - [0060-ntumie-repository-and-branding.md](0060-ntumie-repository-and-branding.md) — Apply ntumie. branding and ntumie repository/package names; migrate portfolio and handbook addresses while preserving data and legacy links.
 
 - [0061-shared-platform-deployment-baseline.md](0061-shared-platform-deployment-baseline.md) — Registered ntumie.link, shared product database/queue isolation, capacity and migration-before-serve deployment gates.
+
+- [0062-focused-release-browser-gate.md](0062-focused-release-browser-gate.md) — Code/integration verification and four critical browser journeys gate releases; full browser coverage runs deliberately through manual dispatch.

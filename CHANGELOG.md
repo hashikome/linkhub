@@ -9,6 +9,10 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Keep automatic releases focused: run code/integration verification and four critical
+  browser journeys, with the full browser suite in a separate manual workflow.
+  The local pre-push hook continues to run `bun run verify`.
+
 - Deploy main pushes through GitHub verification, image rehearsal, GHCR and Dokploy;
   preserve manual artifact-only rehearsal. Prepare neutral Stack identities with
   role-only services and guarded retirement of the previous serving application.

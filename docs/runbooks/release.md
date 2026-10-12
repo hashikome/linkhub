@@ -73,7 +73,9 @@ prove Swarm scheduling, ingress, secrets distribution, or rolling updates.
 
 `.github/workflows/verify.yml` runs the complete application verification gate
 on branch pushes and pull requests, and as the first job of a main-branch release,
-including compilation and real-service tests.
+including compilation, real-service tests and four critical browser journeys.
+The full browser suite is a separate manually dispatched `browser.yml` workflow;
+it does not delay every push or deploy.
 No required integration suite skips because services are absent. It does not
 build or rehearse Docker images.
 

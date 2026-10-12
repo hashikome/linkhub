@@ -111,8 +111,15 @@ This escalation path is the decided design; only its trigger is pending.
 - `.github/workflows/verify.yml` runs this full gate on branch pushes, pull
   requests and reusable calls from the main release with required PostgreSQL and Redis services. Missing infrastructure
   is a failure, never a skipped green suite. It also installs Chromium and runs
-  `bun run test:browser` for the complete reading journey. Application compilation remains
+  `bun run test:browser:critical`: four explicitly tagged journeys for public reading,
+  email sign-in/session isolation, verified operator invitation acceptance, and
+  saving the first private link. Application compilation remains
   part of verification; Docker image builds and rehearsals are separate.
+- `.github/workflows/browser.yml` runs the full browser suite only through manual
+  dispatch. Select the branch/ref to review; this workflow never deploys. For local
+  focused acceptance use `bun run test:browser:critical`; use `bun run test:browser`
+  for broad browser changes. [ADR-0062](../engineering-decisions/0062-focused-release-browser-gate.md)
+  replaces the earlier requirement to run the full browser suite for every milestone.
 - `.github/workflows/release.yml` runs on pushes to main for automatic deployment
   and also supports manual artifact rehearsal or promotion. It requires the full gate, then builds and rehearses an image
   before the publication job can run. Image acceptance is separate from local application

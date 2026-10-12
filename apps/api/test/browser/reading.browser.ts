@@ -1238,7 +1238,7 @@ describe("explore to resource: production browser journey", () => {
     }
   }, 15000);
 
-  it("follows hub, ID collection URL, reference and external resource with keyboard, narrow widths and no JavaScript", async () => {
+  it("[critical] follows hub, ID collection URL, reference and external resource with keyboard, narrow widths and no JavaScript", async () => {
     for (const js of [true, false]) {
       const { page, close } = await freshPage(js);
       try {
@@ -2094,7 +2094,7 @@ describe("explore to resource: production browser journey", () => {
     }
   }, 15000);
 
-  it("issues a real browser cookie and prevents cross-user/expired-session restoration", async () => {
+  it("[critical] issues a real browser cookie and prevents cross-user/expired-session restoration", async () => {
     const { page, close } = await freshPage();
     try {
       await ready(page);
@@ -2766,7 +2766,7 @@ describe("email invitation onboarding", () => {
     await page.getByRole("button", { name: "Verify and activate" }).click();
     await browserExpect(page.locator("h1")).toHaveText("Accounts");
   }
-  it("starts from email, creates accounts only on acceptance, and requires fresh OTP for matching sessions with or without JavaScript", async () => {
+  it("[critical] starts from email, creates accounts only on acceptance, and requires fresh OTP for matching sessions with or without JavaScript", async () => {
     const { prepareAdminInvitation } = await import("../../src/operations/invitations.js");
     for (const js of [true, false]) {
       await prisma.requestBudget.deleteMany();
@@ -3916,7 +3916,7 @@ describe("account shell and appearance", () => {
   }, 20000);
 });
 
-it("saves a first private link through email, preserves retries, then adds and renames without requiring JavaScript", async () => {
+it("[critical] saves a first private link through email, preserves retries, then adds and renames without requiring JavaScript", async () => {
   for (const js of [true, false]) {
     await prisma.requestBudget.deleteMany();
     const email = `first-link-${crypto.randomUUID()}@example.com`,
