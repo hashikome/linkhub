@@ -12,7 +12,7 @@ answer in your own words before continuing. Reading the whole file in one go
 is the failure mode this structure exists to prevent. Every file is a
 clickable link.
 
-**Pin:** verified against commit `98b0970`. This is enforced, not honor
+**Pin:** verified against commit `043891c`. This is enforced, not honor
 system: `check:guide-pin` (part of `bun run verify`) fails when any file this
 guide links changes after the pinned commit. To clear it, reread the affected
 sessions, fix any drift, and move the pin to the latest commit — in a
@@ -27,6 +27,11 @@ review this guide against that commit and record the pin before pushing.
 ## Session 1 — Make It Run (do first, read nothing yet)
 
 Goal: a working local stack and a green verification before any theory.
+
+These commands assume a fresh checkout. For an existing checkout renamed to
+ntumie, first follow the
+[volume-preservation steps](../runbooks/local-development.md#existing-checkout-renamed-to-ntumie)
+before starting Compose, so the renamed project keeps the original development data.
 
 ```bash
 bun --version            # expect 1.3.x
@@ -221,10 +226,10 @@ Goal: see the failure modes, then read the code that decides access.
 
 ```bash
 # Drill 1: degrade the queue Redis — the product keeps working
-docker stop linkhub-redis
+docker stop ntumie-redis
 curl -s localhost:4004/api/v1/status | jq        # "degraded"; redisQueue "unavailable"
 curl -s localhost:4004/api/v1/discover | jq '.data | length'   # still serves
-docker start linkhub-redis
+docker start ntumie-redis
 curl -s localhost:4004/api/v1/status | jq        # "ready" again
 
 # Drill 2: existence-hiding — unpublish, then read anonymously
