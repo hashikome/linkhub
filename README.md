@@ -4,11 +4,12 @@
 shareable guides. **Good links belong together.**
 
 Source: [hashikome/ntumie](https://github.com/hashikome/ntumie). The selected
-product domain is `ntumie.link`, registered with Cloudflare DNS. Deployment setup is
-active; registration does not announce a launch.
+product domain is [ntumie.link](https://ntumie.link). Production CI/CD deployed the
+application on 12 October 2026; public-launch acceptance remains separate. See the
+[release record](docs/runbooks/release.md) for verified behavior and remaining gates.
 
-The application is in development and is not deployed yet. The NestJS API owns
-the product rules; the Next.js web app uses its HTTP contracts.
+The application is in development. The NestJS API owns the product rules; the
+Next.js web app uses its HTTP contracts.
 
 ## What works today
 
@@ -30,7 +31,7 @@ the product rules; the Next.js web app uses its HTTP contracts.
 
 The [product definition](PRODUCT.md#11-delivery) distinguishes implemented
 features from planned work. Billing, shared company IAM, and the browser
-extension are not implemented. Shared company infrastructure remains planned.
+extension are not implemented. Production uses shared company PostgreSQL and queue Redis.
 
 ## Start locally
 

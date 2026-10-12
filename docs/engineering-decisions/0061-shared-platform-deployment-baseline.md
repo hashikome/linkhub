@@ -1,6 +1,6 @@
 # ADR-0061: ntumie.link and shared product data services
 
-Status: Accepted for deployment preparation; live acceptance pending
+Status: Accepted; coordinated production rollout passed on 12 October 2026
 Date: 2026-10-12
 
 ## Context
@@ -42,5 +42,5 @@ Assess aggregate host capacity now, including shared services, application overl
 backups and future product admission. Preserve unrelated workloads and existing
 mail DNS. Domain purchase is accepted; image publication, provider setup, shared
 service provisioning, recovery and public launch remain independently verified gates.
-The [deployment plan](../exec-plans/active/prepare-ntumie-link-deployment.md) owns
+The [deployment plan](../exec-plans/completed/prepare-ntumie-link-deployment.md) owns
 current progress; infra owns the service lifecycle and allocation contract.

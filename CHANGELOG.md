@@ -9,6 +9,12 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Accept production CI/CD at `https://ntumie.link`: GitHub verification, image
+  rehearsal and immutable GHCR publication now precede successful migration and
+  Dokploy API/web/worker promotion. Read-only live health, shared-data readiness
+  and HTTPS checks passed; capacity, recovery and full provider/user journeys
+  remain separate launch gates.
+
 - Keep worker shutdown bounded when Redis is reconnecting or never became ready;
   email and metadata producers now force-close their owned connections directly.
   Image rehearsals wait for PostgreSQL's final TCP listener, avoiding the temporary
@@ -36,7 +42,7 @@ summary of what changed after completed work has been promoted out of `ref/`.
   Default application replicas to zero until migration coordination is accepted.
   Rehearse shared PostgreSQL role/database boundaries and Redis queue ACLs,
   compiled email delivery, restore and dependency-outage shutdown. Shared data
-  capacity, recovery, provider setup and live deployment remain pending.
+  capacity, recovery and complete provider acceptance remain launch gates.
 
 - Rename the product to **ntumie.** (formerly LinkHub), with `ntumie` repository
   and package names. Update web, email, auth display names, API metadata and

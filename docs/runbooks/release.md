@@ -1,15 +1,24 @@
 # Release preparation and operator handoff
 
-Status: release artifacts and local rehearsal tooling exist; nothing is deployed.
-Image acceptance is separate from routine application verification. Rebuild and
-rehearse the exact release commit before publication; older image evidence does
-not validate the current source. The
-[completed release-foundations plan](../exec-plans/completed/deliver-release-foundations.md)
-retains milestone evidence.
+Production CI/CD passed on 12 October 2026 through
+[release 38275967261](https://github.com/hashikome/ntumie/actions/runs/38275967261),
+selecting source `3215c83fbef20586255975ca820134694b7fbc63`. GitHub verified the
+application/browser and image rehearsal, published immutable images to GHCR,
+then coordinated a successful migration and API/web/worker promotion in Dokploy.
+Independent checks accepted exact images/attempt, API/web health, running worker,
+migration exit zero and shared-data readiness. Health/status/home/sign-in/support
+returned HTTPS 200 at `https://ntumie.link`. The eight existing Swarm services
+remained healthy. Post-start available RAM was 386 MiB with no swap; capacity and
+rolling-overlap acceptance remain open.
 
-GHCR publication, Swarm/Dokploy promotion, off-host restore, live email/webhooks
-and production monitoring remain unverified. Grafana/Loki/Alloy rollout is deferred
-by the platform owner; initial monitoring is Kuma and Dokploy resource views. Browser Origin enforcement is
+Image acceptance is separate from routine application verification. Rehearse each
+selected release commit; older evidence does not validate changed source. The
+[deployment plan](../exec-plans/completed/prepare-ntumie-link-deployment.md) retains
+acceptance evidence. Off-host product restore, Google callback and full user
+journeys, product monitoring and capacity remain launch checks. The authorized
+sender test reached the support inbox; product delivery webhooks remain backlogged.
+Grafana/Loki/Alloy rollout is deferred; initial monitoring uses Kuma and Dokploy.
+Browser Origin enforcement is
 implemented and tested locally; each new browser workflow needs its own
 acceptance. Self-service account lifecycle and editable hub handles are
 implemented ([ADR-0033](../engineering-decisions/0033-permanent-hub-handles-and-self-service-accounts.md),
@@ -76,7 +85,7 @@ commit SHA tag and build provenance/SBOM. Its summary supplies
 `WEB_IMAGE=<registry>/<repository>/web:<sha>@sha256:<digest>`, with `RELEASE_SHA`
 in a retained `release-inputs.txt` artifact. Select `deploy=true` to run the
 coordinated migration/application promotion described below; no Git webhook
-deploys ahead of the release checks. First live rollout acceptance remains pending.
+deploys ahead of the release checks. The first coordinated production rollout passed; see the acceptance record above.
 
 
 The Dockerfile pins Bun 1.3.14 by digest, installs the frozen lockfile and
@@ -205,8 +214,8 @@ The owner created `support@ntumie.link` for user help; `hello@ntumie.link` is
 available for general enquiries. The support inbox received the authorized test.
 The selected sender is
 `no-reply@notify.ntumie.link`. The current Resend key only permits sending and
-cannot manage domains, by design. The owner will configure the sending domain
-in Resend and confirmed adding `notify.ntumie.link`. DKIM and return-path DNS
+cannot manage domains, by design. The owner configured `notify.ntumie.link`
+in Resend. DKIM and return-path DNS
 records were observed, with iCloud MX unchanged. The existing send-only key
 accepted one owner-authorized message from `no-reply@notify.ntumie.link` to
 `support@ntumie.link` on 12 October 2026. The owner confirmed inbox receipt. Transactional sender presentation is
@@ -223,7 +232,7 @@ The owner authorized production activation through the verified GitHub release p
 Full platform recovery, off-host product restore and capacity acceptance remain
 production-launch requirements; they do not block this production CI/CD setup.
 
-## Prepared GitHub promotion
+## Coordinated GitHub promotion
 
 The release workflow builds both immutable images after verification. Its optional
 `deploy` input defaults to false. When selected, the `production` environment
