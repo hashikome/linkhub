@@ -12,7 +12,7 @@ answer in your own words before continuing. Reading the whole file in one go
 is the failure mode this structure exists to prevent. Every file is a
 clickable link.
 
-**Pin:** verified against commit `96f3d0045c830963e3a936ba38a7bdda90181124`. This is enforced, not honor
+**Pin:** verified against commit `6450385ef3629615b73363e3580425bb08ee5cb0`. This is enforced, not honor
 system: `check:guide-pin` (part of `bun run verify`) fails when any file this
 guide links changes after the pinned commit. To clear it, reread the affected
 sessions, fix any drift, and move the pin to the latest commit — in a
@@ -248,7 +248,8 @@ Now trace why, through five files (read in this order):
 3. [collection-policy.service.ts](../../apps/api/src/modules/hubs/collection-policy.service.ts)
    — **the heart of the product's security.** Follow `resolve()` and
    `resolveMany()` into their shared evaluator and read the independent grant
-   checks slowly; note `requireRead` throws 404, not 403. Batched references
+   checks slowly; note `requireRead` throws 404, not 403, and that a read reuses
+   its session's fresh active-account proof only briefly. Batched references
    still check each destination's access and current same-hub ownership.
 4. [collections.service.ts](../../apps/api/src/modules/collections/collections.service.ts)
    — find `readCollectionView` (ID reads authorize here) and
@@ -330,7 +331,8 @@ Read:
    [DESIGN.md](../../DESIGN.md) for journeys, interaction and theme values.
 4. [release.md](../runbooks/release.md) for API/web image rehearsal, push-to-deploy
    through GitHub/Dokploy, optional manual rehearsal, accepted first rollout and remaining
-   launch checks.
+   launch checks. [edge-cache.md](../runbooks/edge-cache.md) owns the Cloudflare rule
+   behind edge-cached signed-out public pages.
    Production uses shared product PostgreSQL/queue Redis with scoped roles/ACLs;
    migration and grant verification precede application promotion. Secret providers
    are optional: plain env files remain supported, while our deploy job can fetch
