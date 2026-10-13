@@ -19,6 +19,11 @@ export function CommentFocus() {
     };
     const composer = document.querySelector<HTMLDetailsElement>(".comment-compose[open]");
     composer?.querySelector("textarea")?.focus();
+    // A streamed discussion can arrive after the router attempted its fragment
+    // scroll. Resolve discussion anchors when their actual content is mounted.
+    const fragment = window.location.hash.slice(1);
+    if (fragment === "comments" || fragment.startsWith("comment-"))
+      document.getElementById(fragment)?.scrollIntoView({ block: "nearest" });
     // "toggle" does not bubble; listen in the capture phase.
     document.addEventListener("toggle", opened, true);
     return () => {

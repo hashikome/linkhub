@@ -186,9 +186,11 @@ itself with `Content-Disposition: attachment`.
 Authenticated mutations run inside one transaction holding a single advisory
 lock and recheck the session under it (see `docs/RELIABILITY.md`); network
 calls such as page lookups run in the worker, from rows written in the same
-transaction (the outbox shape, as for email). Web forms post natively to
-`/forms/[action]`, which checks the Origin, calls the API and redirects with a
-notice; JavaScript only enhances.
+transaction (the outbox shape, as for email). Web forms submit asynchronously to
+`/forms/[action]`, which checks Origin and calls the API. Interactive requests
+receive cookie-preserving JSON continuations; native fallbacks receive redirects.
+Next.js navigation and refreshed server output preserve the browser document.
+The API remains authoritative; JavaScript-free parity is not required (ADR-0064).
 
 ## Deployment Shape
 

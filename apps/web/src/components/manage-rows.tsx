@@ -8,6 +8,7 @@ import type {
 import { collectionActionPath } from "../lib/collection-action-path";
 import { shortIds } from "../lib/short-id";
 import { ActionPicker } from "./action-picker";
+import { AppForm } from "./app-form";
 import { AuditIdValue } from "./audit-identity";
 import { InvitationAction } from "./invitation-form";
 import { LocalTime } from "./local-time";
@@ -39,11 +40,11 @@ export function accountsRows(items: OperatorAccount[]): ManageRow[] {
       <tr key={a.id} className="account-row">
         <td data-label="Account">
           <div className="ops-account-identity">
-            <form action={`/manage/accounts/${a.id}`} method="get">
+            <AppForm action={`/manage/accounts/${a.id}`} method="get">
               <button type="submit" className="ops-primary account-open">
                 {a.name || "Unnamed account"}
               </button>
-            </form>
+            </AppForm>
             <span className="ops-secondary">{a.username}</span>
           </div>
         </td>

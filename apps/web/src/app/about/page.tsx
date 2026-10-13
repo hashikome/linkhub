@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { AboutCollection } from "../../components/about-collection";
 import { LandingHero } from "../../components/landing-hero";
 import { ShareAction } from "../../components/share-action";
+import { queryValue } from "../../lib/http";
 
 export const metadata: Metadata = {
   title: "About ntumie.",
@@ -9,7 +10,12 @@ export const metadata: Metadata = {
 };
 export const dynamic = "force-dynamic";
 
-export default function Page() {
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const query = await searchParams;
   return (
     <div className="landing" data-reader>
       <LandingHero
@@ -23,7 +29,7 @@ export default function Page() {
           />
         }
       >
-        <AboutCollection />
+        <AboutCollection selectedItemId={queryValue(query.item)} />
       </LandingHero>
     </div>
   );

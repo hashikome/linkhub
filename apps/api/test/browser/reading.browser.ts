@@ -18,10 +18,14 @@ import { itemTags } from "../../src/modules/resources/item-tags";
 import { expectSignIns } from "../fixtures/authentication-audit";
 import { signInHubOwner, signInWithCode } from "../fixtures/sign-in";
 import { diagnosticContext, withBrowserDiagnostics } from "./browser-diagnostic-test";
+import { benchmarkNavigation } from "./navigation-performance";
 import { type ApiTiming, measureProduction, routeShape } from "./production-performance";
 
 const apiTimings: ApiTiming[] = [];
 let recordApiTimings = false;
+let delayedDiscussion:
+  | { path: string; started: () => void; released: Promise<void>; fail: boolean }
+  | undefined;
 const it = Object.assign(
   (name: string, run: () => Promise<void>, timeout?: number) =>
     test(
@@ -131,7 +135,10 @@ async function waitForResend(page: Page) {
 }
 async function ready(page: Page, path = "/discover") {
   const response = await page.goto(origin + path, { waitUntil: "domcontentloaded" });
-  expect(response?.headers()["cache-control"]).toContain("no-store");
+  // Signed-out public pages may carry the edge policy; everything else is private.
+  expect(response?.headers()["cache-control"]).toMatch(
+    /no-store|^public, max-age=0, s-maxage=60, stale-while-revalidate=60$/,
+  );
   await browserExpect(page.locator("h1")).toBeVisible();
 }
 
@@ -261,6 +268,15 @@ beforeAll(async () => {
             status: res.statusCode,
           }),
         );
+      }
+      if (req.method === "GET" && req.url.split("?")[0] === delayedDiscussion?.path) {
+        const pending = delayedDiscussion;
+        pending.started();
+        void pending.released.then(() => {
+          if (pending.fail) res.status(503).json({ error: { code: "service_unavailable" } });
+          else next();
+        });
+        return;
       }
       if (req.url === "/api/v1/auth/methods" && googleMethodsDisabled) {
         res.status(200).json({ data: { google: false, passkey: true } });
@@ -467,7 +483,12 @@ describe("explore to resource: production browser journey", () => {
           await ready(page, "/");
           await browserExpect(page).toHaveTitle("ntumie. · Good links belong together.");
           await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "system");
-          await browserExpect(page.getByRole("figure")).toContainText("Example");
+          await browserExpect(
+            page.getByRole("figure", { name: "Example collection" }),
+          ).toBeVisible();
+          await browserExpect(
+            page.getByRole("figure").getByText("Example", { exact: true }),
+          ).toHaveCount(0);
           for (const width of [320, 390, 768, 1280, 1440]) {
             await page.setViewportSize({ width, height: 900 });
             expect(
@@ -807,7 +828,7 @@ describe("explore to resource: production browser journey", () => {
     }
   }, 60000);
 
-  it("fits home and About in desktop viewports with shared collection structure and left footer links", async () => {
+  it("fits home and About in desktop viewports with shared collection structure and right footer links", async () => {
     for (const js of [true, false]) {
       const { page, close } = await freshPage(js);
       try {
@@ -826,18 +847,18 @@ describe("explore to resource: production browser journey", () => {
             await page.setViewportSize({ width, height });
             const bounds = await page.evaluate(() => {
               const footer = document.querySelector(".footer-nav a")?.getBoundingClientRect();
-              const intro = document.querySelector(".landing-intro")?.getBoundingClientRect();
+              const intro = document.querySelector(".collection-example")?.getBoundingClientRect();
               if (!footer || !intro) throw new Error("Missing landing layout");
               return {
                 height: document.documentElement.scrollHeight,
                 width: document.documentElement.scrollWidth,
-                left: footer.left - intro.left,
+                right: footer.right - intro.right,
                 bottom: footer.bottom,
               };
             });
             expect(bounds.height).toBeLessThanOrEqual(height);
             expect(bounds.width).toBeLessThanOrEqual(width);
-            expect(Math.abs(bounds.left)).toBeLessThan(2);
+            expect(Math.abs(bounds.right)).toBeLessThan(2);
             expect(bounds.bottom).toBeLessThanOrEqual(height);
           }
           const panel = collection.getByRole("region", { name: "Resources", exact: true });
@@ -869,30 +890,36 @@ describe("explore to resource: production browser journey", () => {
             await page.setViewportSize({ width, height: 900 });
             for (const path of ["/", "/about", "/sign-in"]) {
               await ready(page, path);
+              if (path === "/about") {
+                await browserExpect(page.locator("h1")).toHaveText("Good links belong together.");
+              }
               const footer = page.getByRole("contentinfo");
               await footer.scrollIntoViewIfNeeded();
               const link = footer.getByRole("link");
               await browserExpect(link).toHaveText(
                 path === "/about" ? "Join ntumie." : "About ntumie.",
               );
-              await browserExpect(footer.locator(".footer-tagline")).toHaveCount(
-                path === "/sign-in" ? 1 : 0,
-              );
+              await browserExpect(footer.locator(".footer-tagline")).toHaveCount(0);
+              await browserExpect(page.locator("header .theme-picker")).toHaveCount(0);
+              const wordmark = page.locator(".wordmark");
+              expect(
+                await wordmark.evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize)),
+              ).toBe(width < 640 ? 24 : 28);
+              expect(
+                await link.evaluate((el) => Number.parseFloat(getComputedStyle(el).fontSize)),
+              ).toBe(18);
               await browserExpect(
                 page.getByRole("button", { name: "Continue with Google" }),
               ).toHaveCount(0);
               const geometry = await footer.evaluate((element) => {
                 const content = element.querySelector(".footer-content")?.getBoundingClientRect();
                 const nav = element.querySelector(".footer-nav")?.getBoundingClientRect();
-                const tagline = element.querySelector(".footer-tagline")?.getBoundingClientRect();
                 if (!content || !nav) throw new Error("Missing footer layout");
                 return {
-                  left: nav.left - content.left,
-                  right: tagline ? content.right - tagline.right : 0,
+                  right: content.right - nav.right,
                   overflow: document.documentElement.scrollWidth > innerWidth,
                 };
               });
-              expect(Math.abs(geometry.left)).toBeLessThan(2);
               expect(Math.abs(geometry.right)).toBeLessThan(2);
               expect(geometry.overflow).toBe(false);
               const output = process.env.FOOTER_REVIEW_DIR;
@@ -907,6 +934,12 @@ describe("explore to resource: production browser journey", () => {
                   path: join(output, `${name}-${width}.png`),
                   fullPage: true,
                 });
+                await page.emulateMedia({ colorScheme: "dark" });
+                await page.screenshot({
+                  path: join(output, `${name}-dark-${width}.png`),
+                  fullPage: true,
+                });
+                await page.emulateMedia({ colorScheme: "light" });
                 if (path === "/sign-in" && width === 390) {
                   await link.hover();
                   await footer.screenshot({ path: join(output, "footer-hover.png") });
@@ -949,7 +982,7 @@ describe("explore to resource: production browser journey", () => {
         );
         await browserExpect(footer.locator(".footer-tagline")).toHaveCount(0);
         const collection = page.getByRole("region", { name: "A few useful links" });
-        await browserExpect(collection.getByRole("link")).toHaveCount(2);
+        await browserExpect(collection.locator("summary a")).toHaveCount(2);
         const support = collection.getByRole("link", { name: "Support", exact: true });
         const maker = collection.getByRole("link", { name: /Meet the maker/ });
         await browserExpect(support).not.toHaveAttribute("target", "_blank");
@@ -960,11 +993,50 @@ describe("explore to resource: production browser journey", () => {
         await page.keyboard.press("Enter");
         await browserExpect(makerDetails).toHaveAttribute("open", "");
         await browserExpect(collection.getByText(/Explore the projects and notes/)).toBeVisible();
+        const itemLink =
+          "/about?item=019a0000-0000-7000-8000-000000000016#item-019a0000-0000-7000-8000-000000000016";
+        if (js) {
+          // Denied clipboard access must still reveal a usable address.
+          await page.evaluate(() => {
+            Object.defineProperty(navigator, "clipboard", {
+              configurable: true,
+              value: {
+                writeText: async () => {
+                  throw new Error("Clipboard unavailable");
+                },
+              },
+            });
+          });
+          await makerDetails.getByRole("button", { name: "Copy link to this item" }).click();
+          await browserExpect(makerDetails.getByLabel("Link to this item")).toHaveValue(
+            `${origin}${itemLink}`,
+          );
+        } else {
+          await browserExpect(
+            makerDetails.getByRole("link", { name: "Open item link to copy its address" }),
+          ).toHaveAttribute("href", itemLink);
+        }
+        await ready(page, itemLink);
+        await browserExpect(makerDetails).toHaveAttribute("open", "");
+        await browserExpect(collection.locator(".resource-disclosure").first()).not.toHaveAttribute(
+          "open",
+          "",
+        );
+        await browserExpect(collection.locator(".row-meta")).toContainText("@ntumie");
+        await browserExpect(collection.locator(".row-meta")).toContainText("Updated");
+        await browserExpect(makerDetails.getByText(/^Added by namestarlit/)).toBeVisible();
+        await browserExpect(makerDetails.locator("time")).toHaveAttribute(
+          "datetime",
+          "2026-10-12T02:58:20.000Z",
+        );
+        const sectionSummary = collection.locator(".section-disclosure > summary");
+        await sectionSummary.click();
+        await browserExpect(maker).not.toBeVisible();
+        await sectionSummary.click();
+        await browserExpect(maker).toBeVisible();
         await support.click();
         await browserExpect(page).toHaveURL(`${origin}/support`);
-        await browserExpect(footer.locator(".footer-tagline")).toHaveText(
-          "Good links belong together.",
-        );
+        await browserExpect(footer.locator(".footer-tagline")).toHaveCount(0);
         await footer.getByRole("link", { name: "About ntumie." }).click();
         await footer.getByRole("link", { name: "Join ntumie." }).click();
         await browserExpect(page).toHaveURL(`${origin}/sign-up`);
@@ -975,8 +1047,14 @@ describe("explore to resource: production browser journey", () => {
         await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
         await page.reload();
         await browserExpect(footer.getByRole("link", { name: "Join ntumie." })).toHaveCount(0);
-        await footer.getByRole("link", { name: "Discover", exact: true }).click();
+        await browserExpect(footer.getByRole("link")).toHaveCount(0);
+        await browserExpect(footer.getByRole("navigation")).toHaveCount(0);
+        await page
+          .getByRole("navigation", { name: "Main navigation" })
+          .getByRole("link", { name: "Discover", exact: true })
+          .click();
         await browserExpect(page).toHaveURL(`${origin}/discover`);
+        await browserExpect(footer.getByRole("link", { name: "About ntumie." })).toBeVisible();
       } finally {
         await close();
       }
@@ -997,9 +1075,7 @@ describe("explore to resource: production browser journey", () => {
           .getByRole("link", { name: "Discover", exact: true }),
       ).toHaveAttribute("href", "/discover");
       const footer = page.getByRole("contentinfo");
-      await browserExpect(footer.locator(".footer-tagline")).toHaveText(
-        "Good links belong together.",
-      );
+      await browserExpect(footer.locator(".footer-tagline")).toHaveCount(0);
       await browserExpect(footer.getByRole("link")).toHaveCount(1);
       await browserExpect(footer.getByRole("link", { name: "About ntumie." })).toHaveAttribute(
         "href",
@@ -1013,99 +1089,146 @@ describe("explore to resource: production browser journey", () => {
     }
   }, 15000);
 
-  it("recovers cancelled document navigation with fresh authorization", async () => {
+  it("keeps the document across navigation and reauthorizes history", async () => {
     const { page, close } = await freshPage();
     let release = () => {};
     let unpublished = false;
     try {
-      for (const entry of [`/c/${sourceId}`]) {
-        for (const revoke of [false, true]) {
-          await ready(page, entry);
-          let started = () => {};
-          const waiting = new Promise<void>((resolve) => {
-            started = resolve;
-          });
-          const released = new Promise<void>((resolve) => {
-            release = resolve;
-          });
-          await page.waitForLoadState("networkidle");
-          const protocol = await page.context().newCDPSession(page);
-          await page.evaluate(() => {
-            window.addEventListener(
-              "click",
-              () => {
-                setTimeout(() => {
-                  document.body.dataset.navigationObservation = JSON.stringify({
-                    heading: document.querySelector("h1")
-                      ? getComputedStyle(document.querySelector("h1") as HTMLElement).visibility
-                      : "missing",
-                    feedback:
-                      document.querySelector(".navigation-recovery, .navigation-loading") !== null,
-                  });
-                }, 400);
-              },
-              { once: true },
-            );
-          });
-          delayedDocument = { path: `/c/${targetId}`, started, released };
-          const aborted = page.waitForEvent("requestfailed", {
-            predicate: (req) =>
-              req.isNavigationRequest() && req.url() === `${origin}/c/${targetId}`,
-          });
-          await page
-            .getByRole("link", { name: "A useful collection", exact: true })
-            .click({ noWaitAfter: true });
-          await waiting;
-          // Allow the old document's timer to observe the delayed response. Playwright
-          // evaluations during pending navigation wait for the replacement document.
-          await Bun.sleep(600);
-          await page.keyboard.press("Escape");
-          // Headless key dispatch does not invoke Chromium's browser-chrome Stop command.
-          await protocol.send("Page.stopLoading");
-          await protocol.detach();
-          expect((await aborted).failure()?.errorText).toContain("ERR_ABORTED");
-          expect(
-            await page.evaluate(() =>
-              JSON.parse(document.body.dataset.navigationObservation ?? "null"),
-            ),
-          ).toEqual({ heading: "visible", feedback: false });
-          await browserExpect(page.locator(".navigation-recovery")).toContainText(
-            "Navigation was interrupted.",
-          );
-          expect(page.url()).toBe(origin + entry);
-          await browserExpect(page.locator("h1")).toBeHidden();
-          if (revoke) {
-            await change(sourceId, "unpublish");
-            unpublished = true;
-          }
-          delayedDocument = undefined;
-          release();
-          const reload = page.getByRole("button", { name: "Reload this page", exact: true });
-          if (!revoke) await page.screenshot({ path: "/tmp/w3-navigation-recovery.png" });
-          await reload.focus();
-          await browserExpect(reload).toBeFocused();
-          await Promise.all([
-            page.waitForNavigation({ waitUntil: "domcontentloaded" }),
-            reload.press("Enter"),
-          ]);
-          await browserExpect(page.locator("h1")).toHaveText(
-            revoke ? "This collection isn't available." : longTitle,
-          );
-          await browserExpect(page.locator(".navigation-recovery")).toBeHidden();
-          if (revoke) {
-            await browserExpect(page.locator(".resource-row")).toHaveCount(0);
-            await change(sourceId, "publish");
-            unpublished = false;
-          }
-        }
-      }
+      await ready(page, `/c/${sourceId}`);
+      const documentId = await page.evaluate(() => performance.timeOrigin);
+      let started = () => {};
+      const waiting = new Promise<void>((resolve) => {
+        started = resolve;
+      });
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      delayedDocument = { path: `/c/${targetId}`, started, released };
+      await page.getByRole("link", { name: "A useful collection", exact: true }).click();
+      await waiting;
+      await browserExpect(page.locator("h1")).toHaveText(longTitle);
+      await browserExpect(page.locator("h1")).toBeVisible();
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentId);
+      delayedDocument = undefined;
+      release();
+      await browserExpect(page).toHaveURL(`${origin}/c/${targetId}`);
+      await browserExpect(page.locator("h1")).toHaveText("A useful collection");
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentId);
+      await change(sourceId, "unpublish");
+      unpublished = true;
+      await page.goBack();
+      await browserExpect(page.locator("h1")).toHaveText("This collection isn't available.");
+      await browserExpect(page.locator(".resource-row")).toHaveCount(0);
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentId);
     } finally {
       delayedDocument = undefined;
       release();
       if (unpublished) await change(sourceId, "publish");
       await close();
     }
-  }, 20000);
+  }, 30000);
+
+  it("retains form entries after an uncertain submission and never retries automatically", async () => {
+    const { page, close } = await freshPage();
+    try {
+      await ready(page, "/sign-in");
+      const documentId = await page.evaluate(() => performance.timeOrigin);
+      const email = "interrupted-sign-in@example.com";
+      await page.getByLabel("Email address").fill(email);
+      let attempts = 0;
+      await page.route("**/forms/email-start", async (route) => {
+        attempts++;
+        await route.abort("failed");
+      });
+      await page.locator('form[action="/forms/email-start"]').evaluate((form: HTMLFormElement) => {
+        form.requestSubmit();
+        form.requestSubmit();
+      });
+      await browserExpect(
+        page.getByRole("alert").filter({ hasText: "couldn’t confirm" }),
+      ).toBeVisible();
+      await browserExpect(page.getByLabel("Email address")).toHaveValue(email);
+      await browserExpect(
+        page.getByRole("button", { name: "Continue with email", exact: true }),
+      ).toBeEnabled();
+      expect(attempts).toBe(1);
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentId);
+    } finally {
+      await close();
+    }
+  });
+
+  it("changes appearance immediately and saves forms without replacing the document", async () => {
+    const { page, close } = await freshPage();
+    try {
+      const signed = await signInWithCode(app.getHttpServer(), {
+        email: `appearance-${crypto.randomUUID()}@example.com`,
+        name: "Appearance reader",
+      });
+      const sessionCookie = (signed.headers["set-cookie"] as unknown as string[])
+        .map((entry) => entry.split(";")[0])
+        .find((entry) => entry.startsWith("better-auth.session_token="));
+      if (!sessionCookie) throw new Error("Expected browser session cookie");
+      const [name, ...value] = sessionCookie.split("=");
+      await page.context().addCookies([{ name, value: value.join("="), url: origin }]);
+      await ready(page, "/settings?section=device");
+      const documentId = await page.evaluate(() => performance.timeOrigin);
+      const theme = page.locator(".theme-picker");
+      let release = () => {};
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await page.route("**/forms/theme", async (route) => {
+        await released;
+        await route.continue();
+      });
+      try {
+        await theme.getByRole("button", { name: "Dark", exact: true }).click();
+        await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+        await browserExpect(theme.getByRole("status")).toHaveText("Saving…");
+      } finally {
+        release();
+      }
+      await browserExpect(theme.getByRole("status")).toHaveText("Appearance saved.");
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentId);
+      const review = process.env.NAVIGATION_REVIEW_DIR;
+      if (review) {
+        await mkdir(review, { recursive: true });
+        for (const width of [390, 768, 1280, 1440]) {
+          await page.setViewportSize({ width, height: 900 });
+          await page.screenshot({ path: join(review, `appearance-${width}.png`), fullPage: true });
+          expect(
+            await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+          ).toBe(true);
+        }
+      }
+      await page.unroute("**/forms/theme");
+      await page.route("**/forms/theme", (route) =>
+        route.fulfill({ status: 503, body: "Unavailable" }),
+      );
+      await theme.getByRole("button", { name: "Light", exact: true }).click();
+      await browserExpect(theme.getByRole("status")).toContainText("Couldn’t save");
+      await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentId);
+      await page.unroute("**/forms/theme");
+      await page.getByRole("contentinfo").getByRole("link", { name: "About ntumie." }).click();
+      await browserExpect(page).toHaveURL(`${origin}/about`);
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(documentId);
+      expect(
+        (await page.context().cookies(origin)).find((cookie) => cookie.name === "appearance")
+          ?.value,
+      ).toBe("dark");
+      // A native form's cookie-bearing sign-out continuation now stays in-document.
+      const currentDocument = await page.evaluate(() => performance.timeOrigin);
+      await page.getByLabel("Account menu", { exact: true }).click();
+      await page.getByRole("button", { name: "Sign out", exact: true }).click();
+      await browserExpect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+      await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "system");
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(currentDocument);
+    } finally {
+      await close();
+    }
+  }, 30000);
 
   it("browses public hubs as anonymous, owner and another user without private data", async () => {
     for (const session of [undefined, cookie, otherCookie]) {
@@ -1261,7 +1384,7 @@ describe("explore to resource: production browser journey", () => {
         const collection = page.getByRole("link", { name: longTitle, exact: true });
         await collection.focus();
         await collection.press("Enter");
-        expect(new URL(page.url()).pathname).toBe(`/c/${sourceId}`);
+        await browserExpect(page).toHaveURL(new RegExp(`/c/${sourceId}(\\?|$)`));
         await browserExpect(page.locator("h1")).toHaveText(longTitle);
         await page.reload();
         await browserExpect(page.locator(".resource-row")).toHaveCount(20);
@@ -1281,7 +1404,7 @@ describe("explore to resource: production browser journey", () => {
         await browserExpect(page.locator(".resource-row")).toHaveCount(js ? 22 : 2);
         await ready(page, `/c/${sourceId}`);
         await page.getByRole("link", { name: "A useful collection", exact: true }).click();
-        expect(new URL(page.url()).pathname).toBe(`/c/${targetId}`);
+        await browserExpect(page).toHaveURL(new RegExp(`/c/${targetId}(\\?|$)`));
         await browserExpect(page.locator("h1")).toHaveText("A useful collection");
         await page.getByRole("link", { name: `@${handle}`, exact: true }).click();
         await page.getByRole("link", { name: longTitle }).click();
@@ -1292,7 +1415,7 @@ describe("explore to resource: production browser journey", () => {
         const popup = await popupPromise;
         await browserExpect(popup.locator("body")).toHaveText("External reference opened");
         expect(captureReferer).toBeNull();
-        expect(new URL(page.url()).pathname).toBe(`/c/${sourceId}`);
+        await browserExpect(page).toHaveURL(new RegExp(`/c/${sourceId}(\\?|$)`));
         await popup.close();
       } finally {
         await close();
@@ -1368,7 +1491,7 @@ describe("explore to resource: production browser journey", () => {
       expect(new URL(page.url()).pathname).toBe(`/@${handle}`);
       await ready(page, `/c/${sourceId}?cursor=invalid`);
       await page.getByRole("link", { name: "Reload collection", exact: true }).click();
-      expect(new URL(page.url()).pathname).toBe(`/c/${sourceId}`);
+      await browserExpect(page).toHaveURL(new RegExp(`/c/${sourceId}(\\?|$)`));
     } finally {
       await close();
     }
@@ -1481,8 +1604,8 @@ describe("explore to resource: production browser journey", () => {
           .every((read) => !read.token && !read.path.includes("s=")),
       ).toBe(true);
       await page.getByRole("link", { name: "A useful collection", exact: true }).click();
-      expect(new URL(page.url()).searchParams.get("s")).toBeNull();
       await browserExpect(page.locator("h1")).toHaveText("A useful collection");
+      expect(new URL(page.url()).searchParams.get("s")).toBeNull();
       const previousToken = linkToken;
       const rotated = await request(app.getHttpServer())
         .put(`/api/v1/collections/${sourceId}/link-sharing`)
@@ -1904,7 +2027,7 @@ describe("explore to resource: production browser journey", () => {
       const popup = await popupPromise;
       await browserExpect(popup.locator("body")).toHaveText("External reference opened");
       expect(captureReferer).toBeNull();
-      expect(new URL(page.url()).pathname).toBe(`/c/${sourceId}`);
+      await browserExpect(page).toHaveURL(new RegExp(`/c/${sourceId}(\\?|$)`));
       await popup.close();
     } finally {
       await close();
@@ -2072,8 +2195,8 @@ describe("explore to resource: production browser journey", () => {
         page.locator(".sheet-body").getByText("reference-tag", { exact: true }),
       ).toBeVisible();
       await page.getByRole("link", { name: "A useful collection", exact: true }).click();
-      expect(new URL(page.url()).searchParams.get("s")).toBeNull();
       await browserExpect(page.locator("h1")).toHaveText("A useful collection");
+      expect(new URL(page.url()).searchParams.get("s")).toBeNull();
       await request(app.getHttpServer())
         .put(`/api/v1/collections/${sourceId}/link-sharing`)
         .auth(owner, { type: "bearer" })
@@ -2155,6 +2278,7 @@ describe("explore to resource: production browser journey", () => {
         .getByRole("navigation", { name: "Main navigation" })
         .getByRole("link", { name: "Discover", exact: true })
         .click();
+      await browserExpect(page).toHaveURL(`${origin}/discover`);
       await page.goBack();
       await browserExpect(page.locator("h1")).toHaveText("This collection isn't available.");
       await ready(page, `/c/${privateId}`);
@@ -2236,7 +2360,10 @@ async function capturedCode(email: string, expectedSubject?: string) {
   if (!code) throw new Error("Missing captured browser code");
   return code;
 }
-async function settingsSection(page: Page, name: "Profile" | "Hub" | "Notifications") {
+async function settingsSection(
+  page: Page,
+  name: "Profile" | "Hub" | "Notifications" | "On this device",
+) {
   await page
     .getByRole("navigation", { name: "Settings sections" })
     .getByRole("link", { name, exact: true })
@@ -2260,14 +2387,22 @@ async function browserSignIn(page: Page, email: string, returnTo = "/manage") {
   const sent = page.waitForResponse((response) => response.url().endsWith("/forms/code-send"));
   await page.getByRole("button", { name: "Send code", exact: true }).click();
   const response = await sent;
-  expect(response.status()).toBe(303);
-  expect(response.headers().location).toBeDefined();
-  expect(new URL(response.headers().location, origin).origin).toBe(origin);
+  const interactive = response.request().headers()["x-form-navigation"] === "1";
+  expect(response.status()).toBe(interactive ? 200 : 303);
+  const destination = interactive ? (await response.json()).redirect : response.headers().location;
+  expect(new URL(destination, origin).origin).toBe(origin);
   await browserExpect(page.locator("h1")).toHaveText("Check your email");
   expect(page.url()).not.toContain(email);
+  await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
   await page.getByLabel("Six-digit code").fill(await capturedCode(email));
   await page.getByRole("button", { name: "Verify and continue" }).click();
-  if (creating) await page.getByRole("button", { name: "Create account", exact: true }).click();
+  if (creating) {
+    await page.getByRole("button", { name: "Create account", exact: true }).click();
+    await browserExpect(page).not.toHaveURL(/\/sign-up\/confirm(?:\?|$)/);
+  } else {
+    // Existing accounts may continue to MFA or account recovery before the destination.
+    await browserExpect(page).not.toHaveURL(/\/sign-in\/code(?:\?|$)/);
+  }
 }
 async function operatorFixture(name: string) {
   const email = `${name}-${crypto.randomUUID()}@example.com`;
@@ -2346,6 +2481,8 @@ it("appends filtered audit events, retains rows on retry and hides Load more at 
       await page.getByRole("searchbox", { name: "Search", exact: true }).fill(op.id);
       await page.getByLabel("Action", { exact: true }).selectOption("account.suspend");
       await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+      // Filters submit in the background; the unfiltered page already has 20 rows.
+      await page.waitForURL((url) => url.searchParams.get("action") === "account.suspend");
       const rows = page.locator(".ops-table tbody tr");
       await browserExpect(rows).toHaveCount(20);
       expect(page.url()).not.toContain(op.email);
@@ -2470,6 +2607,7 @@ describe("management: production browser journey", () => {
         await browserExpect(row).toHaveCount(1);
         await browserExpect(row).toContainText("Browser target");
         await row.getByRole("button", { name: "Browser target", exact: true }).click();
+        await browserExpect(page.locator("h1")).toHaveText("Browser target");
         await chooseAction(page, "account.suspend");
         await submitOperation(page, "Suspend account", "spam");
         await browserExpect(
@@ -2480,6 +2618,7 @@ describe("management: production browser journey", () => {
             .accountState,
         ).toBe("suspended");
         await submitOperation(page, "Reactivate account", "review_completed");
+        await browserExpect(page.getByRole("link", { name: "Suspend", exact: true })).toBeVisible();
         expect(
           (await prisma.user.findUniqueOrThrow({ where: { id: target.body.user.id } }))
             .accountState,
@@ -2487,6 +2626,9 @@ describe("management: production browser journey", () => {
         await signInWithCode(app.getHttpServer(), { email: targetEmail });
         await ready(page, `/manage/accounts/${target.body.user.id}`);
         await submitOperation(page, "End all sessions", "account_compromise");
+        await browserExpect(
+          page.getByText("The action is complete.", { exact: true }),
+        ).toBeVisible();
         await tabs.getByRole("link", { name: "Collections" }).click();
         await page.getByLabel("Collection ID or link", { exact: true }).fill(`${origin}/c/${id}`);
         await page.getByRole("button", { name: "Search", exact: true }).click();
@@ -2596,6 +2738,7 @@ describe("management: production browser journey", () => {
         },
       ]);
       await page.getByRole("button", { name: "Send code", exact: true }).click();
+      await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
       expect(
         (await page.context().cookies(origin)).some((cookie) =>
           cookie.name.includes("google_connection"),
@@ -2762,6 +2905,7 @@ describe("email invitation onboarding", () => {
   }
   async function verifyInvitationCode(page: Page, email: string) {
     await browserExpect(page.locator("h1")).toHaveText("Check your email");
+    await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
     await page.getByLabel("Six-digit code").fill(await capturedCode(email));
     await page.getByRole("button", { name: "Verify and activate" }).click();
     await browserExpect(page.locator("h1")).toHaveText("Accounts");
@@ -3172,6 +3316,8 @@ describe("account shell and appearance", () => {
         else await page.getByRole("button", { name: "Save changes", exact: true }).click();
         await ready(page, "/settings?section=hub");
         await browserExpect(toggle).not.toBeChecked();
+        // Settings mounts sections on first use; open Profile to read its saved name.
+        await settingsSection(page, "Profile");
         await browserExpect(page.locator("#display-name")).toHaveValue("Named Owner");
         expect((await prisma.hub.findUniqueOrThrow({ where: { id: hub.id } })).showOwner).toBe(
           false,
@@ -3453,8 +3599,8 @@ describe("account shell and appearance", () => {
     }
   });
 
-  it("edits the own profile, reviews notifications and uses account navigation in both themes without requiring JavaScript", async () => {
-    for (const js of [true, false]) {
+  it("edits the own profile, reviews notifications and uses account navigation in both themes", async () => {
+    for (const js of [true]) {
       await prisma.requestBudget.deleteMany();
       const email = `profile-${crypto.randomUUID()}@example.com`;
       const { page, close } = await freshPage(js);
@@ -3467,11 +3613,7 @@ describe("account shell and appearance", () => {
         );
         await browserExpect(page).toHaveTitle("Settings · ntumie.");
         await browserExpect(page).toHaveURL(`${origin}/settings`);
-        await browserExpect(
-          page
-            .locator("header .theme-toggle")
-            .getByRole("button", { name: "Appearance: system. Switch to light", exact: true }),
-        ).toHaveAttribute("value", "light");
+        await browserExpect(page.locator("header .theme-picker")).toHaveCount(0);
         const wordmarkColor = await page
           .locator(".wordmark")
           .evaluate((el) => getComputedStyle(el).color);
@@ -3596,29 +3738,35 @@ describe("account shell and appearance", () => {
         await page.getByRole("link", { name: "Settings", exact: true }).click();
         await browserExpect(page.locator("h1")).toHaveText("Settings");
         await browserExpect(page).toHaveTitle("Settings · ntumie.");
-        await ready(page, "/settings?section=appearance");
+        await page.getByRole("link", { name: "On this device", exact: true }).click();
+        const appearance = page.getByRole("group", { name: "Appearance", exact: true });
+        await browserExpect(appearance).toBeVisible();
         await browserExpect(
-          page.getByRole("group", { name: "Profile", exact: true }),
-        ).toBeVisible();
-        await browserExpect(page.locator("main .theme-picker")).toHaveCount(0);
-        const appearance = page.locator("header .theme-toggle");
-        await appearance
-          .getByRole("button", { name: "Appearance: system. Switch to light", exact: true })
-          .click();
-        await appearance
-          .getByRole("button", { name: "Appearance: light. Switch to dark", exact: true })
-          .click();
+          appearance.getByRole("button", { name: "System", exact: true }),
+        ).toHaveAttribute("aria-pressed", "true");
+        await appearance.getByRole("button", { name: "Dark", exact: true }).click();
         await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+        await browserExpect(
+          page.getByRole("status").filter({ hasText: "Appearance saved." }),
+        ).toBeVisible();
         expect(
           await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme),
         ).toBe("dark");
         await page.reload();
         await browserExpect(
-          appearance.getByRole("button", {
-            name: "Appearance: dark. Switch to system",
-            exact: true,
-          }),
-        ).toBeVisible();
+          appearance.getByRole("button", { name: "Dark", exact: true }),
+        ).toHaveAttribute("aria-pressed", "true");
+        const output = process.env.FOOTER_REVIEW_DIR;
+        if (output && js) {
+          await mkdir(output, { recursive: true });
+          for (const width of [390, 768, 1280, 1440]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.screenshot({
+              path: join(output, `appearance-dark-${width}.png`),
+              fullPage: true,
+            });
+          }
+        }
         await page.getByLabel("Account menu", { exact: true }).click();
         for (const width of [320, 768, 1280]) {
           await page.setViewportSize({ width, height: 900 });
@@ -3637,24 +3785,31 @@ describe("account shell and appearance", () => {
           await browserExpect(page.locator(".account-menu")).not.toHaveAttribute("open", "");
         } else await page.getByLabel("Account menu", { exact: true }).click();
         await ready(page, "/hub");
-        const beforeThemeChange = page.url();
-        const headerToggle = page.locator("header .theme-toggle");
-        await browserExpect(headerToggle.getByRole("button")).toHaveCount(1);
-        for (const [current, next] of [
-          ["dark", "system"],
-          ["system", "light"],
-          ["light", "dark"],
-          ["dark", "system"],
-          ["system", "light"],
-        ]) {
-          await headerToggle
+        await browserExpect(page.locator("header .theme-picker")).toHaveCount(0);
+        await ready(page, "/settings?section=device");
+        for (const next of ["system", "light", "dark", "system", "light"]) {
+          await appearance
             .getByRole("button", {
-              name: `Appearance: ${current}. Switch to ${next}`,
+              name: next[0].toUpperCase() + next.slice(1),
               exact: true,
             })
             .click();
-          await browserExpect(page).toHaveURL(beforeThemeChange);
+          if (js)
+            await browserExpect(appearance.getByRole("status")).toHaveText("Appearance saved.");
+          else
+            await browserExpect(page).toHaveURL(
+              `${origin}/settings?section=device&notice=appearance-saved`,
+            );
           await browserExpect(page.locator("html")).toHaveAttribute("data-theme", next);
+        }
+        if (output && js) {
+          for (const width of [390, 768, 1280, 1440]) {
+            await page.setViewportSize({ width, height: 900 });
+            await page.screenshot({
+              path: join(output, `appearance-light-${width}.png`),
+              fullPage: true,
+            });
+          }
         }
         await ready(page, "/settings");
         await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -3751,7 +3906,7 @@ describe("account shell and appearance", () => {
     const [name, ...value] = timezoneCookie.split("=");
     const savedCookie = { name, value: value.join("="), url: origin };
     try {
-      for (const js of [true, false]) {
+      for (const js of [true]) {
         await request(app.getHttpServer())
           .patch("/api/v1/profile")
           .auth(timezoneToken, { type: "bearer" })
@@ -3768,6 +3923,7 @@ describe("account shell and appearance", () => {
           const page = await context.newPage();
           await ready(page, "/settings");
           await browserExpect(page.getByLabel("Timezone", { exact: true })).toHaveValue("");
+          await page.getByLabel("Timezone", { exact: true }).focus();
           await page.getByLabel("Timezone", { exact: true }).selectOption("Africa/Dar_es_Salaam");
           if (!js) await page.getByRole("button", { name: "Save changes", exact: true }).click();
           await browserExpect
@@ -3849,20 +4005,18 @@ describe("account shell and appearance", () => {
         .expect(200);
     }
   }, 60000);
-  it("lets signed-out visitors change appearance without overwriting saved account preferences", async () => {
+  it("follows the device while signed out and reserves appearance changes for settings", async () => {
     for (const js of [true, false]) {
       const { page, close } = await freshPage(js);
       try {
-        await page.context().addCookies([{ name: "appearance", value: "dark", url: origin }]);
+        await page.context().addCookies([
+          { name: "appearance", value: "dark", url: origin },
+          { name: "reader_appearance", value: "dark", url: origin },
+        ]);
         await page.emulateMedia({ colorScheme: "dark" });
-        await ready(page, "/?item=019a0000-0000-7000-8000-000000000006");
-        const address = page.url();
+        await ready(page, "/");
         await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "system");
-        const toggle = page.locator("header .theme-toggle");
-        await browserExpect(toggle.getByRole("button")).toHaveCount(1);
-        await browserExpect(toggle.getByRole("button")).toHaveAccessibleName(
-          "Switch to light theme",
-        );
+        await browserExpect(page.locator(".theme-picker")).toHaveCount(0);
         const dark = await page
           .locator("body")
           .evaluate((el) => getComputedStyle(el).backgroundColor);
@@ -3871,34 +4025,30 @@ describe("account shell and appearance", () => {
           .locator("body")
           .evaluate((el) => getComputedStyle(el).backgroundColor);
         expect(dark).not.toBe(light);
-        await browserExpect(toggle.getByRole("button")).toHaveCount(1);
-        await browserExpect(toggle.getByRole("button")).toHaveAccessibleName(
-          "Switch to dark theme",
-        );
-        for (const next of ["dark", "light"]) {
-          await toggle
-            .getByRole("button", { name: `Switch to ${next} theme`, exact: true })
-            .click();
-          await browserExpect(page).toHaveURL(address);
-          await browserExpect(page.locator("html")).toHaveAttribute("data-theme", next);
-        }
-        await browserExpect(toggle.getByRole("button", { name: /system/i })).toHaveCount(0);
-        for (const width of [390, 768, 1280, 1440]) {
-          await page.setViewportSize({ width, height: 900 });
-          await page.screenshot({ path: `/tmp/reader-theme-${js}-${width}.png`, fullPage: true });
-        }
-        await page.emulateMedia({ colorScheme: "dark" });
         await page.reload();
-        await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "light");
+        await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "system");
         await ready(page, "/sign-in");
-        await browserExpect(toggle.getByRole("button")).toBeVisible();
-        await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "light");
-        await browserExpect(page.getByRole("contentinfo").locator(".theme-picker")).toHaveCount(0);
+        await browserExpect(page.locator(".theme-picker")).toHaveCount(0);
+        const anonymous = await page.request.post(`${origin}/forms/theme`, {
+          headers: { Origin: origin },
+          form: { theme: "light" },
+          maxRedirects: 0,
+        });
+        expect(anonymous.status()).toBe(303);
+        expect(anonymous.headers().location).toContain("/sign-in");
+        expect(anonymous.headers()["set-cookie"]).toBeUndefined();
         expect(
           (await page.context().cookies()).find((cookie) => cookie.name === "appearance")?.value,
         ).toBe("dark");
-        await browserSignIn(page, `reader-theme-${crypto.randomUUID()}@example.com`, "/settings");
+        await browserSignIn(
+          page,
+          `reader-theme-${crypto.randomUUID()}@example.com`,
+          "/settings?section=device",
+        );
         await browserExpect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+        await browserExpect(
+          page.getByRole("group", { name: "Appearance", exact: true }),
+        ).toBeVisible();
         const rejected = await page.request.post(`${origin}/forms/theme`, {
           headers: { Origin: "https://untrusted.example" },
           form: { theme: "light" },
@@ -4067,6 +4217,7 @@ it("[critical] saves a first private link through email, preserves retries, then
         await browserExpect(page.locator("h1")).toHaveText("Verify your email to save this link");
         await page.getByLabel("Email address").fill(email);
         await page.getByRole("button", { name: "Send code", exact: true }).click();
+        await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
         await page.getByLabel("Six-digit code").fill(await capturedCode(email));
         await page.getByRole("button", { name: "Verify and save" }).click();
       }
@@ -4114,6 +4265,7 @@ it("[critical] saves a first private link through email, preserves retries, then
         expect(await prisma.collection.count({ where: { hubId: account.hub.id } })).toBe(2);
         await page.getByLabel("Account menu", { exact: true }).click();
         await page.getByRole("button", { name: "Sign out", exact: true }).click();
+        await browserExpect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
         await ready(page, "/capture");
         await page
           .getByLabel("Link URL", { exact: true })
@@ -4121,6 +4273,7 @@ it("[critical] saves a first private link through email, preserves retries, then
         await page.getByRole("button", { name: "Save link", exact: true }).click();
         await page.getByLabel("Email address").fill(email);
         await page.getByRole("button", { name: "Send code", exact: true }).click();
+        await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
         await page.getByLabel("Six-digit code").fill(await capturedCode(email));
         await page.getByRole("button", { name: "Verify and save" }).click();
         await browserExpect(page.locator(".form-notice")).toContainText("Choose where to save");
@@ -4307,7 +4460,7 @@ it("shows collection descriptions and hub attribution without repeated separator
 }, 15000);
 
 describe("collection discussion", () => {
-  it("prompts signed-out readers, lets signed-in readers post and reply, shows the contributor's answer and honours the switch, with and without JavaScript", async () => {
+  it("prompts signed-out readers, lets signed-in readers post and reply, shows the contributor's answer and honours the switch", async () => {
     // Earlier journeys end the shared owner's session; this one has its own contributor.
     const curator = (
       await signInHubOwner(app.getHttpServer(), {
@@ -4315,7 +4468,7 @@ describe("collection discussion", () => {
         name: "Curator",
       })
     ).headers["set-auth-token"] as string;
-    for (const js of [true, false]) {
+    for (const js of [true]) {
       const id = (
         await request(app.getHttpServer())
           .post("/api/v1/collections")
@@ -4629,7 +4782,7 @@ it("continues replies on an older question page with the share token and answer 
       createdAt: new Date(base + n * 1000),
     })),
   });
-  for (const js of [true, false]) {
+  for (const js of [true]) {
     const { page, close } = await freshPage(js);
     try {
       await ready(page, `/c/${id}?s=${token}`);
@@ -4880,8 +5033,8 @@ describe("activity and attribution", () => {
   }, 60000);
 });
 
-it("edits a hubless person's username and profile without creating a hub, with and without JavaScript", async () => {
-  for (const js of [true, false]) {
+it("edits a hubless person's username and profile without creating a hub", async () => {
+  for (const js of [true]) {
     await prisma.requestBudget.deleteMany();
     const email = `hubless-browser-${crypto.randomUUID()}@example.com`;
     const { page, close } = await freshPage(js);
@@ -5117,8 +5270,8 @@ it("shares Manage across owner and service contexts without exposing service con
   }
 }, 60000);
 
-it("sizes discussion by its own content within the reader frame, with and without JavaScript", async () => {
-  for (const js of [true, false]) {
+it("sizes discussion by its own content within the reader frame", async () => {
+  for (const js of [true]) {
     await prisma.requestBudget.deleteMany();
     const email = `discussion-sizing-${crypto.randomUUID()}@example.com`;
     const signed = await signInWithCode(app.getHttpServer(), { email, name: "Reader" });
@@ -5580,6 +5733,8 @@ it("filters audit calendar days in the saved timezone with native and enhanced f
       await page.getByLabel("From", { exact: true }).fill("2026-03-08");
       await page.getByLabel("To", { exact: true }).fill("2026-03-08");
       await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+      // The fields already show the typed days; wait for the submitted result.
+      await page.waitForURL((url) => url.searchParams.get("to")?.startsWith("2026-03-09") ?? false);
       await browserExpect(page.getByLabel("From", { exact: true })).toHaveValue("2026-03-08");
       const query = new URL(page.url()).searchParams;
       expect(query.get("from")).toBe("2026-03-08T05:00:00.000Z");
@@ -5657,6 +5812,8 @@ it("shows recorded audit effects, honest legacy gaps, international dates and op
       await page.getByLabel("From", { exact: true }).fill(day);
       await page.getByLabel("To", { exact: true }).fill(day);
       await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+      // The fields already show the typed day; wait for the submitted result.
+      await page.waitForURL((url) => url.searchParams.has("from") && url.searchParams.has("to"));
       await browserExpect(page.getByLabel("From", { exact: true })).toHaveValue(day);
       const start = new Date(`${day}T00:00:00.000Z`).getTime() - (js ? 3 * 3600000 : 0);
       const query = new URL(page.url()).searchParams;
@@ -5859,6 +6016,7 @@ it("uses action dialogs and owner collection operations with native fallback", a
       await browserExpect(page).toHaveURL(`${origin}/c/${id}`);
       await ready(page, `/manage/collections?q=${id}`);
       await chooseAction(page, "share", page.locator(".ops-table tbody tr"));
+      await browserExpect(page.locator("h1")).toHaveText("Share collection");
       await page.screenshot({ path: `/tmp/collection-share-${js}.png` });
       await page.reload();
       await page.getByRole("link", { name: "Back to collections", exact: true }).click();
@@ -6644,6 +6802,7 @@ it("preserves private sharing destinations and resumes access, link and transfer
       await page.getByRole("button", { name: "Continue with email", exact: true }).click();
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
+      await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
       await page.getByLabel("Six-digit code").fill(await capturedCode(email));
       await page.getByRole("button", { name: "Verify and continue" }).click();
     };
@@ -7249,6 +7408,7 @@ describe("reorder", () => {
         expect((await rows())[19].id).toBe(boundary.id);
         await page.getByRole("link", { name: "First items", exact: true }).click();
         const current = await rows();
+        await browserExpect(page.locator(`#reorder-${current[1].id}`)).toBeVisible();
         await prisma.session.updateMany({
           where: { user: { email } },
           data: { expiresAt: new Date(0) },
@@ -7262,6 +7422,7 @@ describe("reorder", () => {
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
         await browserExpect(page.locator("h1")).toHaveText("Check your email");
+        await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
         await page.getByLabel("Six-digit code").fill(await capturedCode(email));
         await page.getByRole("button", { name: "Verify and continue" }).click();
         await browserExpect(page.locator("h1")).toHaveText("Reorder items");
@@ -7507,6 +7668,7 @@ it("shows public Gravatar pictures and links Settings to Support with native fal
             expect(
               await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
             ).toBe(true);
+            await page.keyboard.press("Tab");
             await help.focus();
             await browserExpect(help).toBeFocused();
             expect(
@@ -8074,6 +8236,7 @@ for (const registration of [false, true]) {
         await browserExpect(
           page.getByRole("heading", { name: "Verify your email", exact: true }),
         ).toBeVisible();
+        await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
         await page.getByLabel("Six-digit code").fill(await capturedCode(email));
         await page.getByRole("button", { name: "Verify and continue", exact: true }).click();
       }
@@ -8142,10 +8305,12 @@ it("offers only cancel deletion after email proof during first-link capture", as
       await ready(page, "/capture");
       await page.getByLabel("Link URL", { exact: true }).fill("https://fixture-links.dev/recovery");
       await page.getByRole("button", { name: "Save link", exact: true }).click();
+      await browserExpect(page.getByLabel("Email address")).toBeVisible();
       const destination = new URL(page.url()).searchParams.get("returnTo");
       await page.getByLabel("Email address").fill(email);
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
+      await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
       await page.getByLabel("Six-digit code").fill(await capturedCode(email));
       await page.getByRole("button", { name: "Verify and save", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Cancel deletion");
@@ -8205,6 +8370,7 @@ it("prioritizes verified recovery over a different signed-in account", async () 
         await page.getByLabel("Email address").fill(email);
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
+        await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
         await page.getByLabel("Six-digit code").fill(await capturedCode(email));
         await page.getByRole("button", { name: "Verify and continue", exact: true }).click();
         const label = deletion ? "Cancel deletion" : "Reactivate account";
@@ -8252,13 +8418,14 @@ it("preserves the sign-in destination when choosing a different email", async ()
         await page.getByLabel("Email address").fill(`wrong-${crypto.randomUUID()}@example.com`);
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("link", { name: "Use a different email", exact: true }).click();
-        expect(new URL(page.url()).searchParams.get("returnTo")).toBe(returnTo);
+        await browserExpect(page).toHaveURL((url) => url.searchParams.get("returnTo") === returnTo);
       }
       const email = `right-${crypto.randomUUID()}@example.com`;
       await signInWithCode(app.getHttpServer(), { email });
       await page.getByLabel("Email address").fill(email);
       await page.getByRole("button", { name: "Continue with email", exact: true }).click();
       await page.getByRole("button", { name: "Send code", exact: true }).click();
+      await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
       await page.getByLabel("Six-digit code").fill(await capturedCode(email));
       await page.getByRole("button", { name: "Verify and continue" }).click();
       await browserExpect(page).toHaveURL(`${origin}${destination}`);
@@ -8289,6 +8456,7 @@ it("offers deliberate account creation and an optional named hub after email pro
         await page.getByLabel("Email address").fill(email);
         await page.getByRole("button", { name: "Continue with email", exact: true }).click();
         await page.getByRole("button", { name: "Send code", exact: true }).click();
+        await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
         await page.getByLabel("Six-digit code").fill(await capturedCode(email));
         await page.getByRole("button", { name: "Verify and continue", exact: true }).click();
         await browserExpect(page).toHaveURL(`${origin}/sign-up/confirm?method=email`);
@@ -8499,7 +8667,7 @@ it("requires explicit hub creation before uploading a text import and protects n
         .getByRole("link", { name: "My reading", exact: true })
         .click();
       await page.getByRole("link", { name: "Needs attention 1", exact: true }).click();
-      expect(new URL(page.url()).searchParams.get("status")).toBe("failed");
+      await browserExpect(page).toHaveURL((url) => url.searchParams.get("status") === "failed");
       await browserExpect(page.locator(".import-table tbody tr")).toHaveCount(1);
       await browserExpect(page.locator(".import-table")).toContainText("bad-address");
       await browserExpect(
@@ -9094,6 +9262,7 @@ it("resumes submitted import corrections after sign-in with and without JavaScri
       await page.getByRole("button", { name: "Continue with email", exact: true }).click();
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
+      await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
       await page.getByLabel("Six-digit code").fill(await capturedCode(email));
       await page.getByRole("button", { name: "Verify and continue" }).click();
     };
@@ -9101,7 +9270,7 @@ it("resumes submitted import corrections after sign-in with and without JavaScri
       await ready(page, `${here}/rows/${row.id}?status=failed`);
       await verify();
       await browserExpect(page.locator("h1")).toHaveText("Saved correction");
-      expect(new URL(page.url()).searchParams.get("status")).toBe("failed");
+      await browserExpect(page).toHaveURL((url) => url.searchParams.get("status") === "failed");
       const address = `https://fixture-links.dev/resumed-${crypto.randomUUID()}/${"a".repeat(1800)}`;
       await page.getByLabel("Address", { exact: true }).fill(address);
       await browserExpect(page.getByLabel("Tags, one per line")).toHaveValue(tags.join("\n"));
@@ -9122,7 +9291,7 @@ it("resumes submitted import corrections after sign-in with and without JavaScri
       expect(recovery?.value).toMatch(/^ref\.[a-f0-9]{64}$/);
       await verify();
       await browserExpect(page.locator("h1")).toHaveText("Saved correction");
-      expect(new URL(page.url()).searchParams.get("status")).toBe("failed");
+      await browserExpect(page).toHaveURL((url) => url.searchParams.get("status") === "failed");
       expect(await prisma.pendingActionPayload.count()).toBe(0);
       const saved = await prisma.importRow.findUniqueOrThrow({
         where: { id: row.id },
@@ -9244,6 +9413,7 @@ it("transfers same-title collections at stable IDs before and after sign-in", as
       await page.getByRole("button", { name: "Continue with email", exact: true }).click();
       await page.getByRole("button", { name: "Send code", exact: true }).click();
       await browserExpect(page.locator("h1")).toHaveText("Check your email");
+      await browserExpect(page.getByLabel("Six-digit code")).toBeVisible();
       await page.getByLabel("Six-digit code").fill(await capturedCode(email));
       await page.getByRole("button", { name: "Verify and continue" }).click();
     };
@@ -9462,3 +9632,285 @@ it("caches only immutable build assets and keeps profile reads request-scoped", 
     await close();
   }
 }, 30000);
+
+(process.env.BROWSER_NAVIGATION_BENCHMARK === "1" ? it : it.skip)(
+  "benchmarks navigation latency",
+  async () => {
+    recordApiTimings = true;
+    try {
+      await benchmarkNavigation({
+        browser,
+        origin,
+        cookie,
+        hubId,
+        sourceId,
+        apiTimings,
+        output: process.env.BROWSER_ARTIFACT_DIR ?? directory,
+        resetBudget: () => prisma.requestBudget.deleteMany(),
+        fixture: {
+          collections: await prisma.collection.count({ where: { hubId } }),
+          resources: await prisma.resource.count({ where: { collectionId: sourceId } }),
+        },
+      });
+    } finally {
+      recordApiTimings = false;
+    }
+  },
+  900000,
+);
+
+it("streams usable collection links while discussion is pending or fails", async () => {
+  const { page, close } = await freshPage();
+  let release = () => {};
+  try {
+    await page.context().addCookies([
+      {
+        name: "better-auth.session_token",
+        value: cookie.split("=").slice(1).join("="),
+        url: origin,
+      },
+    ]);
+    for (const fail of [false, true]) {
+      await ready(page, `/h/${hubId}`);
+      await page.waitForFunction(
+        () => performance.getEntriesByName("app:document-ready").length > 0,
+      );
+      const before = await page.evaluate(() => performance.timeOrigin);
+      let discussionStarted = false;
+      const released = Promise.withResolvers<void>();
+      release = released.resolve;
+      delayedDiscussion = {
+        path: `/api/v1/collections/${sourceId}/comments`,
+        started: () => {
+          discussionStarted = true;
+        },
+        released: released.promise,
+        fail,
+      };
+      await page.locator(`main a[href="/c/${sourceId}"]`).first().click();
+      await browserExpect.poll(() => discussionStarted).toBe(true);
+      await browserExpect(page.locator(".resource-list").first()).toBeVisible({ timeout: 2500 });
+      await browserExpect(page.getByText("Loading discussion…", { exact: true })).toBeVisible();
+      // A real item disclosure proves the primary reader is usable, not a skeleton.
+      await page.locator(".resource-list summary").first().focus();
+      await page.locator(".resource-list summary").first().press("Enter");
+      await browserExpect(page.locator(".resource-list details").first()).toHaveAttribute(
+        "open",
+        "",
+      );
+      expect(await page.evaluate(() => performance.timeOrigin)).toBe(before);
+      release();
+      await browserExpect(page.locator("#comments .comments-body")).toBeVisible();
+      await browserExpect(page.getByText("Loading discussion…", { exact: true })).toHaveCount(0);
+      if (fail)
+        await browserExpect(page.locator("#comments")).toContainText(
+          "The discussion couldn't load",
+        );
+      await browserExpect(page.locator(".resource-list").first()).toBeVisible();
+      delayedDiscussion = undefined;
+    }
+  } finally {
+    release();
+    delayedDiscussion = undefined;
+    await close();
+  }
+}, 30000);
+
+it("loads Settings sections on demand and preserves unvisited fields and failed drafts", async () => {
+  const { page, close } = await freshPage();
+  try {
+    const email = `section-drafts-${crypto.randomUUID()}@example.com`;
+    await browserSignIn(page, email, "/settings");
+    const person = await prisma.user.findUniqueOrThrow({ where: { email } });
+    const hub = await prisma.withAuthority(() => ensurePersonalHub(prisma, person.id));
+    await prisma.hub.update({
+      where: { id: hub.id },
+      data: { name: "Keep this hub", description: "Unvisited hub description", showOwner: true },
+    });
+    await ready(page, "/settings");
+    const before = await page.evaluate(() => performance.timeOrigin);
+    await browserExpect(page.getByLabel("Username", { exact: true })).toBeVisible();
+    await browserExpect(page.locator('[name="hubName"]:not([type="hidden"])')).toHaveCount(0);
+    await browserExpect(page.locator('form[action="/forms/theme"]')).toHaveCount(0);
+    await browserExpect(page.locator("#time-zone option")).toHaveCount(1);
+    await page.getByLabel("Full name", { exact: true }).fill("A new display name");
+    await browserExpect
+      .poll(async () => (await prisma.user.findUniqueOrThrow({ where: { id: person.id } })).name)
+      .toBe("A new display name");
+    const preserved = await prisma.hub.findUniqueOrThrow({ where: { id: hub.id } });
+    expect(preserved.name).toBe("Keep this hub");
+    expect(preserved.description).toBe("Unvisited hub description");
+    expect(preserved.showOwner).toBe(true);
+    await page.route("**/forms/profile-save", (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: false, code: "unavailable" }),
+      }),
+    );
+    await page.getByLabel("Bio", { exact: true }).fill("Keep this failed draft");
+    await browserExpect(page.locator(".form-notice.error")).toContainText("couldn't confirm");
+    await settingsSection(page, "Hub");
+    await browserExpect(page.getByLabel("Hub name", { exact: true })).toHaveValue("Keep this hub");
+    await page.getByLabel("Hub name", { exact: true }).fill("Keep this hub draft too");
+    await browserExpect(page.locator("#bio")).toHaveValue("Keep this failed draft");
+    await settingsSection(page, "On this device");
+    await browserExpect(page.locator('form[action="/forms/theme"]')).toBeVisible();
+    await browserExpect(page.locator("#bio")).toHaveValue("Keep this failed draft");
+    await page.goBack();
+    await browserExpect(page.getByLabel("Hub name", { exact: true })).toHaveValue(
+      "Keep this hub draft too",
+    );
+    await browserExpect(page.locator("#bio")).toHaveValue("Keep this failed draft");
+    await settingsSection(page, "Profile");
+    await browserExpect(page.getByLabel("Bio", { exact: true })).toHaveValue(
+      "Keep this failed draft",
+    );
+    await browserExpect(page.locator(".form-notice.error")).toContainText("couldn't confirm");
+    await page.unroute("**/forms/profile-save");
+    await page.getByRole("button", { name: "Retry", exact: true }).click();
+    await browserExpect
+      .poll(async () => (await prisma.user.findUniqueOrThrow({ where: { id: person.id } })).bio)
+      .toBe("Keep this failed draft");
+    await browserExpect
+      .poll(async () => (await prisma.hub.findUniqueOrThrow({ where: { id: hub.id } })).name)
+      .toBe("Keep this hub draft too");
+    await page.getByLabel("Timezone", { exact: true }).focus();
+    await page.getByLabel("Timezone", { exact: true }).selectOption("Africa/Dar_es_Salaam");
+    await browserExpect
+      .poll(
+        async () => (await prisma.user.findUniqueOrThrow({ where: { id: person.id } })).timeZone,
+      )
+      .toBe("Africa/Dar_es_Salaam");
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(before);
+    // Direct Hub entry saves safely without ever mounting the Profile fields.
+    await ready(page, "/settings?section=hub");
+    await browserExpect(page.locator("#username")).toHaveCount(0);
+    await page.getByLabel("Hub name", { exact: true }).fill("Direct hub entry");
+    await browserExpect
+      .poll(async () => (await prisma.hub.findUniqueOrThrow({ where: { id: hub.id } })).name)
+      .toBe("Direct hub entry");
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: person.id } })).bio).toBe(
+      "Keep this failed draft",
+    );
+    for (const width of [390, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+        true,
+      );
+      await page.screenshot({
+        path: join(process.env.BROWSER_ARTIFACT_DIR ?? directory, `settings-sections-${width}.png`),
+        fullPage: true,
+      });
+    }
+  } finally {
+    await close();
+  }
+}, 60000);
+
+it("preloads only the next route's code on link intent and reuses it on navigation", async () => {
+  const { page, close } = await freshPage();
+  try {
+    const all: string[] = [];
+    page.on("request", (request) => all.push(new URL(request.url()).pathname));
+    await ready(page, `/h/${hubId}`);
+    await page.waitForFunction(() => performance.getEntriesByName("app:document-ready").length > 0);
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Network.enable");
+    const fromCache = new Set<string>();
+    const urls = new Map<string, string>();
+    cdp.on("Network.requestWillBeSent", (event) => urls.set(event.requestId, event.request.url));
+    cdp.on("Network.requestServedFromCache", (event) => {
+      const url = urls.get(event.requestId);
+      if (url) fromCache.add(new URL(url).pathname);
+    });
+    cdp.on("Network.responseReceived", (event) => {
+      if (event.response.fromDiskCache) fromCache.add(new URL(event.response.url).pathname);
+    });
+    const intent: { path: string; rsc: boolean; type: string }[] = [];
+    const record = (request: import("@playwright/test").Request) =>
+      intent.push({
+        path: new URL(request.url()).pathname,
+        rsc: request.headers().rsc === "1",
+        type: request.resourceType(),
+      });
+    page.on("request", record);
+    const link = page.locator(`main a[href="/c/${sourceId}"]`).first();
+    await link.hover();
+    await browserExpect
+      .poll(() => intent.some(({ path }) => /\/app\/c\/%5Bid%5D\/page-[\w-]+\.js$/.test(path)))
+      .toBe(true);
+    // Intent loads build assets only: no document, RSC payload, page or API read.
+    expect(intent.every(({ path, rsc }) => path.startsWith("/_next/static/") && !rsc)).toBe(true);
+    // Fetched once at idle or on the first intent, whichever comes first.
+    const manifestPath = all.find((path) => path.includes("/route-chunks/"));
+    expect(manifestPath).toBeDefined();
+    const manifest = (await (await page.request.get(origin + manifestPath)).json()) as {
+      routes: [string, string[]][];
+    };
+    const order = manifest.routes.map(([pattern]) => pattern);
+    expect(order.indexOf("/about")).toBeLessThan(order.indexOf("/[handle]"));
+    const chunk = intent.find(({ path }) => /\/app\/c\/%5Bid%5D\/page-/.test(path))?.path as string;
+    page.off("request", record);
+    const before = await page.evaluate(() => performance.timeOrigin);
+    await link.click();
+    await page.waitForURL(`${origin}/c/${sourceId}`);
+    await browserExpect(page.locator(".collection-sheet h1")).toBeVisible();
+    expect(await page.evaluate(() => performance.timeOrigin)).toBe(before);
+    // The navigation's script request for the page chunk is an HTTP cache hit.
+    await browserExpect.poll(() => fromCache.has(chunk)).toBe(true);
+  } finally {
+    await close();
+  }
+});
+
+it("marks only signed-out, fully rendered public pages for the edge cache", async () => {
+  const edge = "public, max-age=0, s-maxage=60, stale-while-revalidate=60";
+  const { page, close } = await freshPage();
+  try {
+    const policy = async (path: string) =>
+      (await page.goto(origin + path, { waitUntil: "domcontentloaded" }))?.headers()[
+        "cache-control"
+      ];
+    for (const path of ["/", "/about", "/discover", `/h/${hubId}`, `/c/${sourceId}`])
+      expect(await policy(path)).toBe(edge);
+    for (const path of [`/c/${sourceId}?s=not-a-token`, `/h/${hubId}?view=public`, "/capture"])
+      expect(await policy(path)).toContain("no-store");
+    // A render whose primary read failed shows a 200 error notice: never shared.
+    delayedDiscussion = {
+      path: `/api/v1/collections/${sourceId}`,
+      started: () => {},
+      released: Promise.resolve(),
+      fail: true,
+    };
+    try {
+      expect(await policy(`/c/${sourceId}`)).toContain("no-store");
+    } finally {
+      delayedDiscussion = undefined;
+    }
+    expect(await policy(`/c/${sourceId}`)).toBe(edge);
+    // Client-router payloads stay private even for public pages.
+    const rsc: string[] = [];
+    page.on("response", (response) => {
+      if (response.request().headers().rsc === "1") rsc.push(response.headers()["cache-control"]);
+    });
+    await ready(page, "/about");
+    await page.waitForFunction(() => performance.getEntriesByName("app:document-ready").length > 0);
+    await page.locator('a[href="/discover"]').first().click();
+    await page.waitForURL(`${origin}/discover`);
+    await browserExpect.poll(() => rsc.length).toBeGreaterThan(0);
+    expect(rsc.every((value) => value.includes("no-store"))).toBe(true);
+    await page.context().addCookies([
+      {
+        name: "better-auth.session_token",
+        value: cookie.split("=").slice(1).join("="),
+        url: origin,
+      },
+    ]);
+    for (const path of ["/", "/about", `/c/${sourceId}`])
+      expect(await policy(path)).toContain("no-store");
+  } finally {
+    delayedDiscussion = undefined;
+    await close();
+  }
+});

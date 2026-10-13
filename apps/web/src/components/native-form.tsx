@@ -1,8 +1,7 @@
-"use client";
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
+import { AppForm } from "./app-form";
 
-// Native POST remains authoritative, including without JavaScript. Pending
-// feedback prevents accidental repeated submissions; Escape permits a retry.
+// Shared command form; requests run in the background after hydration.
 export function NativeForm({
   action,
   id,
@@ -16,28 +15,15 @@ export function NativeForm({
   encType?: "multipart/form-data";
   className?: string;
 }) {
-  const [pending, setPending] = useState(false);
   return (
-    <form
+    <AppForm
       id={id}
       action={action}
       method="post"
       encType={encType}
       className={["action-form", className].filter(Boolean).join(" ")}
-      aria-busy={pending}
-      onSubmit={(event) => {
-        if (pending) {
-          event.preventDefault();
-          return;
-        }
-        setPending(true);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") setPending(false);
-      }}
     >
       {children}
-      {pending && <p role="status">Submitting… If this stops, press Escape and try again.</p>}
-    </form>
+    </AppForm>
   );
 }

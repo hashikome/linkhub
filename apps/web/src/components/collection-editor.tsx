@@ -1,6 +1,8 @@
 "use client";
+
 import type { Collection } from "@ntumie/types";
 import { useActionState } from "react";
+import { AppForm } from "./app-form";
 
 export type CollectionEditState = {
   error?: string;
@@ -31,7 +33,7 @@ export function CollectionEditForm({
   );
   const version = state.latest?.version ?? collection.version;
   return (
-    <form action={action} className="action-form edit-form" aria-busy={pending}>
+    <AppForm action={action} className="action-form edit-form" aria-busy={pending}>
       {state.error && (
         <div className="form-notice error" role="alert">
           <p>{state.error}</p>
@@ -83,6 +85,6 @@ export function CollectionEditForm({
           Cancel
         </a>
       </div>
-    </form>
+    </AppForm>
   );
 }

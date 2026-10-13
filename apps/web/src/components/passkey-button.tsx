@@ -1,7 +1,10 @@
 "use client";
+
 import { startAuthentication, startRegistration } from "@simplewebauthn/browser";
 import { useEffect, useRef, useState } from "react";
 import { type PasskeyPath, submitForm, submitPasskey } from "../lib/http";
+import { navigateInApp } from "../lib/navigation";
+import { AppForm } from "./app-form";
 
 class PasskeyRequestError extends Error {}
 
@@ -67,7 +70,7 @@ export function PasskeyButton({
                 name: name.trim() || "Passkey",
               });
               if (result.backupCodes) setCodes(result.backupCodes);
-              else window.location.assign("/settings/security?notice=security-saved");
+              else navigateInApp("/settings/security?notice=security-saved");
             } else {
               if (!pending && !email && !googleConnection) {
                 const started = await submitForm(
@@ -140,9 +143,9 @@ export function PasskeyButton({
         </div>
       )}
       {!register && (
-        <form ref={finish} action="/forms/auth-complete" method="post" hidden>
+        <AppForm ref={finish} action="/forms/auth-complete" method="post" hidden>
           <button type="submit">Continue</button>
-        </form>
+        </AppForm>
       )}
     </div>
   );

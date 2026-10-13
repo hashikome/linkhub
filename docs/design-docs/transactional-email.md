@@ -188,7 +188,10 @@ this invitation? You can ignore it; nothing changes.” The support link uses
 `EMAIL_SUPPORT_URL`, the web `/support` page,
 which shows the support address (`SUPPORT_EMAIL`, web server config). Emails
 never carry the address themselves, so changing it needs no email change.
-Web footers use the separate About/navigation contract in the
+The shared header wordmark is 28 px, weight 700. In the copyright line, the
+20 px bold wordmark is larger and darker than the 14 px muted copyright/year;
+the retained tagline is 14 px. These are inline email styles shared by codes
+and service invitations. Web footers use the separate About/navigation contract in the
 [interface system](web-interface-system.md).
 
 ## Idempotency

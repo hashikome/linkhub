@@ -1,6 +1,7 @@
 import "server-only";
 import { webServerConfig } from "@ntumie/config/web-server";
 import { headers } from "next/headers";
+import { markEdgeUncacheable } from "./edge-cache-scope";
 import { type ApiPath, postJson, readJson, safePath } from "./http";
 import { visitorHeaders } from "./visitor-source";
 
@@ -11,7 +12,7 @@ export async function serverGet<T>(
   options: Parameters<typeof readJson>[1],
   incoming?: Headers,
 ) {
-  return readJson<T>(`${webServerConfig().apiOrigin}${safePath(path)}`, {
+  const result = await readJson<T>(`${webServerConfig().apiOrigin}${safePath(path)}`, {
     ...options,
     headers: visitorHeaders(
       incoming ?? (await headers()),
@@ -19,6 +20,9 @@ export async function serverGet<T>(
       webServerConfig().sourceSecret,
     ),
   });
+  // Only pages whose every read succeeded may be shared from the edge.
+  if (!result.ok) markEdgeUncacheable();
+  return result;
 }
 export async function serverSend<T>(
   path: ApiPath,
@@ -26,6 +30,7 @@ export async function serverSend<T>(
   options: Parameters<typeof postJson>[2],
   incoming?: Headers,
 ) {
+  markEdgeUncacheable();
   return postJson<T>(`${webServerConfig().apiOrigin}${safePath(path)}`, body, {
     ...options,
     headers: visitorHeaders(

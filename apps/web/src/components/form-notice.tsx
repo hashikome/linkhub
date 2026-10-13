@@ -107,7 +107,11 @@ export function FormNotice({ code, wait }: { code?: string; wait?: string }) {
   const text = `${message}${seconds > 0 ? ` Wait at least ${seconds} seconds.` : ""}`;
   if (toasts.has(code))
     return (
-      <Toast message={text} tone={code === "sent" || code === "resent" ? "info" : "success"} />
+      <Toast
+        key={`${code}:${text}`}
+        message={text}
+        tone={code === "sent" || code === "resent" ? "info" : "success"}
+      />
     );
   const tone = info.has(code) ? " info" : errors.has(code) ? " error" : "";
   return (

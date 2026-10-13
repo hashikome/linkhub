@@ -1,45 +1,32 @@
+import { aboutItems, aboutCollection as collection } from "../lib/about-collection-snapshot";
 import { CollectionPreview } from "./collection-preview";
+import { CollectionMeta } from "./primitives";
 import type { ResourcePresentation } from "./resource-presentation";
 
-const items: ResourcePresentation[] = [
-  {
-    id: "help-and-people",
-    collectionId: "about",
-    kind: "heading",
-    title: "Help and the person behind it",
-    description: "Find a little help, or get to know who is building ntumie.",
-    tags: [],
-  },
-  {
-    id: "support",
-    collectionId: "about",
-    kind: "site_link",
-    title: "Support",
-    url: "/support",
-    tags: [],
-    description:
-      "Find help with your account, signing in, importing bookmarks and keeping your links together.",
-  },
-  {
-    id: "maker",
-    collectionId: "about",
-    kind: "external_link",
-    title: "Meet the maker — Paul John",
-    url: "https://namestarlit.com",
-    tags: [],
-    description: "Explore the projects and notes of namestarlit, the person building ntumie.",
-  },
-];
+// Keep Support on the current installation, including local development.
+const items: ResourcePresentation[] = aboutItems.map((item) =>
+  item.url === "https://ntumie.link/support"
+    ? { ...item, kind: "site_link", url: "/support" }
+    : item,
+);
 
-export function AboutCollection() {
+export function AboutCollection({ selectedItemId }: { selectedItemId?: string }) {
+  const selected =
+    selectedItemId === "support"
+      ? items[1]
+      : selectedItemId === "maker"
+        ? items[2]
+        : items.find((item) => item.id === selectedItemId && item.kind !== "heading");
   return (
     <CollectionPreview
-      context="About ntumie."
-      title="A few useful links"
-      description="Support and a connection to the person behind the product."
+      context={collection.hub.name}
+      title={collection.title}
+      description={collection.description}
+      tags={collection.tags}
+      metadata={<CollectionMeta item={collection} preview />}
       items={items}
-      selectedItem={items[1]}
-      itemBase={null}
+      selectedItem={selected ?? items[1]}
+      itemBase="/about"
     />
   );
 }

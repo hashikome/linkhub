@@ -191,6 +191,15 @@ revocation are transaction-bound. Shared identity budgets complement source
 throttles; codes expire after five minutes with three wrong attempts allowed.
 Auth audits retain 90 days; collection audit/deletion policy remains separate.
 
+## Shared caching
+
+Documents are `private, no-store` except fully rendered signed-out public pages,
+which the web origin may mark for about a minute of edge caching (ADR-0066). The
+origin refuses that for any app cookie, Authorization, client-router request,
+share token, preview, non-200, Set-Cookie or failed/writing API call; Cloudflare
+must also bypass its cache on session, appearance and device-preference cookies
+([runbook](runbooks/edge-cache.md)). Signed-in responses are never shared.
+
 ## Abuse protection
 
 Every non-probe request admitted by the browser-origin boundary consumes an atomic PostgreSQL-backed source budget,

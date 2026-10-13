@@ -1,9 +1,11 @@
 "use client";
+
 import { type AuditLogEntry, auditReadActions } from "@ntumie/types";
 import { useEffect, useRef, useState } from "react";
 import { auditActionLabel, auditTarget } from "../lib/audit-presentation";
 import { readAuditPage } from "../lib/browser-api";
 import type { Failure } from "../lib/http";
+import { refreshInApp } from "../lib/navigation";
 import { shortIds } from "../lib/short-id";
 import { AuditEffect, AuditOutcome } from "./audit-effect";
 import { AuditIdValue } from "./audit-identity";
@@ -27,11 +29,23 @@ export function AuditEvents({
   const [announcement, setAnnouncement] = useState("");
   const active = useRef<AbortController | null>(null);
   const table = useRef<HTMLTableElement>(null);
+  useEffect(() => {
+    active.current?.abort();
+    active.current = null;
+    setItems(initial);
+    setCursor(nextCursor);
+    setPending(false);
+    setError(undefined);
+  }, [initial, nextCursor]);
   const params = new URLSearchParams(filters);
   if (cursor) params.set("cursor", cursor);
   const href = `/manage/audit?${params}`;
   useEffect(() => {
-    const stop = () => active.current?.abort();
+    const stop = () => {
+      active.current?.abort();
+      active.current = null;
+      setPending(false);
+    };
     window.addEventListener("reader:suspend", stop);
     return () => {
       stop();
@@ -53,7 +67,7 @@ export function AuditEvents({
     setPending(false);
     if (!result.ok) {
       if ([401, 403].includes(result.status)) {
-        window.location.reload();
+        refreshInApp();
         return;
       }
       setError(result);

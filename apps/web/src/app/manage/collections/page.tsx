@@ -1,5 +1,6 @@
 import type { ManagedCollection, SessionView } from "@ntumie/types";
 import type { Metadata } from "next";
+import { AppForm } from "../../../components/app-form";
 import { FormNotice } from "../../../components/form-notice";
 import { managedCollectionsRows } from "../../../components/manage-rows";
 import { ManageTable } from "../../../components/manage-table";
@@ -35,7 +36,7 @@ export default async function Page({
         Find a collection by its ID or link. Available actions depend on your access.
       </p>
       <FormNotice code={queryValue(query.notice)} />
-      <form method="get" action="/manage/collections" className="ops-filters">
+      <AppForm method="get" action="/manage/collections" className="ops-filters">
         <label className="ops-search">
           <span className="sr-only">Collection ID or link</span>
           <input
@@ -51,7 +52,7 @@ export default async function Page({
           Search
         </button>
         {q && <a href="/manage/collections">Clear</a>}
-      </form>
+      </AppForm>
       <ManageTable
         key={q}
         label="Collections"

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "bun server.ts --dev",
-    "build": "bun --bun next build --webpack",
+    "build": "bun --bun next build --webpack && bun scripts/route-chunks.ts",
     "start": "bun server.ts",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "bun test test"

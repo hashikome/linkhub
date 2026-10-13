@@ -50,7 +50,11 @@ not perform resolve to 403.
 
 `resolveMany` evaluates a batch using fresh account, availability, hub-owner and
 share reads within that operation. It uses the same policy as single-collection
-resolution, with no cache across operations. Resource pages and exports share
+resolution, with no cache across operations. For a GET/HEAD request, the session
+resolution that admitted the viewer already required an active account; the policy
+reuses that proof for the same principal object for at most one second instead of
+reading the account again. Writes, workers, copied principals and longer reads
+re-read it; availability, ownership and share state are always read. Resource pages and exports share
 the policy's batched reference projection: source and target must still belong
 to the same hub, and only independently readable targets enter the projection.
 

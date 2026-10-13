@@ -1,5 +1,6 @@
 import type { ShareAnalytics, ShareKind } from "@ntumie/types";
 import type { Metadata } from "next";
+import { AppForm } from "../../../components/app-form";
 import { LocalTime } from "../../../components/local-time";
 import { OperatorFailure } from "../../../components/operator-failure";
 import { operatorRead } from "../../../lib/operator-read";
@@ -56,11 +57,11 @@ export default async function Page() {
       <h1>Analytics</h1>
       <p className="meta">Sharing across the service, all time.</p>
       <div className="analytics-refresh">
-        <form action="/manage/analytics" method="get">
+        <AppForm action="/manage/analytics" method="get">
           <button className="button" type="submit">
             Refresh
           </button>
-        </form>
+        </AppForm>
         <p className="meta">
           Updated <LocalTime at={new Date().toISOString()} />
         </p>

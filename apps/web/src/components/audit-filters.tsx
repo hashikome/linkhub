@@ -1,6 +1,7 @@
 import { auditActions, authenticationAuditActions, operatorAuditActions } from "@ntumie/types";
 import { auditActionLabel } from "../lib/audit-presentation";
 import { queryValue } from "../lib/http";
+import { AppForm } from "./app-form";
 import { AuditDates } from "./audit-dates";
 
 export function AuditFilters({ query }: { query: Record<string, string | string[] | undefined> }) {
@@ -11,9 +12,19 @@ export function AuditFilters({ query }: { query: Record<string, string | string[
     ["q", "actor", "targetId", "hub", "action", "from", "to", "fromInstant", "toInstant"].some(
       (key) => Boolean(queryValue(query[key])),
     );
+  // Client navigation keeps uncontrolled fields; remount so they show the applied,
+  // server-normalised filters rather than what was typed.
+  const applied = ["q", "actor", "targetId", "hub", "action", "from", "to", "view"]
+    .map((key) => `${key}=${queryValue(query[key]) ?? ""}`)
+    .join("&");
   return (
     <>
-      <form method="post" action="/forms/manage-search" className="ops-filters audit-filters">
+      <AppForm
+        key={applied}
+        method="post"
+        action="/forms/manage-search"
+        className="ops-filters audit-filters"
+      >
         <input type="hidden" name="page" value="audit" />
         <label className="audit-search">
           Search
@@ -58,7 +69,7 @@ export function AuditFilters({ query }: { query: Record<string, string | string[
             )}
           </div>
         </div>
-      </form>
+      </AppForm>
       {queryValue(query.notice) === "filters-unavailable" && (
         <p role="alert">
           Couldn't apply these filters. Check the search text and date range, then try again.

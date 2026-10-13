@@ -142,3 +142,11 @@ Current implementation guidance lives in the linked design documents.
 - [0061-shared-platform-deployment-baseline.md](0061-shared-platform-deployment-baseline.md) — Registered ntumie.link, shared product database/queue isolation, capacity and migration-before-serve deployment gates.
 
 - [0062-focused-release-browser-gate.md](0062-focused-release-browser-gate.md) — Code/integration verification and four critical browser journeys gate releases; full browser coverage runs deliberately through manual dispatch.
+
+- [0063-wordmark-footer-and-appearance.md](0063-wordmark-footer-and-appearance.md) — Strengthen the wordmark, simplify right-aligned footer navigation and move appearance to signed-in device settings.
+
+- [0064 — Client navigation and interactive forms](0064-client-navigation-and-interactive-forms.md): smooth navigation and saves; JavaScript-free parity is no longer required.
+
+- [0065 — Account state loaded with the session user](0065-account-state-in-session-user.md): one query fewer per signed-in request; session cookie cache stays off.
+
+- [0066 — Edge-cached public pages for signed-out visitors](0066-edge-cached-public-pages.md): origin-decided public caching with a Cloudflare cookie bypass.

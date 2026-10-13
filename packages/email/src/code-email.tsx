@@ -68,7 +68,13 @@ const styles = {
     margin: 0,
   },
   container: { maxWidth: "560px", margin: "0 auto", padding: "40px 24px" },
-  wordmark: { fontSize: "22px", fontWeight: 700, letterSpacing: "-0.02em", margin: 0 },
+  wordmark: {
+    fontSize: "28px",
+    lineHeight: "35px",
+    fontWeight: 700,
+    letterSpacing: "-0.02em",
+    margin: 0,
+  },
   lead: { fontSize: "16px", lineHeight: "24px", margin: "28px 0 0" },
   code: {
     fontSize: "32px",
@@ -86,9 +92,14 @@ const footerStyles = {
   prompt: { fontSize: "14px", lineHeight: "21px", color: "#4b5563", margin: "0 0 4px" },
   support: { fontSize: "14px", lineHeight: "21px", color: "#4b5563", margin: "0 0 20px" },
   link: { color: "#1e5ba1", textDecoration: "underline" },
-  brand: { fontSize: "13px", lineHeight: "18px", fontWeight: 600, color: "#1a1a1a", margin: 0 },
-  tagline: { fontSize: "12px", lineHeight: "18px", color: "#6b7280", margin: "2px 0 0" },
+  brand: { fontSize: "14px", lineHeight: "28px", color: "#4b5563", margin: 0 },
+  wordmark: { fontSize: "20px", fontWeight: 700, letterSpacing: "-0.02em", color: "#1a1a1a" },
+  tagline: { fontSize: "14px", lineHeight: "21px", color: "#6b7280", margin: "2px 0 0" },
 } as const;
+
+export function EmailWordmark() {
+  return <Text style={styles.wordmark}>ntumie.</Text>;
+}
 
 // Shared email footer: a support prompt linking the support page (which
 // lists how to reach us), then "© <year> ntumie." over "Good links belong together.".
@@ -109,7 +120,9 @@ export function EmailFooter({
           Visit support
         </Link>
       </Text>
-      <Text style={footerStyles.brand}>© {new Date().getUTCFullYear()} ntumie.</Text>
+      <Text style={footerStyles.brand}>
+        © {new Date().getUTCFullYear()} <span style={footerStyles.wordmark}>ntumie.</span>
+      </Text>
       <Text style={footerStyles.tagline}>Good links belong together.</Text>
     </>
   );
@@ -131,7 +144,7 @@ export function CodeEmail({ input, copy }: { input: CodeEmailBaseInput; copy: Co
       <Preview>{copy.preview}</Preview>
       <Body style={styles.body}>
         <Container style={styles.container}>
-          <Text style={styles.wordmark}>ntumie.</Text>
+          <EmailWordmark />
           <Text style={styles.lead}>{copy.lead}</Text>
           <Text style={styles.code}>{input.code}</Text>
           <Text style={styles.validity}>

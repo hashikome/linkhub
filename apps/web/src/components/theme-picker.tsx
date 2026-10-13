@@ -1,89 +1,78 @@
 "use client";
-import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { submitForm } from "../lib/http";
+import { AppForm } from "./app-form";
 export type Theme = "light" | "dark" | "system";
-export function ThemePicker({
-  theme,
-  compact = false,
-  allowSystem = true,
-}: {
-  theme: Theme;
-  compact?: boolean;
-  allowSystem?: boolean;
-}) {
-  const pathname = usePathname(),
-    search = useSearchParams().toString();
-  const nextTheme: Record<Theme, Theme> = {
-    system: "light",
-    light: "dark",
-    dark: allowSystem ? "system" : "light",
-  };
-  // CSS resolves the OS preference before hydration, including native browsers.
-  const automaticReader = compact && !allowSystem && theme === "system";
-  const choices: Theme[] = compact
-    ? automaticReader
-      ? ["light", "dark"]
-      : [theme]
-    : allowSystem
-      ? ["light", "dark", "system"]
-      : ["light", "dark"];
-  const toggleLabel = (value: Theme) =>
-    allowSystem
-      ? `Appearance: ${value}. Switch to ${nextTheme[value]}`
-      : `Switch to ${nextTheme[value]} theme`;
+
+export function ThemePicker({ theme, saved }: { theme: Theme; saved: boolean }) {
+  const [selected, setSelected] = useState(theme);
+  const [pending, setPending] = useState(false);
+  const [feedback, setFeedback] = useState(saved ? "Appearance saved." : "");
+  const saving = useRef(false);
+  useEffect(() => setSelected(theme), [theme]);
   return (
-    <form
+    <AppForm
       action="/forms/theme"
       method="post"
-      className={`theme-picker${compact ? " theme-toggle" : ""}`}
+      className="theme-picker"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (saving.current) return;
+        const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+        const next = submitter?.value;
+        if (next !== "light" && next !== "dark" && next !== "system") return;
+        saving.current = true;
+        setPending(true);
+        setFeedback("Saving…");
+        const previous = selected;
+        const session = document.documentElement.dataset.session;
+        setSelected(next);
+        document.documentElement.dataset.theme = next;
+        const result = await submitForm<{ theme: Theme }>(
+          "/forms/theme",
+          new URLSearchParams({ theme: next }),
+        );
+        if (result.ok) setFeedback("Appearance saved.");
+        else {
+          setSelected(previous);
+          if (
+            document.documentElement.dataset.session === session &&
+            document.documentElement.dataset.theme === next
+          )
+            document.documentElement.dataset.theme = previous;
+          setFeedback("Couldn’t save your appearance. Try again.");
+        }
+        saving.current = false;
+        setPending(false);
+      }}
     >
-      <input type="hidden" name="returnTo" value={`${pathname}${search ? `?${search}` : ""}`} />
-      <fieldset>
-        <legend className={compact ? "sr-only" : undefined}>Appearance</legend>
+      <fieldset
+        className="account-field-group"
+        aria-describedby="appearance-help"
+        disabled={pending}
+      >
+        <legend>Appearance</legend>
+        <p className="field-help" id="appearance-help">
+          System follows your device’s light or dark appearance. Your choice is saved in this
+          browser and used while you’re signed in.
+        </p>
         <div className="theme-options">
-          {choices.map((value) => (
+          {(["system", "light", "dark"] as const).map((value) => (
             <button
               key={value}
-              className={automaticReader ? `theme-auto-${value}` : undefined}
               type="submit"
               name="theme"
-              value={compact ? nextTheme[value] : value}
-              aria-pressed={compact ? undefined : theme === value}
-              aria-label={compact ? toggleLabel(value) : value[0].toUpperCase() + value.slice(1)}
-              title={compact ? toggleLabel(value) : undefined}
+              value={value}
+              aria-pressed={selected === value}
             >
-              {compact ? (
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  {value === "light" ? (
-                    <>
-                      <circle cx="12" cy="12" r="4" />
-                      <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" />
-                    </>
-                  ) : value === "dark" ? (
-                    <path d="M20.5 13.2A8.5 8.5 0 0 1 10.8 3.5a8.5 8.5 0 1 0 9.7 9.7Z" />
-                  ) : (
-                    <>
-                      <rect x="3" y="4" width="18" height="13" rx="2" />
-                      <path d="M12 17v4m-4 0h8" />
-                    </>
-                  )}
-                </svg>
-              ) : (
-                value[0].toUpperCase() + value.slice(1)
-              )}
+              {value[0].toUpperCase() + value.slice(1)}
             </button>
           ))}
         </div>
+        <p className="meta" role="status">
+          {feedback}
+        </p>
       </fieldset>
-    </form>
+    </AppForm>
   );
 }

@@ -4,6 +4,7 @@ import { AuthUser } from "src/common/interfaces/auth-user.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { Collection, Resource } from "src/generated/prisma/client";
 import { appError } from "../../common/errors/app-exception";
+import { recentlyVerifiedViewer } from "../../common/verified-viewer";
 import { availableCollections } from "./availability";
 
 export interface CollectionAccess {
@@ -39,6 +40,7 @@ export class CollectionPolicyService {
 
   // Results live only for this operation. Every call checks current account,
   // ownership, hold and share state; source tokens never enter batch resolution.
+  // A read's session resolution moments ago already proved the account active.
   async resolveMany(collections: Collection[], viewer: AuthUser | null) {
     return this.resolveBatch(collections, viewer);
   }
@@ -52,6 +54,7 @@ export class CollectionPolicyService {
     if (!collections.length) return result;
     if (
       viewer &&
+      !recentlyVerifiedViewer(viewer) &&
       !(await this.prisma.user.findFirst({
         where: { id: viewer.userId, accountState: "active" },
         select: { id: true },

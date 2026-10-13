@@ -9,6 +9,67 @@ summary of what changed after completed work has been promoted out of `ref/`.
 
 ## Unreleased
 
+- Show the applied, server-normalised audit filters after a background filter
+  submission (the form remounts per applied filter set) and make audit browser
+  journeys wait for the filtered result rather than the typed fields.
+
+- Mark fully rendered signed-out public pages (home, About, Discover, published
+  collections, public hubs and profiles) cacheable at the edge for about a minute
+  (ADR-0066). Signed-in, cookie-bearing, token, router and failed renders stay
+  private. Takes effect once the Cloudflare Cache Rule in the edge-cache runbook exists.
+
+- Preload a route's JavaScript when a link is hovered, focused or pressed, from a
+  post-build route manifest of immutable build assets; no page data is fetched
+  before navigation. First visits no longer wait for page data, then code.
+
+- Start a collection's resource, item and discussion reads alongside its
+  metadata read; share each hub/profile read between page metadata and body and
+  start it before the owner check; drop the redundant session pre-read from Manage
+  row continuation. The API still authorizes every read.
+
+- Load account state with better-auth's session user instead of a separate query
+  (ADR-0065); one fewer SQL statement on every signed-in request.
+
+- Reuse a read request's session proof of an active account in the collection
+  policy (same principal, at most one second) instead of re-reading it; writes,
+  workers and longer reads still re-check. Removes one SQL statement per policy
+  evaluation on signed-in reads.
+
+- Render a form's destination once: `/forms` continuations state whether layouts
+  must refresh (only search, sharing and link saves without session/appearance/
+  device cookies skip it), and GET filter forms navigate without a refresh.
+
+- Stream collection discussion independently so its delay or failure does not
+  block usable resource links. Load Settings sections on first use, retain visited
+  drafts and populate timezone choices when the picker opens. Preserve unvisited
+  profile/hub values through saves and keep streamed discussion anchors working.
+
+- Add an opt-in production-browser navigation benchmark covering cold entry,
+  page transitions and theme feedback/persistence under normal and throttled
+  conditions. Correct the older performance helper to omit document-only timings
+  for client transitions instead of reporting the previous document's timing.
+
+- Keep the browser document alive for internal navigation and form submissions;
+  apply appearance immediately and save in the background with failure feedback.
+  Retain server authorization, cookie-bearing continuations and history/session
+  revalidation. Remove mandatory JavaScript-free parity from product requirements.
+
+- Remove the visible Example badge from the homepage collection preview.
+
+- Align About's useful-links collection with the reader: simplify its heading
+  hierarchy, add descriptive tags, and share reopenable item links using the
+  existing copy control and native fallback. Use a complete presentation-only
+  collection snapshot with namestarlit attribution and fixed activity dates, like
+  Ada's homepage example; no real account, hub or collection is required.
+
+- Strengthen the ntumie. wordmark and right-align larger About/Join footer links;
+  remove the web footer tagline and the signed-in About footer link.
+  Give About its own “Good links belong together.” headline.
+- Move System/Light/Dark choices to Settings → On this device. Signed-out pages
+  follow the device theme, and the header has no theme switcher.
+- Give code and invitation emails a shared larger wordmark, with a smaller
+  copyright/year and the existing email tagline.
+
 - Keep automatic releases focused: run code/integration verification and four critical
   browser journeys, with the full browser suite in a separate manual workflow.
   The local pre-push hook continues to run `bun run verify`.
@@ -18,8 +79,6 @@ summary of what changed after completed work has been promoted out of `ref/`.
   role-only services and guarded retirement of the previous serving application.
 - Default production Google sign-in off until its callback is configured; an
   explicit backend availability switch hides the option without deleting credentials.
-- Keep footer navigation left and its tagline right even when a phone layout wraps;
-  preserve the homepage and About page's distinct labels and native navigation.
 
 - Accept production CI/CD at `https://ntumie.link`: GitHub verification, image
   rehearsal and immutable GHCR publication now precede successful migration and

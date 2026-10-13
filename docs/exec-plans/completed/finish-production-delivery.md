@@ -109,3 +109,30 @@ owner review and live acceptance. `workspace/handoff.md` records cross-repo stat
 
 GitHub main, GHCR, Dokploy 0.30.8, existing external Swarm secrets/data network and
 shared PostgreSQL/Redis. The app continues to accept normal env and `_FILE` inputs.
+
+## Publication and live acceptance — 12 October 2026
+
+The owner subsequently authorized the agent to push in order. Infra `4c3dc17`
+([run 38297513031](https://github.com/hashikome/infra/actions/runs/38297513031))
+passed before ntumie `6cb03c1`
+([run 38298443767](https://github.com/hashikome/ntumie/actions/runs/38298443767)).
+Handbook `15a56c1` / run `38301835146` also passed. The later focused-CI release
+`6fb4cd3` / run `38301467702` is the current production revision; its acceptance
+is recorded in [the completed verification plan](focus-release-verification.md).
+
+Independent public checks confirmed ready PostgreSQL/Redis, disabled Google
+sign-in, and the requested footer labels/alignment at 320/390/1280px. Borrowed
+MySQL/DHIS2 containers remain stopped with their data preserved. Legacy app/queue
+Stack definitions remain referenced by the coordinators; remove those references
+safely before retiring the records. Physical data volumes retain their old names.
+
+The existing API did not regain database readiness after the PostgreSQL endpoint
+replacement, although DNS/TCP and a fresh authenticated database client worked.
+The normal application release restored readiness; the published debt tracker
+owns connection-recovery follow-up before future maintenance/public launch.
+
+Initial administrator email was configured with owner authorization. One pending
+invitation was sent once across both releases; the owner found it in Junk.
+On 13 October the owner confirmed the invitation flow completed successfully
+(user acceptance; no subsequent database check).
+These final acceptance notes are local until the next source publication.

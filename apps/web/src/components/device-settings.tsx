@@ -1,16 +1,17 @@
 "use client";
+
 import { useRef, useState } from "react";
 import { submitForm } from "../lib/http";
+import { AppForm } from "./app-form";
 import { useResourceNavigation } from "./resource-navigation";
 
-export function DeviceSettings({ hidden, saved }: { hidden: boolean; saved: boolean }) {
+export function DeviceSettings({ saved }: { saved: boolean }) {
   const { newTab, setNewTab } = useResourceNavigation();
   const busy = useRef(false);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState(saved ? "Saved" : "");
   return (
-    <form
-      hidden={hidden}
+    <AppForm
       action="/forms/device-preferences"
       method="post"
       className="action-form"
@@ -33,7 +34,7 @@ export function DeviceSettings({ hidden, saved }: { hidden: boolean; saved: bool
       }}
     >
       <fieldset className="account-field-group" disabled={saving}>
-        <legend>On this device</legend>
+        <legend>Resource links</legend>
         <div className="settings-field">
           <label htmlFor="resource-same-tab">Open external resources in the same tab</label>
           <div className="settings-field-control">
@@ -65,6 +66,6 @@ export function DeviceSettings({ hidden, saved }: { hidden: boolean; saved: bool
           </span>
         </div>
       </fieldset>
-    </form>
+    </AppForm>
   );
 }

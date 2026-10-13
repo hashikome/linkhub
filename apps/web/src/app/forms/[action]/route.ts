@@ -27,6 +27,7 @@ import { draftCookie, draftRoom, readDraft, saveDraft } from "../../../lib/captu
 import { completeSignIn } from "../../../lib/complete-sign-in";
 import { serverCookie } from "../../../lib/cookies";
 import { resourceSameTabCookie } from "../../../lib/device-preferences";
+import { formNavigationResponse } from "../../../lib/form-navigation";
 import {
   accountFlowCookie,
   flowCookie,
@@ -40,7 +41,7 @@ import {
   sealFlow,
   sealInvitationFlow,
 } from "../../../lib/form-server";
-import { type ApiPath, safeDocumentReturn, safeReturn, sessionCookie } from "../../../lib/http";
+import { type ApiPath, safeReturn, sessionCookie } from "../../../lib/http";
 import { importForm } from "../../../lib/import-forms";
 import { sealSearch } from "../../../lib/manage-search";
 import {
@@ -60,7 +61,11 @@ import { dayBoundary } from "../../../lib/time";
 import { captureUrl, isUuid, parseTags } from "../../../lib/validation";
 import type { VerificationPurpose } from "../../../lib/verification";
 
-export async function POST(request: Request, { params }: { params: Promise<{ action: string }> }) {
+export async function POST(request: Request, context: { params: Promise<{ action: string }> }) {
+  const { action } = await context.params;
+  return formNavigationResponse(request, await handlePost(request, context), action);
+}
+async function handlePost(request: Request, { params }: { params: Promise<{ action: string }> }) {
   const { action } = await params;
   let form: URLSearchParams;
   try {
@@ -335,12 +340,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ act
     return redirectResponse("/settings?section=device&notice=device-saved", [cookie]);
   }
   if (action === "theme") {
+    if (!(await readSession()))
+      return redirectResponse("/sign-in?returnTo=%2Fsettings%3Fsection%3Ddevice");
     const theme = form.get("theme");
-    if (!["light", "dark", "system"].includes(theme ?? ""))
+    if (theme !== "light" && theme !== "dark" && theme !== "system")
       return new Response("Invalid appearance", { status: 400 });
-    return redirectResponse(safeDocumentReturn(form.get("returnTo")), [
-      appearanceCookie(theme as string, !!(await readSession())),
-    ]);
+    const cookie = appearanceCookie(theme);
+    if (request.headers.get("accept")?.includes("application/json"))
+      return Response.json(
+        { ok: true, data: { theme } },
+        {
+          headers: { "Set-Cookie": cookie, "Cache-Control": "private, no-store, max-age=0" },
+        },
+      );
+    return redirectResponse("/settings?section=device&notice=appearance-saved", [cookie]);
   }
   if (action === "profile-save") {
     const json = request.headers.get("accept")?.includes("application/json");

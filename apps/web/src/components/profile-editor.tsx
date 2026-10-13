@@ -1,34 +1,29 @@
 "use client";
-import type { HandleAvailability, Profile, UsernameAvailability } from "@ntumie/types";
+
+import type { Profile, UsernameAvailability } from "@ntumie/types";
+import dynamic from "next/dynamic";
+import { useRouter, useSearchParams } from "next/navigation";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { browserRead } from "../lib/browser-api";
 import { submitForm } from "../lib/http";
-import { DeviceSettings } from "./device-settings";
+import { navigateInApp } from "../lib/navigation";
+import { AppForm } from "./app-form";
 import { FormNotice } from "./form-notice";
-import { LocalTime } from "./local-time";
+import { type Draft, type HandleState, SettingsFieldContext } from "./settings-field-context";
+import SettingsProfileFields from "./settings-profile-fields";
+import type { Theme } from "./theme-picker";
 import { useTimeZone } from "./time-zone";
 
-type Draft = {
-  username: string;
-  showOwner: boolean;
-  displayName: string;
-  bio: string;
-  timeZone: string;
-  hubName: string;
-  handle: string;
-  hubDescription: string;
-};
+const loading = () => (
+  <p className="field-help" role="status">
+    Loading settings…
+  </p>
+);
+const SettingsHubFields = dynamic(() => import("./settings-hub-fields"), { loading });
+const SettingsDevice = dynamic(() => import("./settings-device"), { loading });
+const SettingsNotifications = dynamic(() => import("./settings-notifications"), { loading });
+
 type AvailabilityState = { status: HandleState; suggestion?: string };
-type HandleState = HandleAvailability["status"] | "checking" | "error";
-const handleMessages: Record<HandleState, string> = {
-  current: "",
-  available: "Available",
-  invalid: "Use 3–60 lowercase letters, numbers and single hyphens between words.",
-  reserved: "This handle is reserved. Choose another.",
-  taken: "This handle is already in use. Choose another.",
-  checking: "Checking availability…",
-  error: "We couldn't check availability. You can still try saving your profile.",
-};
 function draftOf(profile: Profile): Draft {
   return {
     username: profile.username,
@@ -53,17 +48,21 @@ function sameDraft(a: Draft, b: Draft) {
     a.hubDescription === b.hubDescription
   );
 }
-function readDraft(form: HTMLFormElement): Draft {
+function readDraft(form: HTMLFormElement, previous: Draft): Draft {
   const data = new FormData(form);
+  const value = (key: keyof Draft) =>
+    data.has(key) ? String(data.get(key) ?? "") : String(previous[key]);
   return {
-    username: String(data.get("username") ?? ""),
-    displayName: String(data.get("displayName") ?? ""),
-    bio: String(data.get("bio") ?? ""),
-    timeZone: String(data.get("timeZone") ?? ""),
-    showOwner: data.get("showOwner") === "on",
-    hubName: String(data.get("hubName") ?? ""),
-    handle: form.querySelector<HTMLInputElement>('[name="handle"]')?.value ?? "",
-    hubDescription: String(data.get("hubDescription") ?? ""),
+    username: value("username"),
+    displayName: value("displayName"),
+    bio: value("bio"),
+    timeZone: value("timeZone"),
+    showOwner: form.querySelector('[name="showOwner"]')
+      ? data.get("showOwner") === "on"
+      : previous.showOwner,
+    hubName: value("hubName"),
+    handle: form.querySelector<HTMLInputElement>('[name="handle"]')?.value ?? previous.handle,
+    hubDescription: value("hubDescription"),
   };
 }
 
@@ -110,19 +109,20 @@ function useAvailability(
 }
 
 export type SettingsSection = "profile" | "hub" | "notifications" | "device";
-export function ProfileEditor({
-  profile,
-  notice,
-  section: initialSection = "profile",
-  timeZones,
-}: {
-  profile: Profile;
-  notice?: string;
-  section?: SettingsSection;
-  timeZones: string[];
-}) {
+export function ProfileEditor({ profile, theme }: { profile: Profile; theme: Theme }) {
+  const router = useRouter();
+  const query = useSearchParams();
+  const notice = query.get("notice") ?? undefined;
+  const requestedSection = query.get("section");
+  const initialSection: SettingsSection =
+    requestedSection === "hub" ||
+    requestedSection === "notifications" ||
+    requestedSection === "device"
+      ? requestedSection
+      : "profile";
   const { setPreference } = useTimeZone();
   const [section, setSection] = useState<SettingsSection>(initialSection);
+  useEffect(() => setSection(initialSection), [initialSection]);
   useEffect(() => {
     const sync = () => {
       const value = new URL(window.location.href).searchParams.get("section");
@@ -133,6 +133,10 @@ export function ProfileEditor({
     window.addEventListener("popstate", sync);
     return () => window.removeEventListener("popstate", sync);
   }, []);
+  const [visited, setVisited] = useState(() => new Set<SettingsSection>([initialSection]));
+  useEffect(() => {
+    setVisited((previous) => (previous.has(section) ? previous : new Set([...previous, section])));
+  }, [section]);
   const [saved, setSaved] = useState(profile);
   const [draft, setDraft] = useState(() => draftOf(profile));
   const form = useRef<HTMLFormElement>(null);
@@ -169,14 +173,14 @@ export function ProfileEditor({
     // Preserve typing/autofill that happened before hydration. Native controls
     // own their values; React owns validation and confirmed-save feedback.
     if (form.current) {
-      latest.current = readDraft(form.current);
+      latest.current = readDraft(form.current, latest.current);
       setDraft(latest.current);
     }
     setEnhanced(true);
   }, []);
   const edit = () => {
     if (!form.current) return;
-    const next = readDraft(form.current);
+    const next = readDraft(form.current, latest.current);
     latest.current = next;
     setDraft(next);
     setFeedback(undefined);
@@ -215,7 +219,7 @@ export function ProfileEditor({
     busy.current = true;
     setSavingPart(part);
     setFeedback(undefined);
-    const submitted = readDraft(form.current);
+    const submitted = readDraft(form.current, latest.current);
     latest.current = submitted;
     setDraft(submitted);
     try {
@@ -277,7 +281,7 @@ export function ProfileEditor({
             : "Your earlier changes were saved. You still have unsaved changes.",
         });
         if (unchanged && navigateAfterSave.current) {
-          window.location.assign(
+          navigateInApp(
             navigateAfterSave.current === "hub" && result.data.hubId
               ? `/h/${encodeURIComponent(result.data.hubId)}?view=public`
               : `/${encodeURIComponent(result.data.username)}`,
@@ -342,405 +346,171 @@ export function ProfileEditor({
   }, [enhanced, dirty, draft, saving, validFormat, feedback, saved.hubId]);
 
   return (
-    <div className="settings-layout">
-      <nav className="settings-nav" aria-label="Settings sections">
-        {(
-          [
-            ["profile", "Profile"],
-            ["hub", "Hub"],
-            ["notifications", "Notifications"],
-            ["device", "On this device"],
-          ] as const
-        ).map(([key, label]) => (
-          <a
-            key={key}
-            href={key === "profile" ? "/settings" : `/settings?section=${key}`}
-            aria-current={section === key ? "page" : undefined}
-            onClick={(event) => {
-              if (
-                event.button !== 0 ||
-                event.metaKey ||
-                event.ctrlKey ||
-                event.shiftKey ||
-                event.altKey
-              )
-                return;
+    <SettingsFieldContext
+      value={{
+        profile,
+        saved,
+        draft,
+        section,
+        enhanced,
+        saving,
+        savingPart,
+        usernameState,
+        handleState,
+        suggestion,
+        form,
+        edit,
+        openPublicView,
+      }}
+    >
+      <div className="settings-layout">
+        <nav className="settings-nav" aria-label="Settings sections">
+          {(
+            [
+              ["profile", "Profile"],
+              ["hub", "Hub"],
+              ["notifications", "Notifications"],
+              ["device", "On this device"],
+            ] as const
+          ).map(([key, label]) => (
+            <a
+              key={key}
+              href={key === "profile" ? "/settings" : `/settings?section=${key}`}
+              aria-current={section === key ? "page" : undefined}
+              onClick={(event) => {
+                if (
+                  event.button !== 0 ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return;
+                event.preventDefault();
+                if (dirty && !form.current?.reportValidity()) return;
+                setSection(key);
+                router.push(event.currentTarget.href, { scroll: false });
+              }}
+            >
+              {label}
+            </a>
+          ))}
+          <a href="/settings/security">Security</a>
+        </nav>
+        <div className="settings-content">
+          {!feedback &&
+            !dirty &&
+            !["profile-saved", "device-saved", "appearance-saved"].includes(notice ?? "") && (
+              <FormNotice code={notice} />
+            )}
+          <AppForm
+            ref={form}
+            action="/forms/profile-save"
+            method="post"
+            className="action-form"
+            aria-busy={saving}
+            onSubmit={(event) => {
               event.preventDefault();
-              if (dirty && !form.current?.reportValidity()) return;
-              setSection(key);
-              window.history.pushState(null, "", event.currentTarget.href);
+              void save();
             }}
           >
-            {label}
-          </a>
-        ))}
-        <a href="/settings/security">Security</a>
-      </nav>
-      <div className="settings-content">
-        {!feedback && !dirty && !["profile-saved", "device-saved"].includes(notice ?? "") && (
-          <FormNotice code={notice} />
-        )}
-        <form
-          ref={form}
-          action="/forms/profile-save"
-          method="post"
-          className="action-form"
-          aria-busy={saving}
-          onSubmit={(event) => {
-            event.preventDefault();
-            void save();
-          }}
-        >
-          <input type="hidden" name="section" value={section} />
-          <div className="account-fields">
-            <fieldset className="account-field-group" hidden={section !== "profile"}>
-              <legend>Profile</legend>
-              <dl className="account-facts">
-                <div>
-                  <dt>Email address</dt>
-                  <dd className="account-email">{profile.email}</dd>
-                </div>
-              </dl>
-              <div className="settings-field">
-                <label htmlFor="display-name">Full name</label>
-                <input
-                  id="display-name"
-                  name="displayName"
-                  maxLength={255}
-                  autoComplete="name"
-                  defaultValue={profile.displayName}
-                  onChange={edit}
-                />
-              </div>
-              <div className="settings-field">
-                <label htmlFor="username">Username</label>
-                <div className="settings-field-control">
-                  <input
-                    id="username"
-                    name="username"
-                    required
-                    minLength={3}
-                    // Enhanced drafts can exceed the saved limit to request a suggestion.
-                    maxLength={enhanced ? 255 : 20}
-                    pattern="[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*"
-                    title="3–20 letters, numbers and single hyphens; saved in lowercase"
-                    autoComplete="username"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    defaultValue={profile.username}
-                    onChange={edit}
-                    aria-describedby="username-help username-status"
-                    aria-invalid={
-                      enhanced && ["invalid", "reserved", "taken"].includes(usernameState)
-                    }
-                  />
-                  <p className="field-help" id="username-help">
-                    3–20 characters. Saved in lowercase. Hyphens do not make a username available.
-                    Dots are not allowed.{" "}
-                    <a
-                      href={`/${encodeURIComponent(saved.username)}`}
-                      onClick={(event) => openPublicView(event, "profile")}
-                    >
-                      View your public profile
-                    </a>
-                  </p>
-                  <p
-                    id="username-status"
-                    role="status"
-                    hidden={!enhanced || usernameState === "current"}
-                    className={`field-help handle-status ${["invalid", "reserved", "taken"].includes(usernameState) ? "error" : usernameState === "available" ? "success" : ""}`}
-                  >
-                    {usernameState === "error" && draft.username.trim().length > 20
-                      ? "We couldn't suggest a shorter name. Choose 20 characters or fewer."
-                      : handleMessages[usernameState]
-                          .replaceAll("handle", "username")
-                          .replace("3–60", "3–20")}
-                  </p>
-                  {enhanced && suggestion && (
-                    <p className="field-help">
-                      <button
-                        type="button"
-                        className="text-button"
-                        onClick={() => {
-                          const input = form.current?.elements.namedItem("username");
-                          if (!(input instanceof HTMLInputElement)) return;
-                          input.value = suggestion;
-                          edit();
-                          input.focus();
-                        }}
-                      >
-                        Use {suggestion}
-                      </button>
-                      {" or shorten your name."}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="settings-field">
-                <label htmlFor="bio">Bio</label>
-                <div className="settings-field-control">
-                  <textarea
-                    id="bio"
-                    name="bio"
-                    rows={4}
-                    maxLength={500}
-                    defaultValue={profile.bio ?? ""}
-                    onChange={edit}
-                    aria-describedby="bio-help"
-                  />
-                  <p className="field-help" id="bio-help">
-                    A little about you, shown on your public profile. Up to 500 characters.
-                  </p>
-                </div>
-              </div>
-              <div className="settings-field">
-                <label htmlFor="time-zone">Timezone</label>
-                <div className="settings-field-control">
-                  <select
-                    id="time-zone"
-                    name="timeZone"
-                    defaultValue={profile.timeZone ?? ""}
-                    onChange={edit}
-                    aria-describedby="time-zone-help"
-                  >
-                    <option value="">Automatic (your device’s timezone)</option>
-                    {timeZones.map((zone) => (
-                      <option key={zone} value={zone}>
-                        {zone.replaceAll("_", " ")}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="field-help" id="time-zone-help">
-                    Choose how dates and times appear. A selected timezone follows your account
-                    across devices.
-                  </p>
-                </div>
-              </div>
-              <dl className="account-facts">
-                <div>
-                  <dt>Member since</dt>
-                  <dd>
-                    <LocalTime at={profile.createdAt} variant="date" />
-                  </dd>
-                </div>
-              </dl>
-              <p className="field-help">
-                <a href="/support#profile-picture">How do I update my profile picture?</a>
-              </p>
-            </fieldset>
-            <fieldset className="account-field-group" hidden={section !== "hub"}>
-              <legend>Hub</legend>
-              {!saved.hubId ? (
-                <p className="field-help">
-                  Your hub is created when you save your first link or create a collection. You can
-                  read and contribute without one. <a href="/hub">Create your hub</a> or{" "}
-                  <a href="/capture">Save your first link</a>.
-                </p>
-              ) : (
-                <>
-                  <dl className="account-facts">
-                    <div>
-                      <dt>Hub ID</dt>
-                      <dd className="hub-id">{saved.hubId ?? "Not available"}</dd>
-                    </div>
-                  </dl>
-                  <div className="settings-field">
-                    <label htmlFor="hub-name">Hub name</label>
-                    <input
-                      id="hub-name"
-                      name="hubName"
-                      required
-                      maxLength={255}
-                      defaultValue={saved.hubName ?? ""}
-                      onChange={edit}
-                    />
-                  </div>
-                  <div className="settings-field">
-                    <label htmlFor="handle">Handle</label>
-                    <div className="settings-field-control">
-                      <input
-                        id="handle"
-                        name="handle"
-                        form="profile-handle-form"
-                        required
-                        minLength={3}
-                        maxLength={60}
-                        pattern="[a-z0-9]+(-[a-z0-9]+)*"
-                        title="3–60 lowercase letters, numbers and hyphens"
-                        autoCapitalize="none"
-                        spellCheck={false}
-                        aria-describedby={`handle-help handle-status${saved.handleChangeAvailableAt ? " handle-cooldown" : ""}`}
-                        aria-invalid={
-                          enhanced && ["invalid", "reserved", "taken"].includes(handleState)
-                        }
-                        readOnly={!!saved.handleChangeAvailableAt || savingPart === "handle"}
-                        defaultValue={saved.handle ?? ""}
-                        onChange={edit}
-                      />
-                      <p className="field-help">
-                        You can change your handle once every 30 days. Once changed, your previous
-                        handle can never be used again. Shared links will keep working.
-                      </p>
-                      {saved.handleChangeAvailableAt && (
-                        <p className="field-help" id="handle-cooldown">
-                          You can change your handle again on{" "}
-                          <LocalTime at={saved.handleChangeAvailableAt} />.
-                        </p>
-                      )}
-                      <p className="field-help">Your hub address: /@{draft.handle}</p>
-                      <button
-                        className="button handle-save-button"
-                        type="submit"
-                        form="profile-handle-form"
-                        disabled={
-                          !!saved.handleChangeAvailableAt ||
-                          (enhanced &&
-                            (saving ||
-                              draft.handle === saved.handle ||
-                              invalidStates.includes(handleState)))
-                        }
-                      >
-                        Save handle
-                      </button>
-                      <p id="handle-help" className="field-help">
-                        <a
-                          href={`/h/${encodeURIComponent(saved.hubId)}?view=public`}
-                          onClick={(event) => openPublicView(event, "hub")}
-                        >
-                          View your public hub
-                        </a>
-                      </p>
-                      <p
-                        id="handle-status"
-                        className={`field-help handle-status ${["invalid", "reserved", "taken"].includes(handleState) ? "error" : handleState === "available" ? "success" : ""}`}
-                        role="status"
-                        hidden={!enhanced || handleState === "current"}
-                      >
-                        {handleMessages[handleState]}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="settings-field">
-                    <label htmlFor="show-owner">Show owner</label>
-                    <div className="settings-field-control">
-                      <div className="settings-toggle-control">
-                        <input
-                          id="show-owner"
-                          name="showOwner"
-                          type="checkbox"
-                          // biome-ignore lint/a11y/useAriaPropsForRole: Native checkbox exposes checked state, including without JavaScript.
-                          role="switch"
-                          defaultChecked={saved.showOwner ?? false}
-                          onChange={edit}
-                          aria-describedby="show-owner-help"
-                        />
-                        <span className="settings-toggle-track" aria-hidden="true" />
-                      </div>
-                      <p className="field-help" id="show-owner-help">
-                        Show the owner on this hub and link to this hub from their profile.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="settings-field">
-                    <label htmlFor="hub-description">Description</label>
-                    <textarea
-                      id="hub-description"
-                      name="hubDescription"
-                      rows={4}
-                      maxLength={5000}
-                      defaultValue={saved.hubDescription ?? ""}
-                      onChange={edit}
-                    />
-                  </div>
-                </>
-              )}
-            </fieldset>
-          </div>
-          <div
-            className="profile-save-actions"
-            hidden={(section === "notifications" || section === "device") && !dirty && !saving}
-          >
-            <noscript>
-              <button className="button primary" type="submit">
-                Save changes
-              </button>
-            </noscript>
-            <span
-              className={`profile-save-status meta${savedFeedback ? " success" : ""}`}
-              role="status"
+            <input type="hidden" name="section" value={section} />
+            {section !== "profile" &&
+              !visited.has("profile") &&
+              (["username", "displayName", "bio", "timeZone"] as const).map((name) => (
+                <input key={name} type="hidden" name={name} value={draft[name]} />
+              ))}
+            {section !== "hub" && !visited.has("hub") && saved.hubId && (
+              <>
+                <input type="hidden" name="hubName" value={draft.hubName} />
+                <input type="hidden" name="hubDescription" value={draft.hubDescription} />
+                <input type="hidden" name="showOwner" value={draft.showOwner ? "on" : ""} />
+              </>
+            )}
+
+            <div className="account-fields">
+              {(section === "profile" || visited.has("profile")) && <SettingsProfileFields />}
+              {(section === "hub" || visited.has("hub")) && <SettingsHubFields />}
+            </div>
+            <div
+              className="profile-save-actions"
+              hidden={(section === "notifications" || section === "device") && !dirty && !saving}
             >
-              {saving ? (
-                "Saving…"
-              ) : dirty ? (
-                feedback?.success ? (
-                  "Newer changes aren't saved yet."
-                ) : (
-                  "Unsaved changes"
-                )
-              ) : savedFeedback ? (
-                <>
-                  <span aria-hidden="true">✓ </span>Saved
-                </>
-              ) : (
-                ""
-              )}
-            </span>
-          </div>
-          {feedback && !feedback.success && (
-            <div className="form-notice error" role="alert">
-              <p>{feedback.message}</p>
-              {enhanced && !feedback.signIn && (
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => {
-                    const target =
-                      feedback.part === "handle"
-                        ? document.getElementById("profile-handle-form")
-                        : form.current;
-                    if (target instanceof HTMLFormElement) target.requestSubmit();
-                  }}
-                >
-                  Retry
+              <noscript>
+                <button className="button primary" type="submit">
+                  Save changes
                 </button>
-              )}
-              {feedback.signIn && <a href="/sign-in?returnTo=%2Fsettings">Sign in</a>}
+              </noscript>
+              <span
+                className={`profile-save-status meta${savedFeedback ? " success" : ""}`}
+                role="status"
+              >
+                {saving ? (
+                  "Saving…"
+                ) : dirty ? (
+                  feedback?.success ? (
+                    "Newer changes aren't saved yet."
+                  ) : (
+                    "Unsaved changes"
+                  )
+                ) : savedFeedback ? (
+                  <>
+                    <span aria-hidden="true">✓ </span>Saved
+                  </>
+                ) : (
+                  ""
+                )}
+              </span>
+            </div>
+            {feedback && !feedback.success && (
+              <div className="form-notice error" role="alert">
+                <p>{feedback.message}</p>
+                {enhanced && !feedback.signIn && (
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => {
+                      const target =
+                        feedback.part === "handle"
+                          ? document.getElementById("profile-handle-form")
+                          : form.current;
+                      if (target instanceof HTMLFormElement) target.requestSubmit();
+                    }}
+                  >
+                    Retry
+                  </button>
+                )}
+                {feedback.signIn && <a href="/sign-in?returnTo=%2Fsettings">Sign in</a>}
+              </div>
+            )}
+          </AppForm>
+          <AppForm
+            id="profile-handle-form"
+            action="/forms/profile-save"
+            method="post"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void save("handle");
+            }}
+          >
+            <input type="hidden" name="savePart" value="handle" />
+            <input type="hidden" name="section" value="hub" />
+          </AppForm>
+          {(section === "device" || visited.has("device")) && (
+            <div hidden={section !== "device"}>
+              <SettingsDevice theme={theme} notice={notice} />
             </div>
           )}
-        </form>
-        <form
-          id="profile-handle-form"
-          action="/forms/profile-save"
-          method="post"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void save("handle");
-          }}
-        >
-          <input type="hidden" name="savePart" value="handle" />
-          <input type="hidden" name="section" value="hub" />
-        </form>
-        <DeviceSettings hidden={section !== "device"} saved={notice === "device-saved"} />
-        <p hidden={section !== "profile"}>
-          <a href="/account">Account access and deletion</a>
-        </p>
-        <section
-          className="notification-settings"
-          hidden={section !== "notifications"}
-          aria-labelledby="notification-settings-heading"
-        >
-          <h2 id="notification-settings-heading">Notifications</h2>
-          <dl className="account-facts">
-            <div>
-              <dt>Invitations</dt>
-              <dd>Always on</dd>
-            </div>
-          </dl>
-          <p className="field-help">
-            Invitations appear in your inbox. Invitation links and sign-in codes are sent by email.
+          <p hidden={section !== "profile"}>
+            <a href="/account">Account access and deletion</a>
           </p>
-        </section>
+          {(section === "notifications" || visited.has("notifications")) && (
+            <div hidden={section !== "notifications"}>
+              <SettingsNotifications />
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </SettingsFieldContext>
   );
 }

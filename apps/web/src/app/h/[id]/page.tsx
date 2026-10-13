@@ -5,7 +5,7 @@ import { OwnedHub } from "../../../components/owned-hub";
 import { PublicHub } from "../../../components/public-hub";
 import { ShareOpen } from "../../../components/share-open";
 import { failure, queryValue, withCursor } from "../../../lib/http";
-import { serverRead } from "../../../lib/server-api";
+import { readShared } from "../../../lib/server-api";
 import { readOwnProfile } from "../../../lib/session";
 import { sourcePath } from "../../../lib/sharing";
 import { isUuid } from "../../../lib/validation";
@@ -17,7 +17,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const result = isUuid(id) ? await serverRead<HubPage>(`/api/v1/hubs/${id}?limit=1`) : null;
+  const result = isUuid(id) ? await readShared<HubPage>(withCursor(`/api/v1/hubs/${id}`)) : null;
   return { title: result?.ok ? result.data.hub.name : "Hub" };
 }
 export default async function Page({
@@ -31,6 +31,8 @@ export default async function Page({
   if (!isUuid(id)) return <Feedback hub error={failure("not_found", 404)} />;
   const query = await searchParams;
   const report = <ShareOpen shareId={queryValue(query.via)} kind="hub" resourceId={id} />;
+  // Shared with metadata and started before the owner check resolves.
+  const firstPage = readShared<HubPage>(withCursor(`/api/v1/hubs/${id}`));
   const profile = queryValue(query.view) === "public" ? null : await readOwnProfile();
   if (profile?.hubId === id)
     return (
@@ -43,9 +45,10 @@ export default async function Page({
         />
       </>
     );
-  const result = await serverRead<HubPage>(
-    withCursor(`/api/v1/hubs/${id}`, queryValue(query.cursor)),
-  );
+  const cursor = queryValue(query.cursor);
+  const result = await (cursor
+    ? readShared<HubPage>(withCursor(`/api/v1/hubs/${id}`, cursor))
+    : firstPage);
   if (!result.ok) return <Feedback hub error={result} resetPath={`/h/${id}`} />;
   return (
     <>

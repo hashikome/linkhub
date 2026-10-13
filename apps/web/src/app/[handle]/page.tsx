@@ -13,22 +13,27 @@ import {
   routeSegment,
   withCursor,
 } from "../../lib/http";
-import { serverRead } from "../../lib/server-api";
+import { readShared } from "../../lib/server-api";
 import { readOwnProfile } from "../../lib/session";
 import { sourcePath } from "../../lib/sharing";
 
 export const dynamic = "force-dynamic";
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<{ handle: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }): Promise<Metadata> {
   const segment = routeSegment((await params).handle);
   if (!segment.startsWith("@")) {
     const person =
       /^[a-z0-9]+(-[a-z0-9]+)*$/.test(segment) && segment.length >= 3 && segment.length <= 20
-        ? await serverRead<PersonProfileData>(
-            `/api/v1/people/by-username/${encodeURIComponent(segment)}?limit=1`,
+        ? await readShared<PersonProfileData>(
+            withCursor(
+              `/api/v1/people/by-username/${encodeURIComponent(segment)}`,
+              queryValue((await searchParams).cursor),
+            ),
           )
         : null;
     return {
@@ -37,7 +42,7 @@ export async function generateMetadata({
   }
   const handle = routeHandle(segment);
   const result = handle
-    ? await serverRead<HubPage>(`/api/v1/hubs/by-handle/${encodeURIComponent(handle)}?limit=1`)
+    ? await readShared<HubPage>(withCursor(`/api/v1/hubs/by-handle/${encodeURIComponent(handle)}`))
     : null;
   return { title: result?.ok ? result.data.hub.name : "Hub" };
 }
@@ -64,12 +69,15 @@ export default async function Page({
   const handle = routeHandle(segment);
   if (!handle) return <Feedback hub error={failure("not_found", 404)} />;
   const query = await searchParams;
-  const profile = queryValue(query.view) === "public" ? null : await readOwnProfile();
   const path = `/api/v1/hubs/by-handle/${encodeURIComponent(handle)}` as const;
+  // Shared with metadata and started before the owner check resolves.
+  const firstPage = readShared<HubPage>(withCursor(path));
+  const profile = queryValue(query.view) === "public" ? null : await readOwnProfile();
+  const cursor = queryValue(query.cursor);
   // Resolve the immutable identity before applying an owner's list cursor.
-  let result = await serverRead<HubPage>(
-    withCursor(path, profile ? undefined : queryValue(query.cursor)),
-  );
+  let result = await (profile || !cursor
+    ? firstPage
+    : readShared<HubPage>(withCursor(path, cursor)));
   if (!result.ok) return <Feedback hub error={result} resetPath={hubPath(handle)} />;
   if (profile?.hubId === result.data.hub.id)
     return (
@@ -79,8 +87,7 @@ export default async function Page({
         returnTo={sourcePath(hubPath(handle), query)}
       />
     );
-  if (profile && queryValue(query.cursor))
-    result = await serverRead<HubPage>(withCursor(path, queryValue(query.cursor)));
+  if (profile && cursor) result = await readShared<HubPage>(withCursor(path, cursor));
   if (!result.ok) return <Feedback hub error={result} resetPath={hubPath(handle)} />;
   return (
     <PublicHub

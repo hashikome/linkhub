@@ -1,4 +1,5 @@
 "use client";
+
 import type {
   ImportDraftView,
   ImportRowStatus,
@@ -11,6 +12,8 @@ import { browserRead } from "../lib/browser-api";
 import { type Failure, submitForm } from "../lib/http";
 import { importReasons, importStatusLabels } from "../lib/import-presentation";
 import { formatImportTags } from "../lib/import-tags";
+import { navigateInApp, refreshInApp } from "../lib/navigation";
+import { AppForm } from "./app-form";
 import { Retry } from "./feedback";
 import { NativeForm } from "./native-form";
 import { OperatorTableRegion } from "./operator-table-region";
@@ -82,7 +85,11 @@ export function ImportRows({
     ...(cursor ? { cursor } : {}),
   });
   useEffect(() => {
-    const stop = () => active.current?.abort();
+    const stop = () => {
+      active.current?.abort();
+      active.current = null;
+      setPending(false);
+    };
     window.addEventListener("reader:suspend", stop);
     return () => {
       stop();
@@ -146,7 +153,7 @@ export function ImportRows({
     if (!result.ok) {
       setSaving(false);
       if (result.status === 401) {
-        window.location.assign(`/sign-in?returnTo=${encodeURIComponent(current)}`);
+        navigateInApp(`/sign-in?returnTo=${encodeURIComponent(current)}`);
         return;
       }
       setSaveError(
@@ -158,7 +165,7 @@ export function ImportRows({
     }
     const nextDraft = "draft" in result.data ? result.data.draft : result.data;
     if (!nextDraft.collections.some((c) => c.id === draft.collectionId)) {
-      window.location.assign("/manage/import-export?tab=review&notice=done");
+      navigateInApp("/manage/import-export?tab=review&notice=done");
       return;
     }
     if ("draft" in result.data) {
@@ -205,7 +212,7 @@ export function ImportRows({
     if (controller.signal.aborted) return;
     if (!result.ok) {
       if ([401, 403, 404].includes(result.status)) {
-        window.location.reload();
+        refreshInApp();
         return;
       }
       setError(result);
@@ -437,7 +444,7 @@ export function ImportRows({
                       </td>
                       <td data-label="Edit">
                         {edit ? (
-                          <form
+                          <AppForm
                             id={form}
                             action="/forms/import-row"
                             method="post"
@@ -472,7 +479,7 @@ export function ImportRows({
                             >
                               Cancel
                             </a>
-                          </form>
+                          </AppForm>
                         ) : (
                           selectable(row) && (
                             <a
@@ -559,15 +566,15 @@ export function ImportRows({
         </div>
       </OperatorTableRegion>
       <div className="import-footer">
-        <form action={path} method="get" className="action-form">
+        <AppForm action={path} method="get" className="action-form">
           <input type="hidden" name="collection" value={draft.collectionId} />
           {status && <input type="hidden" name="status" value={status} />}
           <button className="button" type="submit" disabled={saving}>
             Refresh
           </button>
-        </form>
+        </AppForm>
         {!liveDraft.closed && (selected.length > 0 || !hydrated) && (
-          <form
+          <AppForm
             id="import-selection"
             action="/forms/import-selection"
             method="post"
@@ -625,7 +632,7 @@ export function ImportRows({
                 Confirm removal
               </button>
             </details>
-          </form>
+          </AppForm>
         )}
         <NativeForm
           id="import-collection"

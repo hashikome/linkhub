@@ -1,5 +1,6 @@
 import type { NotificationView } from "@ntumie/types";
 import type { Metadata } from "next";
+import { AppForm } from "../../components/app-form";
 import { FormNotice } from "../../components/form-notice";
 import { Updated } from "../../components/local-time";
 import { MarkNotificationsSeen } from "../../components/mark-seen";
@@ -44,11 +45,11 @@ export default async function Page({
           <p>Invitations and updates for your account.</p>
         </div>
         {result.ok && result.data.length > 0 && (
-          <form action="/forms/notifications-clear" method="post">
+          <AppForm action="/forms/notifications-clear" method="post">
             <button type="submit" className="button">
               Clear all
             </button>
-          </form>
+          </AppForm>
         )}
       </div>
       {!result.ok ? (

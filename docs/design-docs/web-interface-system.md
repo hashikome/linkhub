@@ -39,7 +39,7 @@ resources; narrow screens put discussion after the reader. DOM reading order
 must remain meaningful. There is no fixed mobile bottom bar.
 
 All routes have a skip-to-content link, one `h1`, a labelled main region and
-semantic navigation. Native links handle navigation; buttons perform actions.
+semantic navigation. Internal links use client navigation; buttons perform actions.
 Do not make a row containing secondary controls into one enclosing link.
 
 ## Component vocabulary
@@ -52,7 +52,7 @@ Do not make a row containing secondary controls into one enclosing link.
 | Heading resource | Section heading in resource order, with supporting description and native expand/collapse behavior. The reader uses the 24 px section role above 18 px resource titles. |
 | Expanded resource | Keep a persistent neutral surface and fine inset boundary around the title, destination, details and copy action. A small outer gap separates the open item from its neighbors. The grouping follows native `open` state, including without JavaScript; hover is not required, and keyboard focus remains distinct. |
 | Button | Filled accent for the primary action, bordered neutral with ink text for secondary, accent text for low emphasis. Shared primary/secondary button sizing: 32 px with a mouse/trackpad, 44 px touch targets on coarse pointers. Fields remain 38 px with fine pointers. Default/hover/focus/active/disabled/pending states share geometry. Signed-out navigation renders Sign in as a compact secondary button. |
-| Sharing | Profile, hub and collection sharing use contextual controls; Share ntumie. belongs on About. Contributors occupy the top of the collection sidebar; Discussion sits directly below them and grows with its own content on wide, tall screens, capped by the available page space above the footer before scrolling internally. Empty discussions stay compact. Its position is independent of the collection header. The footer contains About ntumie. and the tagline; home/About use the variants below. |
+| Sharing | Profile, hub and collection sharing use contextual controls; Share ntumie. belongs on About. Contributors occupy the top of the collection sidebar; Discussion sits directly below them and grows with its own content on wide, tall screens, capped by the available page space above the footer before scrolling internally. Empty discussions stay compact. Its position is independent of the collection header. The footer contains a right-aligned About ntumie. link; About uses the variants below. |
 | Toast | Transient confirmations (saved, resent, signed out, done, copied) appear top-center as a small card in the page's own surface, border and radius, with a tone mark (✓ success, dot info), fitted to the message; they clear after ~5 s and the `?notice=` code is removed afterwards. Errors, warnings and anything needing action stay inline: info (neutral blue), warning (amber), error (red). |
 | Email verification | One flow for every purpose (sign in, first link, continue, resume, confirm, invitation): the start screen (reason line; the known address in bold or an email field; what happens next; Send code, plus Cancel where backing out makes sense) and the code screen (where it went in bold, the code, the purpose's button, "Didn't receive the code? Send a new code"). Short paragraphs with clear space; no extra panels. |
 | Pagination | Visible continuation control with pending state and result-count announcement; prevent duplicate loads; preserve existing results on a retryable page failure. |
@@ -93,7 +93,9 @@ acceptance concerns new requests and stale application/browser state.
 ## Runtime and HTTP boundary
 
 Hashed build assets under `/_next/static/` use immutable browser caching. Documents,
-forms and private reads remain no-store. Layout, capture and Settings share the
+forms and private reads remain no-store, except fully rendered signed-out public
+pages, which the edge may share for about a minute (ADR-0066,
+[runbook](../runbooks/edge-cache.md)). Layout, capture and Settings share the
 profile result only within the current server request, preserving 401/error
 behavior and rechecking authorization on the next request.
 
@@ -179,13 +181,12 @@ not in the web application. Backend validation and authorization remain decisive
 
 Server/browser config exports, server-only readers, a central browser adapter,
 mechanical import checks and the root development launcher enforce the client
-boundary. Normal document links avoid router prefetch/cache. Complete initial
-server rendering awaits its reads so pages and cursor navigation remain usable
-without JavaScript. Enhanced pagination preserves position/focus and announces
-results.
-If a document navigation is cancelled (for example with Escape), the loading
-surface keeps a keyboard-accessible reload action. It reloads the current URL
-through fresh server authorization; it never simply reveals the old hidden DOM.
+boundary. Ordinary links use client navigation without speculative private
+prefetch. Collection metadata/resources remain authorization-gated; discussion
+streams independently in its own Suspense boundary, so pending or failed comments
+cannot block useful links. The sidebar announces pending discussion and retains
+its own failure state. Discussion fragment targets resolve when streamed content
+mounts. Enhanced pagination preserves position/focus and announces results.
 
 The dev browser calls the backend directly; Next has no API rewrite. Production
 uses ingress path routing to the API and web separately. Both dev and production
@@ -229,25 +230,33 @@ The notification badge counts items newer than the account's last visit to
 Notifications (`users.notifications_seen_at`); “Clear all” sets
 `notifications_cleared_at`. `GET /api/v1/notifications`, `POST …/seen` and
 `POST …/clear` are account-owned and separate from audited operator APIs.
-Product footers show About ntumie. left and “Good links belong together.” right,
-with body-size text, no year and no top divider. The homepage shows only About
-ntumie. About shows Join ntumie. to `/sign-up`, or Discover to `/discover` for
-signed-in visitors. All variants render in initial HTML and remain native links.
-About reuses the landing hero and question animation with the prompts “Found a
+Product footers show one right-aligned About ntumie. link at 18 px, without a
+tagline, year or divider. About shows Join ntumie. to `/sign-up` for signed-out
+visitors and no footer link for signed-in visitors. All variants render in initial
+HTML and remain native links. The header wordmark is 24 px on phones and 28 px
+from 640 px, weight 700; it serves as the logo. See
+[ADR-0063](../engineering-decisions/0063-wordmark-footer-and-appearance.md).
+About uses “Good links belong together.” as its headline and the shared question animation with the prompts “Found a
 good read?”, “Built a useful collection?” and “Know someone who would enjoy it?”.
 Its paragraph reads “Give someone else a place for their good finds. Get a little
 help, meet the person building it, or share ntumie.” Its Share
 ntumie. action opens site sharing and returns to About, while shared site URLs
 still point to the homepage. The minimal collection contains Support and Paul
-John's portfolio at `https://namestarlit.com`; no invented metadata or Example
-badge. Internal links stay in this tab, and the portfolio follows the device
+John's portfolio at `https://namestarlit.com`. Like the homepage's Ada collection,
+About uses a static typed collection/resource fixture, including a simulated hub,
+fixed dates and namestarlit attribution. It never needs an account, real hub or
+API collection. Shared `CollectionMeta` and resource details render its metadata.
+Collection tags aggregate the fixture's help/portfolio resource tags, with a
+Help and the maker section and description. No Example badge is shown on About.
+Copy link to this item generates `/about?item=<id>#item-<id>`; the server selects
+that item on direct entry, with a native item link when JavaScript is disabled.
+Unknown or section identifiers fall back to Support. Internal links stay in this tab, and the portfolio follows the device
 preference. Add Terms/Privacy only once actual pages exist. Embedded collections
 follow reader typography, with heading levels offset beneath the hero h1.
 See [ADR-0056](../engineering-decisions/0056-about-collection-and-footer-navigation.md).
 Service status remains API monitoring without a navigation entry.
-A single icon button beside the avatar cycles System → Light → Dark → System.
-Its icon shows the current mode; its accessible label and tooltip name the current
-and next modes. System remains the default.
+Settings → On this device offers System, Light and Dark buttons with a visible
+selected state and an Appearance saved confirmation. System remains the default.
 
 Manage is one role-aware workspace. Owners see Access, Collections and Audit;
 operators also see Accounts and Analytics, and admins have Team and Invitations.
@@ -334,7 +343,7 @@ using the canvas surface and shared panel radius, matching the collection and
 discussion containers. Navigation stays unboxed beside it, with a surface fill
 for the selected section. Fields use whitespace rather than separator lines. Necessary helper text sits
 beneath its control, including public-view links and Show owner behavior.
-Sign out lives only in the account menu; Appearance remains in the header.
+Sign out lives only in the account menu; Appearance lives in Settings → On this device.
 
 Profile starts with Email address, then Full name, Username, Bio and Member since. Bio is optional public plain text,
 limited to 500 characters, with help beneath the textarea.
@@ -349,7 +358,15 @@ button. Its help explains that ntumie. links stay in the same tab and other
 browsers keep their own choice. Native and enhanced saving share the same cookie;
 failed enhanced saves retain the choice and offer a retry through the save button.
 
-Section changes with JavaScript keep drafts mounted and autosaving. Native
+Settings keeps its editor in a persistent route-group layout keyed by authorized
+user ID, so section history can revalidate access without remounting drafts.
+Profile code loads with the editor; other section code/controls load on first
+use. Visited sections stay mounted while Settings remains open, preserving
+drafts and autosave. The shared editor merges absent fields from retained state;
+unopened profile/hub fields never become blank updates. Timezone choices populate
+the native select on focus/pointer interaction; initial rendering contains only
+Automatic and the saved choice. The interactive picker requires JavaScript.
+Native
 links and explicit Save changes work without JavaScript, retaining the selected
 section after saving. Desktop rows place labels left and controls right; narrow
 screens stack labels and fields. View your public hub links to `/h/:hubId`.
@@ -393,16 +410,16 @@ upload UI, embedded editor or automatic name/bio import is introduced.
 Appearance is a validated, HttpOnly, SameSite cookie containing only `light`,
 `dark` or `system`. Server rendering sets the root attribute, and CSS semantic
 `light-dark()` tokens follow it without a startup script or a theme flash. System
-reacts to the OS preference. Header theme forms preserve the current safe local
-URL, including shared-link query context, and work without JavaScript. The account
+reacts to the OS preference. Theme forms require a valid session and a same-origin
+submission. Appearance applies immediately and persists in the background, with
+inline saving/failure feedback. The account
 menu is a native disclosure enhanced with Escape and outside-click dismissal.
 
-Appearance is available in the header to every visitor. Signed-out readers
-default to System and can choose a temporary appearance for their browser session.
-Their toggle shows only the resolved Light/Dark mode; System is an explicit choice
-only for signed-in users. CSS resolves the reader icon before hydration.
-Their reader choice is separate from the saved Light/Dark/System preference used
-with a valid account session; changing one never overwrites the other.
+Appearance lives in Settings → On this device for signed-in users, with explicit
+System, Light and Dark choices. System is the default. The choice is saved in
+this browser and applies only with a valid session; signed-out pages always follow
+the device preference. The header has no theme control. Existing reader appearance
+cookies are ignored. JavaScript-free behavior is a fallback, not a product gate.
 The account-menu trigger shows only the avatar; the popup begins with Profile
 and Hub, followed by Notifications.
 
@@ -417,14 +434,29 @@ current, available, reserved, taken and invalid names without exposing owners.
 It is advisory: final validation and the database unique constraint decide the
 write. Discard stale availability responses and preserve edits made during a save.
 
-Under [ADR-0048](../engineering-decisions/0048-nonblocking-navigation-progress.md),
-ordinary GET navigation keeps the current authorized view visible. The browser
-provides loading feedback; do not add an app spinner or a slow-response notice.
-Mutation submissions, session changes, long-away revalidation and history
-restoration still conceal stale content. Escape cancellation conceals the document
-and offers reload recovery with fresh authorization. Actual page failures retain
-error/retry views. Manage reuses the request-scoped session read, and independent
-import summary/row reads run in parallel.
+Under [ADR-0064](../engineering-decisions/0064-client-navigation-and-interactive-forms.md),
+internal links and GET forms use Next.js client navigation. The current view stays
+visible while fresh server content loads, with a quiet progress cue. Downloads,
+modified clicks, external links and identity-provider redirects retain native
+browser behavior. There is no speculative prefetch of private content. Link intent
+(hover, focus, press) preloads only the destination route's immutable JavaScript,
+listed by a post-build manifest (`apps/web/scripts/route-chunks.ts`).
+
+Forms submit in the background through the existing same-origin command boundary.
+The server returns a cookie-preserving JSON destination; the client navigates and
+refreshes authorized content without replacing the document. The continuation
+also states whether layouts must re-render: only actions that cannot change the
+session, profile, notification count, appearance or device preferences (search,
+sharing and saving a link) skip it, and any session/appearance/device cookie forces
+it. GET forms are reads and navigate like links. Specialized inline
+forms keep their own feedback. Failures retain inputs, report uncertainty and do
+not automatically repeat writes. Late responses after leaving a form cannot
+redirect the reader. Appearance changes immediately and rolls back if saving fails.
+
+History restoration, session changes and long-away returns conceal stale protected
+content until a server refresh finishes. Server snapshots replace obsolete list
+state, and obsolete requests cannot append old rows. Native fallbacks are retained
+where cheap; JavaScript-free parity no longer dictates UI/UX or acceptance.
 
 
 The owner’s hub view leads with the same hub name, handle, optional owner
@@ -452,7 +484,7 @@ in metadata titles.
 
 Discover is a persistent header link grouped on the right with the account controls for both signed-in and
 anonymous visitors. Do not repeat it as a breadcrumb on hub/collection pages;
-collection context retains its hub link. Appearance is available to all visitors. Signed-in visitors also see Save a link
+collection context retains its hub link. Signed-out pages follow the device theme. Signed-in visitors see Save a link
 and the avatar; signed-out visitors see Sign in. Navigation wraps at narrow widths or
 enlarged text.
 

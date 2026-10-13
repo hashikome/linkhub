@@ -1,5 +1,8 @@
 "use client";
+
+import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { AppForm } from "./app-form";
 import { Avatar } from "./avatar";
 export function AccountMenu({
   userId,
@@ -19,9 +22,18 @@ export function AccountMenu({
   unreadNotifications: number;
 }) {
   const menu = useRef<HTMLDetailsElement>(null);
+  const pathname = usePathname();
+  const search = useSearchParams().toString();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Close persistent shell UI after route changes.
+  useEffect(() => {
+    if (menu.current) menu.current.open = false;
+  }, [pathname, search]);
   const [displayName, setDisplayName] = useState(name);
   const [profileUsername, setProfileUsername] = useState(username);
   const [unread, setUnread] = useState(unreadNotifications);
+  useEffect(() => setDisplayName(name), [name]);
+  useEffect(() => setProfileUsername(username), [username]);
+  useEffect(() => setUnread(unreadNotifications), [unreadNotifications]);
   useEffect(() => {
     const updated = (event: Event) => {
       const { name, username } =
@@ -75,9 +87,9 @@ export function AccountMenu({
           <a href="/settings">Settings</a>
           {canManage && <a href="/manage">Manage</a>}
         </nav>
-        <form action="/forms/sign-out" method="post">
+        <AppForm action="/forms/sign-out" method="post">
           <button type="submit">Sign out</button>
-        </form>
+        </AppForm>
       </div>
     </details>
   );

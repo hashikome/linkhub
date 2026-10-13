@@ -33,7 +33,6 @@ export function CollectionPreview({
     >
       <div className="sheet-bar">
         <span className="context">{context}</span>
-        {example && <span className="example-badge">Example</span>}
       </div>
       <CollectionHeading>
         <h2>{title}</h2>

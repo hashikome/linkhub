@@ -1,11 +1,9 @@
 import type { SessionView } from "@ntumie/types";
 import { AccountMenu } from "./account-menu";
-import { type Theme, ThemePicker } from "./theme-picker";
-export function SessionNav({ session, theme }: { session: SessionView | null; theme: Theme }) {
+export function SessionNav({ session }: { session: SessionView | null }) {
   if (!session)
     return (
       <div className="session-nav">
-        <ThemePicker theme={theme} compact allowSystem={false} />
         <a className="button nav-button" href="/sign-in">
           Sign in
         </a>
@@ -28,7 +26,6 @@ export function SessionNav({ session, theme }: { session: SessionView | null; th
         </svg>
         <span className="nav-save-label">Save a link</span>
       </a>
-      <ThemePicker theme={theme} compact />
       <AccountMenu
         userId={session.userId}
         hubId={session.hubId}

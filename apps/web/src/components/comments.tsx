@@ -1,5 +1,6 @@
 import type { CommentThreads, CommentView } from "@ntumie/types";
 import type { ReactNode } from "react";
+import { AppForm } from "./app-form";
 import { CommentFocus } from "./comment-focus";
 import { FormNotice } from "./form-notice";
 import { ShortTime } from "./local-time";
@@ -22,11 +23,11 @@ function ActionForm({
   className?: string;
 }) {
   return (
-    <form action={`/forms/${action}`} method="post" className={className}>
+    <AppForm action={`/forms/${action}`} method="post" className={className}>
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="returnTo" value={returnTo} />
       {children}
-    </form>
+    </AppForm>
   );
 }
 

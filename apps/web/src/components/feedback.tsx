@@ -1,6 +1,8 @@
 "use client";
+
 import { useEffect, useState } from "react";
 import type { Failure } from "../lib/http";
+import { refreshInApp } from "../lib/navigation";
 
 export function Retry({ seconds = 0, action }: { seconds?: number; action?: () => void }) {
   const [left, setLeft] = useState(seconds);
@@ -18,7 +20,7 @@ export function Retry({ seconds = 0, action }: { seconds?: number; action?: () =
       type="button"
       className="button"
       disabled={left > 0}
-      onClick={action ?? (() => window.location.reload())}
+      onClick={action ?? (() => refreshInApp())}
     >
       {left ? `Try again in ${left}s` : "Try again"}
     </button>

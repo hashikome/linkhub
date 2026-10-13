@@ -1,12 +1,12 @@
 # ADR-0056: About collection and footer navigation
 
-Status: Accepted
+Status: Partially superseded by [ADR-0063](0063-wordmark-footer-and-appearance.md)
 Date: 2026-10-12
 
 Brand labels below record the original decision. [ADR-0060](0060-ntumie-repository-and-branding.md)
 applies the current ntumie. name; current copy lives in the
-[interface system](../design-docs/web-interface-system.md). The navigation and
-layout decisions remain accepted.
+[interface system](../design-docs/web-interface-system.md). ADR-0063 supersedes the footer positioning, tagline, size and signed-in About
+variant, the repeated hero headline and the omission of simulated About metadata. The About collection and sharing decisions remain accepted.
 
 ## Context
 

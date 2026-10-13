@@ -1,7 +1,9 @@
 import { createServer } from "node:http";
 import { webServerConfig } from "@ntumie/config/web-server";
 import next from "next";
+import { applyEdgeCachePolicy } from "./server/edge-cache";
 import { sourceAttribution } from "./server/source";
+import { runEdgeCacheScope } from "./src/lib/edge-cache-scope";
 
 const config = webServerConfig();
 const dev = process.argv.includes("--dev");
@@ -24,7 +26,10 @@ const server = createServer((request, response) => {
   // or rendering. This header is server-only and carries no session authority.
   request.headers["x-web-read-source"] = attribute(request);
   request.headers["x-web-form-source"] = formAttribute(request);
-  void handle(request, response).catch(() => {
+  // Signed-out public pages may be cached at the edge; all else stays private.
+  const scope = { cacheable: true };
+  applyEdgeCachePolicy(request, response, scope);
+  void runEdgeCacheScope(scope, () => handle(request, response)).catch(() => {
     response.statusCode = 500;
     response.end("Unavailable");
   });

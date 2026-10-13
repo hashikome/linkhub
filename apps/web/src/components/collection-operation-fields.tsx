@@ -1,6 +1,8 @@
 "use client";
+
 import type { ReactNode } from "react";
 import { useActionState } from "react";
+import { AppForm } from "./app-form";
 import { ShareLink } from "./share-link";
 export type CollectionOperationState = { error?: string; link?: string; token?: string };
 export function CollectionOperationFields({
@@ -26,7 +28,7 @@ export function CollectionOperationFields({
   const [state, submit, pending] = useActionState(submitAction, {} as CollectionOperationState);
   return (
     <>
-      <form action={submit} className="action-form" aria-busy={pending}>
+      <AppForm action={submit} className="action-form" aria-busy={pending}>
         <input type="hidden" name="id" value={id} />
         <input type="hidden" name="action" value={action} />
         {returnTo && <input type="hidden" name="returnTo" value={returnTo} />}
@@ -44,7 +46,7 @@ export function CollectionOperationFields({
         >
           {pending ? "Working…" : label}
         </button>
-      </form>
+      </AppForm>
       {state.link && (
         <>
           <p>Anyone with this link can read the collection. Save it now; it is shown only once.</p>

@@ -1,7 +1,7 @@
 import type { Collection } from "@ntumie/types";
 import type { Metadata } from "next";
 import { CollectionFeedback } from "../../../components/collection-feedback";
-import { CollectionReader } from "../../../components/collection-reader";
+import { CollectionReader, startCollectionReads } from "../../../components/collection-reader";
 import { ShareOpen } from "../../../components/share-open";
 import { collectionPath, failure, permalink, queryValue } from "../../../lib/http";
 import { serverRead } from "../../../lib/server-api";
@@ -20,6 +20,7 @@ export default async function Page({
   if (!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id))
     return <CollectionFeedback error={failure("not_found", 404)} returnTo={permalink(id)} />;
   const query = await searchParams;
+  const reads = startCollectionReads(id, query);
   const result = await serverRead<Collection>(collectionPath(id), queryValue(query.s, 512));
   if (!result.ok)
     return <CollectionFeedback error={result} returnTo={sourcePath(permalink(id), query)} />;
@@ -31,7 +32,7 @@ export default async function Page({
         resourceId={id}
         token={queryValue(query.s, 512)}
       />
-      <CollectionReader collection={result.data} query={query} />
+      <CollectionReader collection={result.data} query={query} reads={reads} />
     </>
   );
 }

@@ -1,6 +1,7 @@
 import type { OperatorAccount, SessionView } from "@ntumie/types";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { AppForm } from "../../components/app-form";
 import { FormNotice } from "../../components/form-notice";
 import { accountsRows } from "../../components/manage-rows";
 import { ManageTable } from "../../components/manage-table";
@@ -40,7 +41,7 @@ export default async function Page({
         Find people by user ID, username, email or hub handle. Every action is recorded.
       </p>
       <FormNotice code={queryValue(query.notice)} />
-      <form method="post" action="/forms/manage-search" className="ops-filters">
+      <AppForm method="post" action="/forms/manage-search" className="ops-filters">
         <input type="hidden" name="page" value="accounts" />
         <label className="ops-search">
           <span className="sr-only">User ID, username, email or hub handle</span>
@@ -62,7 +63,7 @@ export default async function Page({
             Clear
           </a>
         )}
-      </form>
+      </AppForm>
       <ManageTable
         label="Accounts"
         headers={

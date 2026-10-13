@@ -251,6 +251,39 @@ This is a loopback fixture with identity encoding and no real metadata/email
 provider; it is a repeatable engineering baseline, not a deployed-user SLO.
 Keep before/after fixtures and conditions identical when assessing an optimization.
 
+### In-app navigation comparison
+
+Use the optional interaction benchmark when changes preserve the document:
+
+```bash
+BROWSER_NAVIGATION_BENCHMARK=1 BROWSER_ARTIFACT_DIR=/tmp/navigation-production \
+  bun run verify:isolated test:browser -t 'benchmarks navigation latency'
+```
+
+`navigation-performance.json` separates a cold signed-in homepage from clicks
+between already-open pages and theme feedback/persistence. Ten repetitions per
+journey run normally and under the slow conditions above. Each repetition starts
+with a fresh browser context; fixtures contain 26 owned collections and 22 source
+items. Server routes are warmed before sampling. The click clock is recorded in
+the browser and survives native navigation. Page readiness is checked on browser
+animation frames, avoiding assertion polling delays; completion requires the destination
+content, shell readiness, fonts and two animation frames. Collection navigation
+records usable resources first, then a separate `collection-discussion-ready`
+checkpoint. Loading placeholders never satisfy either content check. Theme feedback measures
+the selected appearance being applied; persistence is a separate sample.
+
+Reports include document replacement, requests, completed-response bytes at the
+measurement checkpoint (not total download size), backend call counts and sanitized
+browser request start/response/completion times. Request paths omit query strings;
+in-flight requests have no completion time at an earlier checkpoint.
+For a before/after comparison, run the same harness against both source
+versions sequentially, with matching fixtures and conditions. Include the source
+revision, sample count, medians, tail values and limitations in the report. Do not
+use an earlier document's navigation timing to describe a client transition; the
+older measurement helper now emits null document-only timings when the document
+is preserved. These fixtures are not measurements of the deployed server or the
+user's earlier three-second observation.
+
 ## Allocated local host ports
 
 When web 3004 and API 4004 are free, verify the actual defaults and native sign-in

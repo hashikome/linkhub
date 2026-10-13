@@ -5,6 +5,7 @@ import request from "supertest";
 import { App } from "supertest/types";
 import { AppModule } from "../src/app.module";
 import { configureApp } from "../src/app.setup";
+import { PrismaService } from "../src/database/prisma.service";
 import { signInWithCode } from "./fixtures/sign-in";
 
 // First collection creation establishes hub ownership atomically.
@@ -95,5 +96,34 @@ describe("Hub tenancy (e2e)", () => {
     const res = await request(server).get("/api/v1/discover?limit=50").expect(200);
     const body = res.body as { data: Array<{ title: string }> };
     expect(body.data.some((c) => c.title === "Published")).toBe(true);
+  });
+  // Reads reuse session resolution's active-account proof in the policy. A live
+  // session for a deactivated account must still read nothing private.
+  it("denies signed-in reads once the account is inactive despite a live session", async () => {
+    const server = app.getHttpServer();
+    const signed = await signInWithCode(server, {
+      email: `inactive_${sfx}@example.com`,
+      name: "Inactive reader",
+    });
+    const bearer = `Bearer ${signed.headers["set-auth-token"]}`;
+    const created = await request(server)
+      .post("/api/v1/collections")
+      .set("Authorization", bearer)
+      .send({ title: "Private", published: false })
+      .expect(201);
+    const id = created.body.data.id as string;
+    for (const path of [`/api/v1/collections/${id}`, `/api/v1/collections/${id}/resources`])
+      await request(server).get(path).set("Authorization", bearer).expect(200);
+    const prisma = app.get(PrismaService);
+    await prisma.user.update({
+      where: { id: signed.body.user.id },
+      data: { accountState: "inactive" },
+    });
+    expect(await prisma.session.count({ where: { userId: signed.body.user.id } })).toBeGreaterThan(
+      0,
+    );
+    for (const path of [`/api/v1/collections/${id}`, `/api/v1/collections/${id}/resources`])
+      await request(server).get(path).set("Authorization", bearer).expect(404);
+    await request(server).get("/api/v1/session").set("Authorization", bearer).expect(401);
   });
 });

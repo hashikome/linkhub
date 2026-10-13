@@ -49,8 +49,9 @@ latency or complete request counts; auth middleware is outside this fixture.
 
 ## Decision Log
 
-- Held back (they change what users see): shrinking the 100-reply preview; the
-  `fresh-document` scroll-reset workaround (needs a real-browser check first).
+- Held back (changes what users see): shrinking the 100-reply preview.
+  The former `fresh-document` scroll reset was replaced by App Router navigation
+  in the separate ADR-0064 interaction milestone (13 October 2026).
 - Pre-deployment: schema changes go into new reviewed migrations on top of the
   squashed `0_init`; the dev database is reset and reseeded (`bun run db:seed`)
   if a change is easier that way. No compatibility code.

@@ -110,12 +110,9 @@ export function createDeliveryAuth(options: DeliveryAuthOptions) {
   const ordinary = createAuth({ prisma, secret, baseURL, webOrigin, google: options.google });
   async function getSession(input: { headers: Headers }) {
     const session = await ordinary.api.getSession(input);
-    if (!session) return null;
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { accountState: true },
-    });
-    return user?.accountState === "active" ? session : null;
+    // accountState comes from the same fresh user row (create-auth additionalFields).
+    // A missing or renamed field fails closed: no session.
+    return session?.user.accountState === "active" ? session : null;
   }
   return {
     ...ordinary,

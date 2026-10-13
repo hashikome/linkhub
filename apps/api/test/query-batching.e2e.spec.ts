@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from "bun:test";
 import { randomUUID } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { markVerifiedReadViewer } from "../src/common/verified-viewer";
 import type { PrismaService } from "../src/database/prisma.service";
 import { type CollectionComment, PrismaClient } from "../src/generated/prisma/client";
 import { CommentsService } from "../src/modules/comments/comments.service";
@@ -76,6 +77,31 @@ beforeAll(async () => {
 });
 afterAll(async () => {
   await prisma.$disconnect();
+});
+
+it("reuses a read's session proof of an active viewer and re-checks everyone else", async () => {
+  const collection = await prisma.collection.findUniqueOrThrow({ where: { id: sourceId } });
+  const checked = await measured(() => policy.resolve(collection, { userId: owner.userId }));
+  const viewer = { userId: owner.userId };
+  markVerifiedReadViewer(viewer);
+  const reused = await measured(() => policy.resolve(collection, viewer));
+  expect(reused.value).toEqual(checked.value);
+  expect(checked.value.isOwner).toBe(true);
+  expect(reused.count).toBe(checked.count - 1);
+  const key = randomUUID().slice(0, 8);
+  const inactive = await prisma.user.create({
+    data: {
+      username: `off-${key}`,
+      name: "Inactive",
+      email: `off-${key}@example.com`,
+      accountState: "inactive",
+    },
+  });
+  const published = await prisma.collection.create({
+    data: { hubId, title: "Published", published: true },
+  });
+  expect((await policy.resolve(published, { userId: inactive.id })).canRead).toBe(false);
+  expect((await policy.resolve(published, null)).canRead).toBe(true);
 });
 
 it("bounds reference reads independently of page size", async () => {

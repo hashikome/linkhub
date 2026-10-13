@@ -1,6 +1,8 @@
 "use client";
+
 import type { Resource } from "@ntumie/types";
 import { useActionState, useRef, useState } from "react";
+import { AppForm } from "./app-form";
 
 type MoveAction = (previous: string, data: FormData) => Promise<string>;
 export function ReorderItems({
@@ -24,7 +26,7 @@ export function ReorderItems({
     `/c/${collectionId}/reorder${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
   );
   return (
-    <form ref={form} action={action} aria-busy={pending}>
+    <AppForm ref={form} action={action} aria-busy={pending}>
       <input type="hidden" name="collectionId" value={collectionId} />
       <input type="hidden" name="cursor" value={cursor ?? ""} />
       <input type="hidden" name="beforeId" defaultValue="" />
@@ -105,6 +107,6 @@ export function ReorderItems({
           </li>
         ))}
       </ul>
-    </form>
+    </AppForm>
   );
 }

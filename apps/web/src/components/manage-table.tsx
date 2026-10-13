@@ -1,6 +1,8 @@
 "use client";
+
 import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 import { type Failure, failure, type Result } from "../lib/http";
+import { refreshInApp } from "../lib/navigation";
 import { Retry } from "./feedback";
 import { OperatorTableRegion } from "./operator-table-region";
 
@@ -33,23 +35,31 @@ export function ManageTable({
   const [announcement, setAnnouncement] = useState("");
   const busy = useRef(false);
   const suspended = useRef(false);
+  const generation = useRef(0);
   const table = useRef<HTMLTableElement>(null);
   useEffect(() => {
     suspended.current = false;
+    busy.current = false;
+    setRows(initial);
+    setCursor(nextCursor);
+    setPending(false);
+    setError(undefined);
     const stop = () => {
       suspended.current = true;
+      generation.current++;
     };
     window.addEventListener("reader:suspend", stop);
     return () => {
       stop();
       window.removeEventListener("reader:suspend", stop);
     };
-  }, []);
+  }, [initial, nextCursor]);
   useEffect(() => {
     if (announcement && !cursor) table.current?.focus({ preventScroll: true });
   }, [announcement, cursor]);
   async function more() {
     if (!cursor || busy.current || suspended.current) return;
+    const attempt = generation.current;
     busy.current = true;
     setPending(true);
     setError(undefined);
@@ -59,12 +69,12 @@ export function ManageTable({
     } catch {
       result = failure();
     }
-    if (suspended.current) return;
+    if (suspended.current || attempt !== generation.current) return;
     busy.current = false;
     setPending(false);
     if (!result.ok) {
       if ([401, 403].includes(result.status)) {
-        window.location.reload();
+        refreshInApp();
         return;
       }
       setError(result);

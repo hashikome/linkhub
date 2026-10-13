@@ -14,8 +14,14 @@ export function LandingHero({
     <section className="landing-hero" aria-labelledby="landing-title">
       <div className="landing-intro">
         <h1 id="landing-title">
-          Good links deserve
-          <br />a place to belong.
+          {about ? (
+            "Good links belong together."
+          ) : (
+            <>
+              Good links deserve
+              <br />a place to belong.
+            </>
+          )}
         </h1>
         <LandingQuestions about={about} />
         <p>

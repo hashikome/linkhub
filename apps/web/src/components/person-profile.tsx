@@ -1,7 +1,7 @@
 import type { PersonProfile as PersonProfileData } from "@ntumie/types";
 import { notFound } from "next/navigation";
 import { type ApiPath, withCursor } from "../lib/http";
-import { serverRead } from "../lib/server-api";
+import { readShared } from "../lib/server-api";
 import { readSession } from "../lib/session";
 import { Avatar } from "./avatar";
 import { Feedback } from "./feedback";
@@ -30,7 +30,7 @@ export async function PersonProfile({
     : `/api/v1/people/by-username/${encodeURIComponent(username ?? "")}`;
   const returnTo = `${profilePath}${cursor ? `?${new URLSearchParams({ cursor })}` : ""}`;
   const [result, session] = await Promise.all([
-    serverRead<PersonProfileData>(withCursor(apiPath, cursor)),
+    readShared<PersonProfileData>(withCursor(apiPath, cursor)),
     readSession(),
   ]);
   if (!result.ok && result.status === 404) notFound();

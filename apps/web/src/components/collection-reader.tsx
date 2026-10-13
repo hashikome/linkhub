@@ -1,4 +1,12 @@
-import type { Collection, CommentThreads, HubPage, HubSummary, Resource } from "@ntumie/types";
+import type {
+  Collection,
+  CommentThreads,
+  HubPage,
+  HubSummary,
+  Resource,
+  SessionView,
+} from "@ntumie/types";
+import { Suspense } from "react";
 import { collectionPath, permalink, queryValue, withCursor } from "../lib/http";
 import { serverRead } from "../lib/server-api";
 import { readSession } from "../lib/session";
@@ -13,37 +21,65 @@ import { PaginatedList } from "./paginated-list";
 import { CollectionMeta, Tags } from "./primitives";
 import { ShareAction } from "./share-action";
 
+export type CollectionReads = ReturnType<typeof startCollectionReads>;
+
+// These reads need only the route ID and share token, so callers start them
+// before the collection metadata resolves. Each stays authorized by the API;
+// results are discarded unless the collection itself loaded.
+export function startCollectionReads(
+  id: string,
+  query: Record<string, string | string[] | undefined>,
+) {
+  const path = collectionPath(id);
+  const token = queryValue(query.s, 512);
+  const itemId = queryValue(query.item);
+  const replyTo = queryValue(query.rt),
+    replyCursor = queryValue(query.rc);
+  const replyQuery =
+    replyTo && replyCursor ? `&${new URLSearchParams({ replyTo, replyCursor })}` : "";
+  return {
+    resources: serverRead<Resource[]>(
+      withCursor(`${path}/resources`, queryValue(query.cursor)),
+      token,
+    ),
+    item: itemId
+      ? serverRead<Resource>(`${path}/resources/${encodeURIComponent(itemId)}`, token)
+      : Promise.resolve(null),
+    discussion: serverRead<CommentThreads>(
+      `${withCursor(`${path}/comments`, queryValue(query.cc))}${replyQuery}`,
+      token,
+    ),
+  };
+}
+
 export async function CollectionReader({
   collection,
   query,
+  reads,
   hub,
   resetPath,
 }: {
   collection: Collection;
   query: Record<string, string | string[] | undefined>;
+  reads: CollectionReads;
   hub?: HubSummary;
   resetPath?: string;
 }) {
   const { id } = collection;
   const path = collectionPath(id);
   const token = queryValue(query.s, 512);
-  const itemId = queryValue(query.item);
   const commentCursor = queryValue(query.cc);
-  const commentPath = withCursor(`${path}/comments`, commentCursor);
   const replyTo = queryValue(query.rt),
     replyCursor = queryValue(query.rc);
-  const replyQuery =
-    replyTo && replyCursor ? `&${new URLSearchParams({ replyTo, replyCursor })}` : "";
-  const [resources, hubResult, comments, session, item] = await Promise.all([
-    serverRead<Resource[]>(withCursor(`${path}/resources`, queryValue(query.cursor)), token),
+  // Discussion was started alongside resources; never gate links on it.
+  const { discussion } = reads;
+  const session = readSession();
+  const [resources, hubResult, item] = await Promise.all([
+    reads.resources,
     hub?.id === collection.hubId
       ? Promise.resolve({ ok: true as const, data: { hub } })
       : serverRead<HubPage>(`/api/v1/hubs/${encodeURIComponent(collection.hubId)}?limit=1`),
-    serverRead<CommentThreads>(`${commentPath}${replyQuery}`, token),
-    readSession(),
-    itemId
-      ? serverRead<Resource>(`${path}/resources/${encodeURIComponent(itemId)}`, token)
-      : Promise.resolve(null),
+    reads.item,
   ]);
   if (!resources.ok)
     return <CollectionFeedback error={resources} returnTo={resetPath ?? permalink(id, token)} />;
@@ -54,10 +90,6 @@ export async function CollectionReader({
   const itemContext = new URL(sourcePath(returnTo, query), "http://local.invalid");
   itemContext.searchParams.delete("item");
   const itemBase = itemContext.pathname + itemContext.search;
-  const older = comments.ok ? comments.meta?.nextCursor : null;
-  const olderHref = older
-    ? `${returnTo}${returnTo.includes("?") ? "&" : "?"}${new URLSearchParams({ cc: older })}#comments`
-    : undefined;
   return (
     <div className="reader-layout" data-reader>
       <article className="reader collection-sheet">
@@ -131,17 +163,66 @@ export async function CollectionReader({
       <CollectionSidebar
         summary={<CollectionContributors contributors={collection.contributors} />}
       >
-        <Comments
-          collectionId={id}
-          threads={comments.ok ? comments.data : null}
-          returnTo={returnTo}
-          signedIn={Boolean(session)}
-          notice={discussionNotice ? notice : undefined}
-          olderHref={olderHref}
-          commentCursor={commentCursor}
-          composerOpen={queryValue(query.compose) === "comment"}
-        />
+        <Suspense
+          key={`${id}:${token ?? ""}:${commentCursor ?? ""}:${replyTo ?? ""}:${replyCursor ?? ""}`}
+          fallback={
+            <section className="comments" id="comments" aria-label="Discussion" aria-busy="true">
+              <header className="comments-heading">
+                <h2>Discussion</h2>
+              </header>
+              <p className="comments-state" role="status">
+                Loading discussion…
+              </p>
+            </section>
+          }
+        >
+          <CollectionDiscussion
+            collectionId={id}
+            discussion={discussion}
+            session={session}
+            returnTo={returnTo}
+            notice={discussionNotice ? notice : undefined}
+            commentCursor={commentCursor}
+            composerOpen={queryValue(query.compose) === "comment"}
+          />
+        </Suspense>
       </CollectionSidebar>
     </div>
+  );
+}
+
+async function CollectionDiscussion({
+  collectionId,
+  discussion,
+  session,
+  returnTo,
+  notice,
+  commentCursor,
+  composerOpen,
+}: {
+  collectionId: string;
+  discussion: ReturnType<typeof serverRead<CommentThreads>>;
+  session: Promise<SessionView | null>;
+  returnTo: string;
+  notice?: string;
+  commentCursor?: string;
+  composerOpen: boolean;
+}) {
+  const [comments, signedIn] = await Promise.all([discussion, session]);
+  const older = comments.ok ? comments.meta?.nextCursor : null;
+  const olderHref = older
+    ? `${returnTo}${returnTo.includes("?") ? "&" : "?"}${new URLSearchParams({ cc: older })}#comments`
+    : undefined;
+  return (
+    <Comments
+      collectionId={collectionId}
+      threads={comments.ok ? comments.data : null}
+      returnTo={returnTo}
+      signedIn={Boolean(signedIn)}
+      notice={notice}
+      olderHref={olderHref}
+      commentCursor={commentCursor}
+      composerOpen={composerOpen}
+    />
   );
 }

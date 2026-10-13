@@ -1,5 +1,7 @@
 "use client";
+
 import { useEffect, useRef } from "react";
+import { AppForm } from "./app-form";
 
 export function ResumeSignIn() {
   const form = useRef<HTMLFormElement>(null);
@@ -10,13 +12,13 @@ export function ResumeSignIn() {
     form.current?.requestSubmit();
   }, []);
   return (
-    <form ref={form} action="/forms/auth-complete" method="post">
+    <AppForm ref={form} action="/forms/auth-complete" method="post">
       <p role="status">Returning to what you were doing…</p>
       <noscript>
         <button className="button primary" type="submit">
           Resume your action
         </button>
       </noscript>
-    </form>
+    </AppForm>
   );
 }

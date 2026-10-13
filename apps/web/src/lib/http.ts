@@ -77,6 +77,20 @@ export async function submitForm<T>(
   }
 }
 
+// Immutable build assets only (route-code preloading): never pages, data or APIs.
+export async function fetchBuildAsset(path: string, json = false): Promise<unknown> {
+  if (!/^\/_next\/static\/[\w%./-]+\.(?:js|json)$/.test(path) || path.includes(".."))
+    throw new Error("Invalid build asset path");
+  // Same URL and credentials as webpack's script request: a later load hits the HTTP cache.
+  const response = await fetch(path, {
+    credentials: "same-origin",
+    redirect: "error",
+    priority: "low",
+  } as RequestInit);
+  if (!response.ok) throw new Error("Build asset unavailable");
+  return json ? response.json() : response.arrayBuffer().then(() => undefined);
+}
+
 export function safePath(path: ApiPath): string {
   const parsed = new URL(path, "http://internal.invalid");
   if (
@@ -360,4 +374,37 @@ export async function postFormAction(action: string) {
   } catch {
     return false;
   }
+}
+
+// Shared form transport preserves server-owned commands, flow cookies and
+// continuation destinations. Never automatically retry a submitted write.
+export async function submitNavigationForm(
+  path: string,
+  body: FormData | URLSearchParams,
+  fetcher: typeof fetch = fetch,
+) {
+  if (!/^\/forms\/[a-z-]+$/.test(path)) throw new Error("Invalid form path");
+  const response = await fetcher(path, {
+    method: "POST",
+    body,
+    headers: { "X-Form-Navigation": "1" },
+    credentials: "same-origin",
+    cache: "no-store",
+    redirect: "error",
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!response.ok) throw new Error("Form request failed");
+  const result: unknown = await response.json();
+  if (
+    !result ||
+    typeof result !== "object" ||
+    !("redirect" in result) ||
+    typeof result.redirect !== "string"
+  )
+    throw new Error("Invalid form continuation");
+  // Refresh unless the server states the write cannot change layout data.
+  return {
+    redirect: result.redirect,
+    refresh: !("refresh" in result) || result.refresh !== false,
+  };
 }

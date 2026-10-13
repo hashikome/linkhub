@@ -1,6 +1,8 @@
 "use client";
+
 import type { Resource } from "@ntumie/types";
 import { useActionState } from "react";
+import { AppForm } from "./app-form";
 export type SectionEditState = {
   title: string;
   description: string;
@@ -31,7 +33,7 @@ export function SectionEditor({
     formPath,
   );
   return (
-    <form action={action} className="action-form edit-form" aria-busy={pending}>
+    <AppForm action={action} className="action-form edit-form" aria-busy={pending}>
       <input type="hidden" name="collectionId" value={collectionId} />
       {section && (
         <>
@@ -110,6 +112,6 @@ export function SectionEditor({
           Cancel
         </a>
       </div>
-    </form>
+    </AppForm>
   );
 }

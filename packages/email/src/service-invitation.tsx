@@ -8,7 +8,7 @@ import {
   render,
   Text,
 } from "@react-email/components";
-import { EmailFooter, type RenderedEmail } from "./code-email.js";
+import { EmailFooter, EmailWordmark, type RenderedEmail } from "./code-email.js";
 
 export async function renderServiceInvitation(input: {
   role: "admin" | "operator";
@@ -29,7 +29,7 @@ export async function renderServiceInvitation(input: {
         style={{ backgroundColor: "#ffffff", color: "#1a1a1a", fontFamily: "Arial, sans-serif" }}
       >
         <Container style={{ maxWidth: "560px", padding: "40px 24px", margin: "0 auto" }}>
-          <Text style={{ fontSize: "22px", fontWeight: 700 }}>ntumie.</Text>
+          <EmailWordmark />
           <Text style={{ fontSize: "18px", lineHeight: "28px" }}>
             You have been invited to be a {role}.
           </Text>

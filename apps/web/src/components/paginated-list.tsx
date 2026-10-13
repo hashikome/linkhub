@@ -1,8 +1,10 @@
 "use client";
+
 import type { Collection, HubPage, Resource } from "@ntumie/types";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { browserRead } from "../lib/browser-api";
 import { type ApiPath, type Failure, withCursor } from "../lib/http";
+import { refreshInApp } from "../lib/navigation";
 import { Retry } from "./feedback";
 import { CollectionRow } from "./primitives";
 import { ResourceSections } from "./resource-sections";
@@ -115,6 +117,16 @@ export function PaginatedList(props: Props) {
     };
   }, []);
   const active = useRef<AbortController | null>(null);
+  useEffect(() => {
+    active.current?.abort();
+    active.current = null;
+    setItems(props.initial);
+    setCursor(props.nextCursor);
+    setPending(false);
+    setError(undefined);
+    setPageStart(0);
+    setHistory([]);
+  }, [props.initial, props.nextCursor]);
   const continuation = useRef<HTMLDivElement>(null);
   const restoreFocus = useRef(false);
   useEffect(() => {
@@ -126,7 +138,11 @@ export function PaginatedList(props: Props) {
     if (!pending) restoreFocus.current = false;
   }, [pending]);
   useEffect(() => {
-    const stop = () => active.current?.abort();
+    const stop = () => {
+      active.current?.abort();
+      active.current = null;
+      setPending(false);
+    };
     window.addEventListener("reader:suspend", stop);
     return () => {
       stop();
@@ -152,7 +168,7 @@ export function PaginatedList(props: Props) {
       if (!result.ok) {
         if ([401, 403, 404].includes(result.status)) {
           document.documentElement.dataset.revalidating = "true";
-          window.location.reload();
+          refreshInApp();
           return;
         }
         setError(result);

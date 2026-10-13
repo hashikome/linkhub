@@ -108,7 +108,13 @@ export function createAuth({
     user: {
       deleteUser: { enabled: false },
       changeEmail: { enabled: false },
-      additionalFields: { username: { type: "string", required: false, input: false } },
+      additionalFields: {
+        username: { type: "string", required: false, input: false },
+        // Loaded with the user row getSession already reads, so the per-request
+        // active-account gate needs no extra query. Never client-writable. Do not
+        // enable session cookieCache: it would serve this value stale.
+        accountState: { type: "string", required: false, input: false },
+      },
     },
     advanced: {
       database: {

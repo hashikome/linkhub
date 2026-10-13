@@ -27,7 +27,8 @@ export default function config(): NextConfig {
         },
         {
           // Hashed build assets contain no user data. Let Next serve them with
-          // immutable caching; documents, forms and other paths stay private.
+          // immutable caching; documents, forms and other paths stay private
+          // (server/edge-cache.ts may mark signed-out public pages for the edge).
           source: "/:path((?!_next/static/).*)",
           headers: [{ key: "Cache-Control", value: "private, no-store, max-age=0" }],
         },

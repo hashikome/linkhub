@@ -3,6 +3,10 @@
 **Status:** accepted
 **Date:** 2026-10-11
 
+Partially superseded by [ADR-0064](0064-client-navigation-and-interactive-forms.md):
+client navigation and asynchronous forms replace mandatory native-first/JS-free
+interaction and full-document reloads. Other decisions remain binding.
+
 ## Context
 
 The web client hid the whole document after an ordinary navigation remained

@@ -3,13 +3,15 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import type { ReactNode } from "react";
 import { ApiOriginProvider } from "../components/api-origin";
+import { AppNavigation } from "../components/app-navigation";
 import { FocusMode } from "../components/focus-mode";
-import { FreshDocument } from "../components/fresh-document";
 import { ResourceNavigationProvider } from "../components/resource-navigation";
+import { RouteCodePreload } from "../components/route-code-preload";
 import { SessionNav } from "../components/session-nav";
 import { SiteFooter } from "../components/site-footer";
 import { TimeZoneProvider } from "../components/time-zone";
 import { readResourceNewTab } from "../lib/device-preferences";
+import { routeChunksUrl } from "../lib/route-chunks-server";
 import { readOwnProfile, readSession } from "../lib/session";
 import { readTheme } from "../lib/theme";
 import "./globals.css";
@@ -30,15 +32,14 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 export default async function Layout({ children }: { children: ReactNode }) {
-  const [session, profile, savedTheme, readerTheme, resourceNewTab] = await Promise.all([
+  const [session, profile, savedTheme, resourceNewTab] = await Promise.all([
     readSession(),
     readOwnProfile(),
     readTheme(),
-    readTheme("reader_appearance"),
     readResourceNewTab(),
   ]);
   const { authOrigin, publicOrigin } = webServerConfig();
-  const theme = session ? savedTheme : readerTheme;
+  const theme = session ? savedTheme : "system";
   return (
     <html
       lang="en"
@@ -69,14 +70,15 @@ export default async function Layout({ children }: { children: ReactNode }) {
                   </a>
                   <div className="primary-nav">
                     <a href="/discover">Discover</a>
-                    <SessionNav session={session} theme={theme} />
+                    <SessionNav session={session} />
                   </div>
                 </nav>
               </header>
               {/* biome-ignore lint/a11y/noNoninteractiveTabindex: Main is the keyboard skip-link target. */}
               <main id="main" aria-label="Main content" tabIndex={0} className="shell">
                 <FocusMode />
-                <FreshDocument />
+                <AppNavigation theme={theme} />
+                <RouteCodePreload manifest={routeChunksUrl()} />
                 {children}
               </main>
               <SiteFooter signedIn={Boolean(session)} />

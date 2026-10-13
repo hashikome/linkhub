@@ -45,8 +45,8 @@ uses `ntumie`; workspace packages use `@ntumie/*`.
 3. UX over compactness: show fewer items rather than crowd a layout.
 4. Copy scans at a glance: short paragraphs, emphasis in bold, the reason
    before the action.
-5. Every journey works without JavaScript; hidden controls never stand in
-   for permissions.
+5. Prioritize smooth, responsive interaction. JavaScript powers the supported web
+   experience; native fallbacks must not compromise UX. The backend owns permissions.
 
 ### Accessibility And Inclusion
 
@@ -634,7 +634,8 @@ self-service account lifecycle, public Gravatar avatars and passwordless securit
   save as they are made. Timezone defaults to Automatic (the device); an explicit
   choice is stored on the account and follows it across devices, including initial
   server-rendered dates and calendar filters (ADR-0045). Appearance (System, Light, Dark)
-  is a header control. Settings → On this device
+  is available in Settings → On this device and saved in this browser, applying
+  only while signed in. Signed-out pages follow the device theme. The same section
   offers an off-by-default preference to open external resources in the same tab,
   saved in this browser rather than synced to the account. External resources
   otherwise open in new tabs to keep the collection available. ntumie. destinations
@@ -728,8 +729,9 @@ publishes or deletes existing private content. See [assisted curation](docs/desi
 
 ### Web Application
 
-The complete product surface: every module above. Native form posts work
-without JavaScript, which only enhances. The interface follows `DESIGN.md`
+The complete product surface: every module above. Internal navigation, forms and
+appearance changes preserve the browser document. JavaScript-free parity is not
+an acceptance requirement. The interface follows `DESIGN.md`
 and `docs/design-docs/web-interface-system.md`.
 
 ### Browser Extension

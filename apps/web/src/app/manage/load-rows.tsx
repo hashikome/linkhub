@@ -4,7 +4,6 @@ import type {
   ManagedCollection,
   OperatorAccount,
   ServiceInvitationView,
-  SessionView,
 } from "@ntumie/types";
 import {
   accountsRows,
@@ -21,7 +20,8 @@ import { serverRead } from "../../lib/server-api";
 type List = "managed-collections" | "accounts" | "people" | "team" | "invitations";
 
 // A continuation read returns server-rendered rows so operation forms retain
-// their server-generated IDs. Each request uses the current session and API policy.
+// their server-generated IDs. Each request uses the current session and API policy;
+// the API rejects signed-out or unauthorized reads, so no separate session pre-read.
 export async function loadManageRows(
   kind: List,
   sealed: string,
@@ -34,8 +34,6 @@ export async function loadManageRows(
     sealed.length > 4096
   )
     return failure("invalid_cursor", 400);
-  const session = await serverRead<SessionView>("/api/v1/session");
-  if (!session.ok) return session;
   switch (kind) {
     case "managed-collections": {
       const params = new URLSearchParams({ cursor, ...(sealed ? { q: sealed } : {}) });

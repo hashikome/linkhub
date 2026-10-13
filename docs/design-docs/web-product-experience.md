@@ -49,7 +49,7 @@ method and a perspective on cultivating and sharing knowledge.
 | Surface | Route and data | Main action |
 | --- | --- | --- |
 | Landing | `/` | Save your first link; Discover in the header |
-| About | `/about`; real Support and maker-portfolio links | Share ntumie.; Join ntumie. in the footer goes directly to `/sign-up` (Discover when signed in) |
+| About | `/about`; real Support and maker-portfolio links | Share ntumie.; Join ntumie. in the footer goes directly to `/sign-up` (no footer link when signed in) |
 | Discover | `/discover`; `GET /api/v1/discover` | Open a collection |
 | Hub | `/@handle` or `/h/<hubId>`; hub lookup and authorized collection list | Open a collection |
 | Collection | `/c/<id>`; collection, resources and discussion APIs | Open a resource or referenced collection |
@@ -171,6 +171,9 @@ View your public hub sits beneath Handle. Autosave retains newer drafts and prov
 Saving/Saved or retry feedback; a noscript Save changes button preserves native
 editing. Handle availability is advisory; backend validation decides the write.
 Missing hubs show a first-save action instead of empty required fields.
+Only the selected section loads initially. Opening another section loads its
+controls while retaining previous drafts. Timezone choices load when the picker
+is focused; the saved selection is visible immediately.
 Hub.showOwner controls the public ownership connection in both directions;
 profile names remain visible, and authorization is unchanged.
 
@@ -199,12 +202,15 @@ or upload field; a help question below the profile fields links to
 `/support#profile-picture`. Support explains optional Gravatar setup and updates;
 a missing image is never presented as proof that no provider account exists.
 See [the avatar contract](identity-and-handles.md#profile-pictures).
-Appearance lives only in the header: System → Light → Dark → System. Signed-out
-visitors follow the system preference; saved appearance applies only with a
-valid session. Product footers show About ntumie. and “Good links belong together.” Home shows
-only About ntumie.; About shows Join ntumie. to `/sign-up`, or Discover when signed
-in. About holds site sharing, Support and the maker’s portfolio. No year or divider.
-See [ADR-0056](../engineering-decisions/0056-about-collection-and-footer-navigation.md). Readiness is API monitoring, with no client status page.
+Appearance lives in Settings → On this device, with System, Light and Dark
+choices saved in this browser and applied only with a valid session. Signed-out
+visitors always follow the device preference. The header has no theme control.
+Product footers show a right-aligned About ntumie. link. On About, signed-out
+visitors see Join ntumie. to `/sign-up`; signed-in visitors see no footer link.
+The web footer has no tagline, year or divider. About holds site sharing, Support
+and the maker’s portfolio. See
+[ADR-0063](../engineering-decisions/0063-wordmark-footer-and-appearance.md).
+Readiness is API monitoring, with no client status page.
 
 Notifications currently lists service invitations as expandable messages,
 unread first. Opening it resets the badge; Clear all hides existing entries.
@@ -239,7 +245,8 @@ changes clear private rendered state; request failures retain safe drafts and
 never trigger mutation retry loops. Backend authorization applies to every
 request; hidden controls are not a security boundary.
 
-Prove journeys with keyboard, narrow screens and no JavaScript. Permalinks
+Prove journeys with keyboard, narrow screens and JavaScript enabled. Native
+fallbacks remain useful but JavaScript-free parity is not mandatory. Permalinks
 survive handle/title changes and collection transfers. Revocation and unpublishing
 remove access on revalidation; private responses never enter shared caches.
 Browser verification and source checks are described in the

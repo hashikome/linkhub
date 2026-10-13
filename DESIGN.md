@@ -73,7 +73,7 @@ and copy in the [product experience](docs/design-docs/web-product-experience.md)
 The web's global stylesheet exposes semantic Tailwind theme variables for
 canvas, surface, ink, muted text, border, accent, focus and feedback. Components
 consume those roles rather than raw palette numbers. All color values use
-OKLCH. Light, Dark and System themes are available from the header toggle.
+OKLCH. Light, Dark and System themes are available in Settings → On this device.
 System follows `prefers-color-scheme`; a validated theme cookie selects explicit
 light/dark server-side without a client flash. Account data is never stored in it.
 
@@ -178,12 +178,12 @@ these tokens, including error, success, focus, hover and native control colors.
 `globals.css` is the exact palette source; verify the dark contrast pairs as part
 of browser acceptance. Motion respects reduced-motion preferences.
 
-Appearance is available in the header to every visitor. Signed-out readers
-default to System and can choose a temporary appearance for their browser session.
-Their toggle shows only the resolved Light/Dark mode; System is an explicit choice
-only for signed-in users. CSS resolves the reader icon before hydration.
-Their reader choice is separate from the saved Light/Dark/System preference used
-with a valid account session; changing one never overwrites the other.
+Appearance lives in Settings → On this device for signed-in users, with explicit
+System, Light and Dark choices. System is the default. The choice is saved in
+this browser and applies only with a valid session; signed-out pages always follow
+the device preference. The header has no theme control. Existing reader appearance
+cookies are ignored. Appearance applies immediately, saves in the background and
+rolls back with inline feedback if persistence fails.
 
 #### Dark contrast evidence
 
@@ -262,20 +262,35 @@ autosave/native Save changes flow.
 
 The header separates the left wordmark from Discover and the avatar-only account menu on the right. The menu groups Profile, Hub (when owned),
 Notifications (with an unread count), Settings and role-gated Manage above
-Sign out. Product footers show About ntumie. on the left and “Good links belong
-together.” on the right, using 16 px body text. The homepage shows only About
-ntumie. About shows only Join ntumie. to `/sign-up`, or Discover to `/discover`
-when signed in. No year, repeated wordmark, utility links or top divider. Links
-use shared control heights and blue hover/focus feedback; content wraps naturally
-on phones while the tagline remains right-aligned on its own line. The footer follows long content and sits at the bottom of short pages.
+Sign out. The wordmark is the logo: 24 px on phones and 28 px from 640 px,
+weight 700, with tight tracking and a 1.25 line height. Product footers contain
+one right-aligned About ntumie. link, at 18 px and weight 500. On About, signed-out
+visitors see Join ntumie. linking to `/sign-up`; signed-in visitors see no footer
+link. There is no footer tagline, year, repeated wordmark or divider. Links retain
+44 px touch targets and shared hover/focus feedback. The footer follows long
+content and sits at the bottom of short pages, including the empty About variant.
 Site sharing, Support and the maker's portfolio live on `/about`; legal links
-join the collection when those pages exist. See [ADR-0056](docs/engineering-decisions/0056-about-collection-and-footer-navigation.md).
+join the collection when those pages exist. See [ADR-0063](docs/engineering-decisions/0063-wordmark-footer-and-appearance.md).
 
-Homepage and About share the existing hero composition. The homepage retains
+About's useful links use the same `CollectionPreview`, section disclosures,
+resource rows, tags, expanded context and item-link controls as the homepage
+example and collection reader. Like Ada's homepage example, it is a self-contained
+visual fixture: a complete typed collection/resource snapshot, simulated hub and
+activity, and namestarlit as its displayed contributor. It has no account, hub or
+API-record dependency. The metadata row uses `CollectionMeta`; expanded resources
+use shared attribution and timestamp rendering. Dates and UUID-shaped identities
+are fixed fixture values. About item links use `/about?item=<id>#item-<id>` and
+reopen the selected item; no simulated identity links into real record routes.
+The destinations themselves are real: Support stays on the current installation
+and the maker link opens the portfolio. Neither embedded collection has a visible Example badge; the homepage retains
+its accessible Example collection label.
+
+Homepage and About share the existing hero composition. Home says “Good links
+deserve a place to belong.”; About says “Good links belong together.” The homepage retains
 Save your first link; About uses Share ntumie. and three follow-up questions.
 Their embedded collections use a 32 px title, 24 px section headings, 18 px resource
 titles and 16 px body-ink section descriptions. Semantic levels start at h2 under
-the hero h1. About's links are real destinations without fabricated metadata.
+the hero h1. About's links are real destinations within a simulated collection.
 
 Generated geometric
 SVGs come from the API, seeded by immutable user UUID. The approved avatar palette
@@ -325,5 +340,5 @@ without children remain direct links. The current section starts expanded.
 
 Home and About use the shared collection preview, built from the reader heading,
 sections, rows and inline details. At desktop sizes the hero and preview fit the
-space between navigation and the bottom-left footer link; lengthy resource content
+space between navigation and the bottom-right footer link; lengthy resource content
 scrolls inside the panel. Smaller or short viewports retain document scrolling.

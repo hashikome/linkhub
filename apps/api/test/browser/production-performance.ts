@@ -111,40 +111,56 @@ export async function measureProduction({
         await resetBudget();
         apiTimings.length = 0;
         headers.length = 0;
+        const previousOrigin = await page.evaluate(() => performance.timeOrigin);
+        const startedAt = Date.now();
         await action(page);
         await page.waitForFunction(
           () => performance.getEntriesByName("app:document-ready").length > 0,
         );
         await page.evaluate(() => document.fonts.ready);
-        const timing = await page.evaluate(() => {
-          const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming;
-          const resources = (
-            performance.getEntriesByType("resource") as PerformanceResourceTiming[]
-          ).map((r) => ({
-            path: new URL(r.name).pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ":id"),
-            kind: r.initiatorType,
-            startMs: r.startTime,
-            durationMs: r.duration,
-            transferBytes: r.transferSize,
-            encodedBytes: r.encodedBodySize,
-          }));
-          const field = document.querySelector("#capture-url-0");
-          return {
-            ttfbMs: nav.responseStart - nav.startTime,
-            serverWaitMs: nav.responseStart - nav.requestStart,
-            documentMs: nav.responseEnd,
-            domContentLoadedMs: nav.domContentLoadedEventEnd,
-            loadMs: nav.loadEventEnd,
-            shellReadyMs: performance.getEntriesByName("app:document-ready")[0].startTime,
-            captureHandlerAttached: field
-              ? Object.keys(field).some((key) => key.startsWith("__reactProps"))
-              : null,
-            paints: performance
-              .getEntriesByType("paint")
-              .map((p) => ({ name: p.name, ms: p.startTime })),
-            resources,
-          };
-        });
+        const timing = await page.evaluate(
+          ({ previousOrigin, startedAt }) => {
+            const documentReplaced = performance.timeOrigin !== previousOrigin;
+            const resourceStart = documentReplaced ? 0 : startedAt - performance.timeOrigin;
+            const nav = performance.getEntriesByType(
+              "navigation",
+            )[0] as PerformanceNavigationTiming;
+            const resources = (
+              performance.getEntriesByType("resource") as PerformanceResourceTiming[]
+            )
+              .filter((r) => r.startTime >= resourceStart)
+              .map((r) => ({
+                path: new URL(r.name).pathname.replace(/[0-9a-f]{8}-[0-9a-f-]{27,}/gi, ":id"),
+                kind: r.initiatorType,
+                startMs: r.startTime,
+                durationMs: r.duration,
+                transferBytes: r.transferSize,
+                encodedBytes: r.encodedBodySize,
+              }));
+            const field = document.querySelector("#capture-url-0");
+            return {
+              documentReplaced,
+              actionToReadyMs: performance.timeOrigin + performance.now() - startedAt,
+              ttfbMs: documentReplaced ? nav.responseStart - nav.startTime : null,
+              serverWaitMs: documentReplaced ? nav.responseStart - nav.requestStart : null,
+              documentMs: documentReplaced ? nav.responseEnd : null,
+              domContentLoadedMs: documentReplaced ? nav.domContentLoadedEventEnd : null,
+              loadMs: documentReplaced ? nav.loadEventEnd : null,
+              shellReadyMs: documentReplaced
+                ? performance.getEntriesByName("app:document-ready")[0].startTime
+                : null,
+              captureHandlerAttached: field
+                ? Object.keys(field).some((key) => key.startsWith("__reactProps"))
+                : null,
+              paints: performance
+                .getEntriesByType("paint")
+                .filter(() => documentReplaced)
+                .map((p) => ({ name: p.name, ms: p.startTime })),
+              resources,
+            };
+          },
+          { previousOrigin, startedAt },
+        );
         expect(apiTimings.filter((entry) => entry.status >= 400)).toEqual([]);
         samples.push({
           journey,
