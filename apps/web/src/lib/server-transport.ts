@@ -1,7 +1,7 @@
 import "server-only";
 import { webServerConfig } from "@ntumie/config/web-server";
 import { headers } from "next/headers";
-import { markEdgeUncacheable } from "./edge-cache-scope";
+import { markEdgeUncacheable } from "../../server/edge-cache-scope";
 import { type ApiPath, postJson, readJson, safePath } from "./http";
 import { visitorHeaders } from "./visitor-source";
 

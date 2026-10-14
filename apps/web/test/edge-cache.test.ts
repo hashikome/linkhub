@@ -8,7 +8,7 @@ import {
   PUBLIC_EDGE_POLICY,
   publicPagePath,
 } from "../server/edge-cache";
-import { markEdgeUncacheable, runEdgeCacheScope } from "../src/lib/edge-cache-scope";
+import { markEdgeUncacheable, runEdgeCacheScope } from "../server/edge-cache-scope";
 
 const id = "0199c3f2-7b1a-7c3d-8e4f-0123456789ab";
 

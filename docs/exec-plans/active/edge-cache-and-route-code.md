@@ -48,6 +48,12 @@ the scope survives Next's rendering under Bun.
 Under Bun, `getHeader("set-cookie")` returns `[]` when unset (Node: `undefined`);
 the first implementation treated that as a cookie and never marked pages public.
 
+The first push failed the release-image check: `server.ts` imported the request
+scope from `src/lib/`, which the production web image does not contain (it ships
+`server/`, `server.ts` and `.next`). The scope moved to `apps/web/server/`, and the
+image check now asserts the edge policy on `/about` and its absence with a session
+cookie, so this class of breakage fails before deployment. Nothing was deployed.
+
 ## Decision Log
 
 - 2026-10-13: Preload code only (immutable `/_next/static` files), never RSC data.

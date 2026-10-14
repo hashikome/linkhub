@@ -52,7 +52,8 @@ production config refusal; then dumps/restores a synthetic publication and
 its audit record. It also checks separate migration/runtime PostgreSQL roles,
 cross-product database refusal, Redis ACL key/channel/admin refusal and the compiled
 BullMQ worker. With the web image supplied it verifies the custom server, `/healthz`,
-server rendering and private responses. It never resets the development database, initializes
+server rendering, private responses, the edge-cache policy on a signed-out public
+page ([edge cache](edge-cache.md)) and its absence with a session cookie. It never resets the development database, initializes
 Swarm, sends mail, or sends remote telemetry. Local Sentry-envelope capture
 is covered by API unit tests. This restore is local, not off-host proof.
 

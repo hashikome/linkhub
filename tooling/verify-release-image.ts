@@ -353,16 +353,17 @@ try {
       "bun",
       "-e",
       `
-      for(const path of ['/sign-in','/about']) {
-        const r=await fetch('http://127.0.0.1:3000'+path);
+      // Signed-out public pages carry the edge policy (ADR-0066); others stay private.
+      for(const [path,cookie,policy] of [['/sign-in','','no-store'],['/about','','s-maxage=60'],['/about','better-auth.session_token=x','no-store']]) {
+        const r=await fetch('http://127.0.0.1:3000'+path,{headers:cookie?{cookie}:{}});
         const body=await r.text();
-        if(r.status!==200||!body.includes('ntumie')||!r.headers.get('cache-control')?.includes('no-store'))process.exit(1);
+        if(r.status!==200||!body.includes('ntumie')||!r.headers.get('cache-control')?.includes(policy))process.exit(1);
         if(body.includes('http://api:4000'))process.exit(1);
       }
     `,
     ]);
     console.log(
-      "Web image custom server, secret-file startup, runtime origin and private pages passed.",
+      "Web image custom server, secret-file startup, runtime origin, private and edge-cacheable pages passed.",
     );
   }
 

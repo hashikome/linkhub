@@ -2,8 +2,8 @@ import { createServer } from "node:http";
 import { webServerConfig } from "@ntumie/config/web-server";
 import next from "next";
 import { applyEdgeCachePolicy } from "./server/edge-cache";
+import { runEdgeCacheScope } from "./server/edge-cache-scope";
 import { sourceAttribution } from "./server/source";
-import { runEdgeCacheScope } from "./src/lib/edge-cache-scope";
 
 const config = webServerConfig();
 const dev = process.argv.includes("--dev");

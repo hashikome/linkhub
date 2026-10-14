@@ -4,7 +4,7 @@ import type {
   OutgoingHttpHeaders,
   ServerResponse,
 } from "node:http";
-import type { EdgeCacheScope } from "../src/lib/edge-cache-scope";
+import type { EdgeCacheScope } from "./edge-cache-scope";
 
 // Signed-out public pages may be served from Cloudflare's edge. The origin decides
 // per response: only an eligible request answered 200 with HTML and no Set-Cookie
