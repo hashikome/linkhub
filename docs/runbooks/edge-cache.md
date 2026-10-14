@@ -50,9 +50,20 @@ renders public). Keep them in step with `EDGE_BYPASS_COOKIES`.
 curl -s -o /dev/null -D - https://ntumie.link/about | grep -iE 'cache-control|cf-cache-status'
 curl -s -o /dev/null -D - https://ntumie.link/about | grep -i cf-cache-status   # HIT
 curl -s -o /dev/null -D - -H 'Cookie: better-auth.session_token=x' https://ntumie.link/about \
-  | grep -iE 'cache-control|cf-cache-status'                                   # no-store; BYPASS/DYNAMIC
-curl -s -o /dev/null -D - https://ntumie.link/capture | grep -i cf-cache-status  # DYNAMIC
+  | grep -iE 'cache-control|cf-cache-status'                                   # no-store; DYNAMIC
+curl -s -o /dev/null -D - https://ntumie.link/capture | grep -i cf-cache-status  # BYPASS
 ```
+
+The first request after a deployment or expiry is a `MISS` (public policy); a repeat
+within a minute is a `HIT`. `BYPASS` means the rule matched but the origin answered
+`private, no-store`; `DYNAMIC` means the rule did not match (an app cookie, `/api/`,
+`/_next/`, `/forms/`). Do not add a cache-busting query such as `?v=1`: unknown query
+keys keep the page private by design, so the result is always `BYPASS`.
+
+Verified live on 14 October 2026: `/`, `/about`, `/discover` and a published
+collection went `MISS` then `HIT`; `?s=`, unknown query keys, RSC requests, an
+unknown profile (404), `/capture` and `/sign-in` stayed `private, no-store`
+(`BYPASS`); session and appearance cookies gave `DYNAMIC`.
 
 ## Staleness and rollback
 

@@ -22,9 +22,11 @@ no code change):
   chunk is a cache hit on navigation; document kept).
 - [x] (2026-10-13) Edge caching: origin eligibility, per-request failure scope,
   unit tests and a production-browser test; ADR-0066 and the edge-cache runbook.
-- [ ] Owner applies the Cloudflare Cache Rule in the dashboard (13 October 2026: the
-  operator API token has no zone Cache Rules permission); live verification with
-  the runbook checks after the deployment.
+- [x] (2026-10-13) Owner applied the Cloudflare Cache Rule in the dashboard (the
+  operator API token has no zone Cache Rules permission).
+- [x] (2026-10-14) Image-scope fix deployed (release run 38531354289; its first
+  attempt failed on a transient Docker Hub manifest error and passed on rerun).
+  Live verification with the runbook checks passed.
 
 ## Surprises & Discoveries
 
@@ -53,6 +55,10 @@ scope from `src/lib/`, which the production web image does not contain (it ships
 `server/`, `server.ts` and `.next`). The scope moved to `apps/web/server/`, and the
 image check now asserts the edge policy on `/about` and its absence with a session
 cookie, so this class of breakage fails before deployment. Nothing was deployed.
+
+Live, `BYPASS` (rule matched, origin private) and `DYNAMIC` (rule did not match)
+differ from the first runbook draft, which expected `DYNAMIC` for `/capture`; a
+cache-busting query key also keeps a page private by design. The runbook now says so.
 
 ## Decision Log
 
@@ -96,7 +102,7 @@ route list to `src/app`. A runbook section specifies the Cloudflare Cache Rule.
 `bun run verify:isolated test:browser --test-name-pattern ...`; full
 `bun run verify:isolated`. After the owner applies the Cloudflare rule, verify with
 `curl -sI https://ntumie.link/about` (expect `cf-cache-status: HIT` on repeat) and
-the same request with a session cookie (expect `BYPASS` or `DYNAMIC`).
+the same request with a session cookie (expect `DYNAMIC`).
 
 ## Validation And Acceptance
 
@@ -115,7 +121,17 @@ the Cache Rule, then revert the origin hook; purge the zone cache if needed.
 
 ## Outcomes & Retrospective
 
-(To be completed.)
+Both changes are live (14 October 2026). Signed-out `/`, `/about`, `/discover` and
+published collections are served `MISS` then `HIT` from Cloudflare with the public
+edge policy; every private case checked (session or appearance cookie, share token,
+unknown query key, RSC request, 404, `/capture`, `/sign-in`) stays `private, no-store`.
+Route code preloads on link intent, proven by the production-browser test.
+
+Lesson: modules imported by `server.ts` must live in what the web image ships
+(`server/`, `server.ts`, `.next`); the release-image check now exercises the edge
+policy, so a missing module fails before deploy rather than at startup. Remaining
+follow-ups are in the tech-debt tracker: purge on unpublish/hold (up to ~2 minutes
+of staleness accepted) and live measurement of signed-in journeys.
 
 ## Artifacts And Notes
 

@@ -16,7 +16,8 @@ summary of what changed after completed work has been promoted out of `ref/`.
 - Mark fully rendered signed-out public pages (home, About, Discover, published
   collections, public hubs and profiles) cacheable at the edge for about a minute
   (ADR-0066). Signed-in, cookie-bearing, token, router and failed renders stay
-  private. Takes effect once the Cloudflare Cache Rule in the edge-cache runbook exists.
+  private. Live on `ntumie.link` since 14 October 2026 through the Cloudflare Cache
+  Rule in the edge-cache runbook; the release-image check asserts both policies.
 
 - Preload a route's JavaScript when a link is hovered, focused or pressed, from a
   post-build route manifest of immutable build assets; no page data is fetched
